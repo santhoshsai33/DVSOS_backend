@@ -1,0 +1,73 @@
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+if (!process.env.DATABASE_URL && process.env.MSSERVER_URI) {
+  process.env.DATABASE_URL = process.env.MSSERVER_URI;
+}
+
+const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
+
+const missingRequiredEnv = requiredEnv.filter((key) => !process.env[key]);
+
+if (missingRequiredEnv.length > 0) {
+  throw new Error(`Missing required environment variables: ${missingRequiredEnv.join(', ')}`);
+}
+
+const optionalGroups = [
+  {
+    name: 'Cloudinary',
+    keys: ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET']
+  },
+  {
+    name: 'Azure Blob Storage',
+    keys: ['AZURE_STORAGE_CONNECTION_STRING', 'AZURE_STORAGE_CONTAINER']
+  },
+  {
+    name: 'Firebase',
+    keys: ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
+  },
+  {
+    name: 'Twilio',
+    keys: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM']
+  }
+];
+
+optionalGroups.forEach((group) => {
+  const missing = group.keys.filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    console.warn(`${group.name} optional config missing: ${missing.join(', ')}`);
+  }
+});
+
+module.exports = {
+  nodeEnv: process.env.NODE_ENV || 'development',
+  port: Number(process.env.PORT || 5000),
+  appName: process.env.APP_NAME || 'DVSOS Backend',
+  apiPrefix: process.env.API_PREFIX || '/api',
+  databaseUrl: process.env.DATABASE_URL,
+  jwtSecret: process.env.JWT_SECRET,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
+  corsOrigin: process.env.CORS_ORIGIN || '*',
+  storageProvider: process.env.STORAGE_PROVIDER || 'cloudinary',
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    apiSecret: process.env.CLOUDINARY_API_SECRET
+  },
+  azureBlob: {
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+    container: process.env.AZURE_STORAGE_CONTAINER
+  },
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY
+  },
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID,
+    authToken: process.env.TWILIO_AUTH_TOKEN,
+    whatsappFrom: process.env.TWILIO_WHATSAPP_FROM
+  }
+};
