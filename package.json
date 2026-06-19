@@ -19,7 +19,7 @@
     "prisma",
     "sqlserver"
   ],
-  "author": "Sai Technologies",
+  "author": "DVSOS Team",
   "license": "UNLICENSED",
   "dependencies": {
     "@prisma/client": "^5.22.0",

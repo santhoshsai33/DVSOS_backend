@@ -16,7 +16,7 @@ Backend foundation for the Digital Vehicle Service Operations System.
 
 ```bash
 npm install
-cp .env.example .env
+cp .env
 npm run prisma:generate
 npm run prisma:migrate
 npm run dev
@@ -25,7 +25,7 @@ npm run dev
 On Windows PowerShell, copy the environment file with:
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env
 ```
 
 ## Environment
