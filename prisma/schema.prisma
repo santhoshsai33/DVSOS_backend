@@ -373,50 +373,41 @@ model UserVehicle {
   @@map("user_vehicles")
 }
 
-
-enum GateEntryType {
-  SERVICE
-  PICKUP
-  ENQUIRY
-  DELIVERY
-  OTHER
-}
-
 model GateEntry {
-  id          Int           @id @default(autoincrement())
-  locationId  Int           @map("location_id")
-  statusId    Int?          @map("status_id")
+  id         Int  @id @default(autoincrement())
+  locationId Int  @map("location_id")
+  statusId   Int? @map("status_id")
 
-  entryType   GateEntryType @default(SERVICE) @map("entry_type")
+  entryType String @default("SERVICE") @map("entry_type") @db.NVarChar(30)
 
-  gateEntryNo String        @unique @map("gate_entry_no") @db.NVarChar(30)
-  slug        String        @unique @db.NVarChar(180)
+  gateEntryNo String @unique @map("gate_entry_no") @db.NVarChar(30)
+  slug        String @unique @db.NVarChar(180)
 
-  customerId  Int           @map("customer_id")
-  vehicleId   Int           @map("vehicle_id")
+  customerId Int @map("customer_id")
+  vehicleId  Int @map("vehicle_id")
 
-  entryTime   DateTime      @default(dbgenerated("SYSUTCDATETIME()")) @map("entry_time") @db.DateTime2
-  exitTime    DateTime?     @map("exit_time") @db.DateTime2
+  entryTime DateTime  @default(dbgenerated("SYSUTCDATETIME()")) @map("entry_time") @db.DateTime2
+  exitTime  DateTime? @map("exit_time") @db.DateTime2
 
-  enteredById Int?          @map("entered_by")
-  remarks     String?       @db.NVarChar(500)
+  enteredById Int?    @map("entered_by")
+  remarks     String? @db.NVarChar(500)
 
-  createdById  Int?         @map("created_by")
-  modifiedById Int?         @map("modified_by")
-  createdAt    DateTime     @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
-  updatedAt    DateTime     @updatedAt @map("updated_at") @db.DateTime2
+  createdById  Int?     @map("created_by")
+  modifiedById Int?     @map("modified_by")
+  createdAt    DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
 
-  location   Location      @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  status     StatusMaster? @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  location Location      @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status   StatusMaster? @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  vehicle    Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vehicle  Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  enteredBy  User?         @relation("GateEntryEnteredBy", fields: [enteredById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy  User?         @relation("GateEntryCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  modifiedBy User?         @relation("GateEntryModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  enteredBy  User? @relation("GateEntryEnteredBy", fields: [enteredById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy  User? @relation("GateEntryCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  modifiedBy User? @relation("GateEntryModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  jobCards   JobCard[]
+  jobCards JobCard[]
 
   @@index([locationId])
   @@index([statusId])
@@ -425,7 +416,6 @@ model GateEntry {
   @@index([vehicleId])
   @@index([enteredById])
   @@index([entryTime])
-
   @@map("gate_entries")
 }
 
@@ -551,47 +541,48 @@ model JobCardService {
   createdAt    DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
 
-  jobCard        JobCard          @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  approval       JobCardApproval? @relation(fields: [approvalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  serviceItem    ServiceItem      @relation(fields: [serviceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  approvalStatus StatusMaster?    @relation("JobCardServiceApprovalStatus", fields: [approvalStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  serviceStatus  StatusMaster?    @relation("JobCardServiceStatus", fields: [serviceStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy      User?            @relation("JobCardServiceCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  modifiedBy     User?            @relation("JobCardServiceModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  jobCard         JobCard          @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approval        JobCardApproval? @relation(fields: [approvalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  serviceItem     ServiceItem      @relation(fields: [serviceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvalStatus  StatusMaster?    @relation("JobCardServiceApprovalStatus", fields: [approvalStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  serviceStatus   StatusMaster?    @relation("JobCardServiceStatus", fields: [serviceStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy       User?            @relation("JobCardServiceCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  modifiedBy      User?            @relation("JobCardServiceModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workAssignments WorkAssignment[]
 
   @@map("job_card_services")
 }
 
 model WorkAssignment {
-  id               Int       @id @default(autoincrement())
-  locationId       Int       @map("location_id")
-  jobCardId        Int       @map("job_card_id")
-  jobCardServiceId Int       @map("job_card_service_id")
-  statusId         Int?      @map("status_id")
+  id               Int  @id @default(autoincrement())
+  locationId       Int  @map("location_id")
+  jobCardId        Int  @map("job_card_id")
+  jobCardServiceId Int  @map("job_card_service_id")
+  statusId         Int? @map("status_id")
 
-  assignedUserId   Int       @map("assigned_user_id")
-  assignedById     Int?      @map("assigned_by")
+  assignedUserId Int  @map("assigned_user_id")
+  assignedById   Int? @map("assigned_by")
 
-  assignedAt       DateTime  @default(dbgenerated("SYSUTCDATETIME()")) @map("assigned_at") @db.DateTime2
-  startedAt        DateTime? @map("started_at") @db.DateTime2
-  completedAt      DateTime? @map("completed_at") @db.DateTime2
-  remarks          String?
+  assignedAt  DateTime  @default(dbgenerated("SYSUTCDATETIME()")) @map("assigned_at") @db.DateTime2
+  startedAt   DateTime? @map("started_at") @db.DateTime2
+  completedAt DateTime? @map("completed_at") @db.DateTime2
+  remarks     String?
 
-  createdById      Int?      @map("created_by")
-  modifiedById     Int?      @map("modified_by")
-  createdAt        DateTime  @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime2
+  createdById  Int?     @map("created_by")
+  modifiedById Int?     @map("modified_by")
+  createdAt    DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
 
-  location         Location       @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  jobCard          JobCard        @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  jobCardService   JobCardService @relation(fields: [jobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  location       Location       @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  jobCard        JobCard        @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  jobCardService JobCardService @relation(fields: [jobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  status           StatusMaster?  @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status StatusMaster? @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  assignedUser     User           @relation("WorkAssignmentAssignedUser", fields: [assignedUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  assignedBy       User?          @relation("WorkAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy        User?          @relation("WorkAssignmentCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  modifiedBy       User?          @relation("WorkAssignmentModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedUser User  @relation("WorkAssignmentAssignedUser", fields: [assignedUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedBy   User? @relation("WorkAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy    User? @relation("WorkAssignmentCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  modifiedBy   User? @relation("WorkAssignmentModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([locationId])
   @@index([jobCardId])
