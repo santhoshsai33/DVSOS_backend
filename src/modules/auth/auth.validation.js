@@ -3,13 +3,13 @@ const { apiResponse } = require('../../common/utils/apiResponse');
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 
 const validateLogin = (req, res, next) => {
-  const { identifier, password } = req.body || {};
+  const { emailId, password } = req.body || {};
 
-  if (!isNonEmptyString(identifier)) {
+  if (!isNonEmptyString(emailId)) {
     return apiResponse(res, {
       statusCode: 400,
       success: false,
-      message: 'identifier is required',
+      message: 'emailId is required',
       data: {},
       meta: {}
     });

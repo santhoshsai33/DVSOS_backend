@@ -1,5 +1,18 @@
-const roleRepository = require('./role.repository');
+const prisma = require('../../config/db');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
+const { buildChangeDetails, createAuditLog } = require('../../common/utils/audit.util');
+
+const roleSelect = {
+  id: true,
+  name: true,
+  slug: true,
+  description: true,
+  isActive: true,
+  createdById: true,
+  modifiedById: true,
+  createdAt: true,
+  updatedAt: true
+};
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -33,8 +46,29 @@ const parseBooleanFilter = (value) => {
   return undefined;
 };
 
+const buildRoleWhere = ({ search, isActive } = {}) => {
+  const where = {};
+
+  if (typeof isActive === 'boolean') {
+    where.isActive = isActive;
+  }
+
+  if (search) {
+    where.OR = [
+      { name: { contains: search } },
+      { slug: { contains: search } },
+      { description: { contains: search } }
+    ];
+  }
+
+  return where;
+};
+
 const ensureRoleExists = async (id) => {
-  const role = await roleRepository.findRoleById(id);
+  const role = await prisma.role.findUnique({
+    where: { id },
+    select: roleSelect
+  });
 
   if (!role) {
     throw createHttpError(404, 'Role not found');
@@ -44,65 +78,119 @@ const ensureRoleExists = async (id) => {
 };
 
 const ensureUniqueRoleName = async (name, excludeId) => {
-  const existingRole = await roleRepository.findRoleByName(name, excludeId);
+  const existingRole = await prisma.role.findFirst({
+    where: {
+      name,
+      ...(excludeId ? { id: { not: excludeId } } : {})
+    },
+    select: { id: true }
+  });
 
   if (existingRole) {
     throw createHttpError(409, 'Role name already exists');
   }
 };
 
-const ensureUniqueRoleSlug = async (slug, excludeId) => {
-  const existingRole = await roleRepository.findRoleBySlug(slug, excludeId);
+const resolveRoleSlug = async (name, excludeId) => {
+  const baseSlug = generateSlug(name);
 
-  if (existingRole) {
-    throw createHttpError(409, 'Role slug already exists');
-  }
-};
-
-const resolveRoleSlug = async ({ name, slug, excludeId }) => {
-  const sourceSlug = slug ? slug : name;
-  const normalizedSlug = generateSlug(sourceSlug);
-
-  if (!normalizedSlug) {
-    throw createHttpError(400, 'Valid role slug is required');
+  if (!baseSlug) {
+    throw createHttpError(400, 'Valid role slug could not be generated from role name');
   }
 
-  if (slug) {
-    await ensureUniqueRoleSlug(normalizedSlug, excludeId);
-    return normalizedSlug;
-  }
-
-  return generateUniqueSlug(normalizedSlug, (slugValue) => {
-    return roleRepository.findRoleBySlug(slugValue, excludeId);
+  return generateUniqueSlug(baseSlug, (slugValue) => {
+    return prisma.role.findFirst({
+      where: {
+        slug: slugValue,
+        ...(excludeId ? { id: { not: excludeId } } : {})
+      },
+      select: { id: true }
+    });
   });
 };
 
-const createRole = async ({ name, slug, description }) => {
+const createRole = async ({ name, description, isActive }, actorUserId) => {
   const normalizedName = name.trim();
-  const normalizedSlug = await resolveRoleSlug({ name: normalizedName, slug });
+  const normalizedSlug = await resolveRoleSlug(normalizedName);
 
   await ensureUniqueRoleName(normalizedName);
 
-  return roleRepository.createRole({
-    name: normalizedName,
-    slug: normalizedSlug,
-    description: description ? description.trim() : null
+  return prisma.$transaction(async (tx) => {
+    const role = await tx.role.create({
+      data: {
+        name: normalizedName,
+        slug: normalizedSlug,
+        description: description ? description.trim() : null,
+        isActive: typeof isActive === 'boolean' ? isActive : true,
+        createdById: actorUserId || null
+      },
+      select: roleSelect
+    });
+
+    await createAuditLog(tx, {
+      tableName: 'roles',
+      recordId: role.id,
+      actionType: 'CREATE',
+      performedByUserId: actorUserId,
+      recordName: role.name,
+      comments: 'Role created',
+      details: [
+        { fieldName: 'name', oldValue: null, newValue: role.name, dataType: 'string' },
+        { fieldName: 'slug', oldValue: null, newValue: role.slug, dataType: 'string' },
+        { fieldName: 'description', oldValue: null, newValue: role.description, dataType: 'string' },
+        { fieldName: 'isActive', oldValue: null, newValue: role.isActive, dataType: 'boolean' }
+      ]
+    });
+
+    return role;
   });
 };
 
-const updateRole = async (id, { name, slug, description }) => {
+const updateRole = async (id, { name, description, isActive }, actorUserId) => {
   const roleId = Number(id);
-  await ensureRoleExists(roleId);
-
+  const currentRole = await ensureRoleExists(roleId);
   const normalizedName = name.trim();
-  const normalizedSlug = await resolveRoleSlug({ name: normalizedName, slug, excludeId: roleId });
+  const normalizedSlug = await resolveRoleSlug(normalizedName, roleId);
 
   await ensureUniqueRoleName(normalizedName, roleId);
 
-  return roleRepository.updateRole(roleId, {
+  const nextData = {
     name: normalizedName,
     slug: normalizedSlug,
-    description: description ? description.trim() : null
+    description: description ? description.trim() : null,
+    modifiedById: actorUserId || null
+  };
+
+  if (typeof isActive === 'boolean') {
+    nextData.isActive = isActive;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const role = await tx.role.update({
+      where: { id: roleId },
+      data: nextData,
+      select: roleSelect
+    });
+
+    const details = buildChangeDetails(currentRole, role, [
+      'name',
+      'slug',
+      'description',
+      'isActive',
+      'modifiedById'
+    ]);
+
+    await createAuditLog(tx, {
+      tableName: 'roles',
+      recordId: role.id,
+      actionType: 'UPDATE',
+      performedByUserId: actorUserId,
+      recordName: role.name,
+      comments: 'Role updated',
+      details
+    });
+
+    return role;
   });
 };
 
@@ -111,13 +199,19 @@ const listRoles = async (query) => {
   const limit = parsePositiveInt(query.limit, 10);
   const search = query.search ? query.search.trim() : undefined;
   const isActive = parseBooleanFilter(query.isActive);
+  const where = buildRoleWhere({ search, isActive });
+  const skip = (page - 1) * limit;
 
-  const { roles, total } = await roleRepository.listRoles({
-    page,
-    limit,
-    search,
-    isActive
-  });
+  const [roles, total] = await prisma.$transaction([
+    prisma.role.findMany({
+      where,
+      select: roleSelect,
+      orderBy: { id: 'asc' },
+      skip,
+      take: limit
+    }),
+    prisma.role.count({ where })
+  ]);
 
   return {
     roles,
@@ -134,11 +228,32 @@ const getRoleDetail = async (id) => {
   return ensureRoleExists(Number(id));
 };
 
-const updateRoleStatus = async (id, { isActive }) => {
+const updateRoleStatus = async (id, { isActive }, actorUserId) => {
   const roleId = Number(id);
-  await ensureRoleExists(roleId);
+  const currentRole = await ensureRoleExists(roleId);
 
-  return roleRepository.updateRole(roleId, { isActive });
+  return prisma.$transaction(async (tx) => {
+    const role = await tx.role.update({
+      where: { id: roleId },
+      data: {
+        isActive,
+        modifiedById: actorUserId || null
+      },
+      select: roleSelect
+    });
+
+    await createAuditLog(tx, {
+      tableName: 'roles',
+      recordId: role.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: actorUserId,
+      recordName: role.name,
+      comments: isActive ? 'Role activated' : 'Role deactivated',
+      details: buildChangeDetails(currentRole, role, ['isActive', 'modifiedById'])
+    });
+
+    return role;
+  });
 };
 
 module.exports = {

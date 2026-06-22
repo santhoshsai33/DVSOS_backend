@@ -47,43 +47,41 @@ const TAMIL_NADU_DISTRICTS = [
 ];
 
 const seedStateDistricts = async (prisma) => {
-  await prisma.$transaction(async (tx) => {
-    const state = await tx.state.upsert({
-      where: { stateCode: TAMIL_NADU_STATE.stateCode },
+  const state = await prisma.state.upsert({
+    where: { stateCode: TAMIL_NADU_STATE.stateCode },
+    update: {
+      stateName: TAMIL_NADU_STATE.stateName,
+      isActive: true
+    },
+    create: {
+      ...TAMIL_NADU_STATE,
+      isActive: true
+    }
+  });
+
+  console.log('Tamil Nadu state seeded');
+
+  for (const districtName of TAMIL_NADU_DISTRICTS) {
+    await prisma.district.upsert({
+      where: {
+        stateId_districtName: {
+          stateId: state.id,
+          districtName
+        }
+      },
       update: {
-        stateName: TAMIL_NADU_STATE.stateName,
+        districtName,
         isActive: true
       },
       create: {
-        ...TAMIL_NADU_STATE,
+        stateId: state.id,
+        districtName,
         isActive: true
       }
     });
+  }
 
-    console.log('Tamil Nadu state seeded');
-
-    for (const districtName of TAMIL_NADU_DISTRICTS) {
-      await tx.district.upsert({
-        where: {
-          stateId_districtName: {
-            stateId: state.id,
-            districtName
-          }
-        },
-        update: {
-          districtName,
-          isActive: true
-        },
-        create: {
-          stateId: state.id,
-          districtName,
-          isActive: true
-        }
-      });
-    }
-
-    console.log('Districts seeded');
-  });
+  console.log('Districts seeded');
 };
 
 const run = async () => {

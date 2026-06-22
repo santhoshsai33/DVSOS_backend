@@ -10,7 +10,7 @@ const normalizeAllowedRoles = (allowedRoles) => {
 
 const roleMiddleware = (allowedRoles = [], options = {}) => {
   const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
-  const allowAdmin = options.allowAdmin !== false;
+  const allowAdmin = options.allowAdmin === true;
 
   return (req, res, next) => {
     const userRole = req.user && req.user.roleSlug;

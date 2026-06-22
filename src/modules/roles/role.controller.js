@@ -3,7 +3,7 @@ const roleService = require('./role.service');
 
 const createRole = async (req, res, next) => {
   try {
-    const role = await roleService.createRole(req.body);
+    const role = await roleService.createRole(req.body, req.user.userId);
 
     return apiResponse(res, {
       statusCode: 201,
@@ -17,7 +17,7 @@ const createRole = async (req, res, next) => {
 
 const updateRole = async (req, res, next) => {
   try {
-    const role = await roleService.updateRole(req.params.id, req.body);
+    const role = await roleService.updateRole(req.params.id, req.body, req.user.userId);
 
     return apiResponse(res, {
       message: 'Role updated successfully',
@@ -57,7 +57,7 @@ const getRoleDetail = async (req, res, next) => {
 
 const updateRoleStatus = async (req, res, next) => {
   try {
-    const role = await roleService.updateRoleStatus(req.params.id, req.body);
+    const role = await roleService.updateRoleStatus(req.params.id, req.body, req.user.userId);
 
     return apiResponse(res, {
       message: role.isActive ? 'Role activated successfully' : 'Role deactivated successfully',

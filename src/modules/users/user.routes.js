@@ -15,11 +15,11 @@ const adminOnly = roleMiddleware(['admin']);
 
 router.use(authenticate);
 
-router.post('/', adminOnly, validateUserPayload({ requirePassword: true }), userController.createUser);
-router.put('/:id', adminOnly, validateIdParam, validateUserPayload(), userController.updateUser);
-router.get('/', canViewUsers, userController.listUsers);
-router.get('/:id', canViewUsers, validateIdParam, userController.getUserDetail);
-router.patch('/:id/status', adminOnly, validateIdParam, validateStatusPayload, userController.updateUserStatus);
-router.patch('/:id/reset-password', adminOnly, validateIdParam, validatePasswordPayload, userController.resetUserPassword);
+router.post('/create', adminOnly, validateUserPayload({ requirePassword: true }), userController.createUser);
+router.put('/update/:id', adminOnly, validateIdParam, validateUserPayload(), userController.updateUser);
+router.get('/list', canViewUsers, userController.listUsers);
+router.get('/detail/:id', canViewUsers, validateIdParam, userController.getUserDetail);
+router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, userController.updateUserStatus);
+router.patch('/reset-password/:id', adminOnly, validateIdParam, validatePasswordPayload, userController.resetUserPassword);
 
 module.exports = router;

@@ -2,13 +2,13 @@ const prisma = require('../../config/db');
 
 const userWithRoleSelect = {
   id: true,
+  roleId: true,
+  locationId: true,
   fullName: true,
   emailId: true,
-  mobileNo: true,
   passwordHash: true,
   isActive: true,
   lastLoginAt: true,
-  roleId: true,
   role: {
     select: {
       id: true,
@@ -19,14 +19,9 @@ const userWithRoleSelect = {
   }
 };
 
-const findUserByIdentifier = (identifier) => {
-  return prisma.user.findFirst({
-    where: {
-      OR: [
-        { emailId: identifier },
-        { mobileNo: identifier }
-      ]
-    },
+const findUserByEmailId = (emailId) => {
+  return prisma.user.findUnique({
+    where: { emailId },
     select: userWithRoleSelect
   });
 };
@@ -41,14 +36,45 @@ const findUserById = (userId) => {
 const updateLastLoginAt = (userId) => {
   return prisma.user.update({
     where: { id: userId },
-    data: {
-      lastLoginAt: new Date()
-    }
+    data: { lastLoginAt: new Date() },
+    select: { id: true }
+  });
+};
+
+const findReadableMenusByRoleId = (roleId) => {
+  return prisma.roleMenuPermission.findMany({
+    where: {
+      roleId,
+      canRead: true,
+      menu: {
+        isActive: true
+      }
+    },
+    select: {
+      canRead: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: true,
+      menu: {
+        select: {
+          id: true,
+          module: true,
+          parentId: true,
+          name: true,
+          path: true,
+          icon: true,
+          sequence: true,
+          isActive: true
+        }
+      }
+    },
+    orderBy: { id: 'asc' }
   });
 };
 
 module.exports = {
-  findUserByIdentifier,
+  findUserByEmailId,
   findUserById,
-  updateLastLoginAt
+  updateLastLoginAt,
+  findReadableMenusByRoleId
 };

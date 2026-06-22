@@ -1,7 +1,5 @@
-const jwt = require('jsonwebtoken');
-
-const env = require('../../config/env');
 const { apiResponse } = require('../utils/apiResponse');
+const { verifyToken } = require('../../utils/jwt');
 
 const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -19,9 +17,9 @@ const authenticate = (req, res, next) => {
   try {
     const token = authHeader.split(' ')[1];
 
-    const decoded = jwt.verify(token, env.jwtSecret);
+    const decoded = verifyToken(token);
 
-    if (!decoded.userId || !decoded.roleId || !decoded.roleSlug || !decoded.email) {
+    if (!decoded.userId || !decoded.roleId || !decoded.roleSlug) {
       return apiResponse(res, {
         statusCode: 401,
         success: false,
@@ -35,7 +33,7 @@ const authenticate = (req, res, next) => {
       userId: decoded.userId,
       roleId: decoded.roleId,
       roleSlug: decoded.roleSlug,
-      email: decoded.email
+      locationId: decoded.locationId || null
     };
 
     return next();
@@ -51,5 +49,6 @@ const authenticate = (req, res, next) => {
 };
 
 module.exports = {
-  authenticate
+  authenticate,
+  authMiddleware: authenticate
 };

@@ -21,10 +21,10 @@ const adminOnly = roleMiddleware(['admin']);
 
 router.use(authenticate);
 
-router.post('/', adminOnly, validateCategoryPayload, categoryController.createCategory);
-router.put('/:id', adminOnly, validateIdParam, validateCategoryPayload, categoryController.updateCategory);
-router.get('/', canViewServiceMasters, categoryController.listCategories);
-router.get('/:id', canViewServiceMasters, validateIdParam, categoryController.getCategoryDetail);
-router.patch('/:id/status', adminOnly, validateIdParam, validateStatusPayload, categoryController.updateCategoryStatus);
+router.post('/create', adminOnly, validateCategoryPayload, categoryController.createCategory);
+router.put('/update/:id', adminOnly, validateIdParam, validateCategoryPayload, categoryController.updateCategory);
+router.get('/list', canViewServiceMasters, categoryController.listCategories);
+router.get('/detail/:id', canViewServiceMasters, validateIdParam, categoryController.getCategoryDetail);
+router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, categoryController.updateCategoryStatus);
 
 module.exports = router;

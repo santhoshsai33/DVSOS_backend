@@ -16,13 +16,11 @@ const login = async (req, res, next) => {
 
 const me = async (req, res, next) => {
   try {
-    const user = await authService.getCurrentUser(req.user.userId);
+    const data = await authService.getCurrentUser(req.user.userId);
 
     return apiResponse(res, {
       message: 'Current user fetched successfully',
-      data: {
-        user
-      }
+      data
     });
   } catch (error) {
     return next(error);
