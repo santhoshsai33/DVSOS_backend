@@ -1,25 +1,10 @@
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
-const env = require('../../config/env');
 const authRepository = require('./auth.repository');
+const { signToken } = require('../../utils/jwt');
+const { getRedirectPath } = require('../../utils/redirectPath');
 
-const ROLE_REDIRECT_PATHS = {
-  admin: '/admin',
-  gate_security: '/gate-security',
-  crm_team: '/crm',
-  floor_supervisor: '/floor-supervisor',
-  body_shop_supervisor: '/body-shop',
-  water_wash_team: '/water-wash',
-  manager: '/manager',
-  managing_director: '/md',
-  'gate-security': '/gate-security',
-  'crm-team': '/crm',
-  'floor-supervisor': '/floor-supervisor',
-  'body-shop-supervisor': '/body-shop',
-  'water-wash-team': '/water-wash',
-  'managing-director': '/md'
-};
+const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -30,86 +15,127 @@ const createHttpError = (statusCode, message) => {
 const toPublicUser = (user) => ({
   id: user.id,
   fullName: user.fullName,
-  email: user.emailId,
-  mobile: user.mobileNo,
+  emailId: user.emailId,
   role: {
     id: user.role.id,
     name: user.role.name,
     slug: user.role.slug
-  }
+  },
+  locationId: user.locationId
 });
 
 const buildJwtPayload = (user) => ({
   userId: user.id,
-  roleId: user.role.id,
+  roleId: user.roleId,
   roleSlug: user.role.slug,
-  email: user.emailId
+  locationId: user.locationId
 });
 
-const generateToken = (user) => {
-  return jwt.sign(buildJwtPayload(user), env.jwtSecret, {
-    expiresIn: env.jwtExpiresIn
-  });
-};
-
-const hashPassword = (password) => {
-  return bcrypt.hash(password, 12);
-};
-
-const verifyPassword = (plainPassword, passwordHash) => {
-  return bcrypt.compare(plainPassword, passwordHash);
-};
-
-const assertUserCanAuthenticate = (user) => {
-  if (!user) {
-    throw createHttpError(401, 'Invalid login credentials');
+const assertUserCanAuthenticate = (user, genericLoginError = false) => {
+  if (!user || !user.role) {
+    throw createHttpError(401, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User not found');
   }
 
   if (!user.isActive) {
-    throw createHttpError(403, 'User account is inactive');
+    throw createHttpError(403, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User account is inactive');
   }
 
-  if (!user.role || !user.role.isActive) {
-    throw createHttpError(403, 'User role is inactive');
+  if (!user.role.isActive) {
+    throw createHttpError(403, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User role is inactive');
   }
 };
 
-const login = async ({ identifier, password }) => {
-  const normalizedIdentifier = identifier.trim();
-  const user = await authRepository.findUserByIdentifier(normalizedIdentifier);
+const comparePassword = (password, passwordHash) => {
+  return bcrypt.compare(password, passwordHash);
+};
 
-  assertUserCanAuthenticate(user);
+const groupMenusByModule = (permissions) => {
+  const groups = new Map();
 
-  const passwordMatches = await verifyPassword(password, user.passwordHash);
+  permissions
+    .map((permission) => ({
+      module: permission.menu.module,
+      menuId: permission.menu.id,
+      parentId: permission.menu.parentId,
+      name: permission.menu.name,
+      path: permission.menu.path,
+      icon: permission.menu.icon,
+      sequence: permission.menu.sequence,
+      canRead: permission.canRead,
+      canCreate: permission.canCreate,
+      canUpdate: permission.canUpdate,
+      canDelete: permission.canDelete
+    }))
+    .sort((a, b) => {
+      return a.module.localeCompare(b.module) || a.sequence - b.sequence || a.name.localeCompare(b.name);
+    })
+    .forEach((menu) => {
+      if (!groups.has(menu.module)) {
+        groups.set(menu.module, []);
+      }
+
+      groups.get(menu.module).push(menu);
+    });
+
+  return Array.from(groups.entries()).map(([module, menus]) => ({
+    module,
+    menus
+  }));
+};
+
+const getAllowedMenus = async (roleId) => {
+  const permissions = await authRepository.findReadableMenusByRoleId(roleId);
+  return groupMenusByModule(permissions);
+};
+
+const buildAuthResponse = async (user, includeToken = false) => {
+  const menus = await getAllowedMenus(user.roleId);
+  const authData = {
+    user: toPublicUser(user),
+    redirectPath: getRedirectPath(user.role.slug),
+    menus
+  };
+
+  if (includeToken) {
+    return {
+      token: signToken(buildJwtPayload(user)),
+      ...authData
+    };
+  }
+
+  return authData;
+};
+
+const login = async ({ emailId, password }) => {
+  const normalizedEmailId = emailId.trim();
+  const user = await authRepository.findUserByEmailId(normalizedEmailId);
+
+  assertUserCanAuthenticate(user, true);
+
+  const passwordMatches = await comparePassword(password, user.passwordHash);
 
   if (!passwordMatches) {
-    throw createHttpError(401, 'Invalid login credentials');
+    throw createHttpError(401, LOGIN_ERROR_MESSAGE);
   }
 
   await authRepository.updateLastLoginAt(user.id);
 
-  const token = generateToken(user);
-
-  return {
-    token,
-    user: toPublicUser(user),
-    redirectPath: ROLE_REDIRECT_PATHS[user.role.slug] || '/'
-  };
+  return buildAuthResponse(user, true);
 };
 
 const getCurrentUser = async (userId) => {
-  const user = await authRepository.findUserById(userId);
+  const user = await authRepository.findUserById(Number(userId));
 
   assertUserCanAuthenticate(user);
 
-  return toPublicUser(user);
+  return buildAuthResponse(user, false);
 };
 
 module.exports = {
-  ROLE_REDIRECT_PATHS,
-  generateToken,
-  hashPassword,
-  verifyPassword,
+  LOGIN_ERROR_MESSAGE,
+  toPublicUser,
+  buildJwtPayload,
+  getAllowedMenus,
   login,
   getCurrentUser
 };

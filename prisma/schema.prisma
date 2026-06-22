@@ -187,11 +187,55 @@ model Role {
 
   users           User[]
   stageTimeLimits StageTimeLimit[]
+  rolePermissions RoleMenuPermission[]
 
   createdBy  User? @relation("RoleCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   modifiedBy User? @relation("RoleModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("roles")
+}
+
+model Menu {
+  id       Int     @id @default(autoincrement())
+  module   String  @db.NVarChar(50)
+  parentId Int?    @map("parent_id")
+  name     String  @db.NVarChar(100)
+  path     String  @db.NVarChar(255)
+  icon     String? @db.NVarChar(50)
+  sequence Int     @default(0)
+  isActive Boolean @default(true) @map("is_active")
+
+  parent   Menu?  @relation("MenuHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children Menu[] @relation("MenuHierarchy")
+
+  rolePermissions RoleMenuPermission[]
+
+  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
+
+  @@unique([module, path])
+  @@map("menus")
+}
+
+model RoleMenuPermission {
+  id Int @id @default(autoincrement())
+
+  roleId Int @map("role_id")
+  menuId Int @map("menu_id")
+
+  canRead   Boolean @default(false) @map("can_read")
+  canCreate Boolean @default(false) @map("can_create")
+  canUpdate Boolean @default(false) @map("can_update")
+  canDelete Boolean @default(false) @map("can_delete")
+
+  role Role @relation(fields: [roleId], references: [id])
+  menu Menu @relation(fields: [menuId], references: [id])
+
+  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
+
+  @@unique([roleId, menuId])
+  @@map("role_menu_permissions")
 }
 
 model User {

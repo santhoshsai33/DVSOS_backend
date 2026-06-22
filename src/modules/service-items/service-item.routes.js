@@ -21,10 +21,10 @@ const adminOnly = roleMiddleware(['admin']);
 
 router.use(authenticate);
 
-router.post('/', adminOnly, validateServiceItemPayload, serviceItemController.createServiceItem);
-router.put('/:id', adminOnly, validateIdParam, validateServiceItemPayload, serviceItemController.updateServiceItem);
-router.get('/', canViewServiceMasters, serviceItemController.listServiceItems);
-router.get('/:id', canViewServiceMasters, validateIdParam, serviceItemController.getServiceItemDetail);
-router.patch('/:id/status', adminOnly, validateIdParam, validateStatusPayload, serviceItemController.updateServiceItemStatus);
+router.post('/create', adminOnly, validateServiceItemPayload, serviceItemController.createServiceItem);
+router.put('/update/:id', adminOnly, validateIdParam, validateServiceItemPayload, serviceItemController.updateServiceItem);
+router.get('/list', canViewServiceMasters, serviceItemController.listServiceItems);
+router.get('/detail/:id', canViewServiceMasters, validateIdParam, serviceItemController.getServiceItemDetail);
+router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, serviceItemController.updateServiceItemStatus);
 
 module.exports = router;
