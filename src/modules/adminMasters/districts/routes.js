@@ -6,4 +6,6 @@ module.exports = createAdminMasterRoutes({
   controller,
   validation,
   menuPath: '/master-districts'
-});
+})
+
+//updated
