@@ -315,7 +315,7 @@ const createAdminMasterService = (config) => {
 
   const listRecords = async (query) => {
     const page = parsePositiveInt(query.page, 1);
-    const limit = parsePositiveInt(query.limit, 10);
+    const limit = parsePositiveInt(query.limit, 1000);
     const search = query.search ? String(query.search).trim() : undefined;
     const isActive = parseBooleanFilter(query.isActive);
     const filters = {};
