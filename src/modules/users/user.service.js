@@ -48,7 +48,12 @@ const toPublicUser = (user) => ({
     id: user.role.id,
     name: user.role.name,
     slug: user.role.slug
-  }
+  },
+  dob: user.dob,
+  licenceNumber: user.licenceNumber,
+  emergencyContact: user.emergencyContact,
+  gender: user.gender,
+  address: user.address
 });
 
 const hashPassword = (password) => {
@@ -119,7 +124,7 @@ const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextI
   }
 };
 
-const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password }, createdById) => {
+const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, dob, licenceNumber, emergencyContact, gender, address }, createdById) => {
   const normalizedEmail = email.trim();
   let normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
@@ -148,13 +153,18 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
     employeeCode: normalizedEmployeeCode,
     roleId: parsedRoleId,
     passwordHash,
+    dob: dob ? new Date(dob) : null,
+    licenceNumber: licenceNumber ? licenceNumber.trim() : null,
+    emergencyContact: emergencyContact ? emergencyContact.trim() : null,
+    gender: gender ? gender.trim() : null,
+    address: address ? address.trim() : null,
     createdById: createdById || null
   });
 
   return toPublicUser(user);
 };
 
-const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId }) => {
+const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address }) => {
   const userId = Number(id);
   const parsedRoleId = Number(roleId);
   const normalizedEmail = email.trim();
@@ -175,7 +185,12 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId })
     emailId: normalizedEmail,
     mobileNo: mobile ? mobile.trim() : null,
     employeeCode: normalizedEmployeeCode,
-    roleId: parsedRoleId
+    roleId: parsedRoleId,
+    dob: dob ? new Date(dob) : null,
+    licenceNumber: licenceNumber ? licenceNumber.trim() : null,
+    emergencyContact: emergencyContact ? emergencyContact.trim() : null,
+    gender: gender ? gender.trim() : null,
+    address: address ? address.trim() : null
   });
 
   return toPublicUser(user);

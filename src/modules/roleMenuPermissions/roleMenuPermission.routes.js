@@ -9,10 +9,10 @@ const {
 const { authenticate } = require('../../common/middleware/auth.middleware');
 const { roleMiddleware } = require('../../common/middleware/role.middleware');
 
-const adminOnly = roleMiddleware(['admin']);
+const adminOrMd = roleMiddleware(['admin', 'managing_director']);
 
 router.use(authenticate);
-router.use(adminOnly);
+router.use(adminOrMd);
 router.use(validateRoleIdParam);
 
 router.post('/save', validatePermissionPayload, roleMenuPermissionController.saveRoleMenuPermissions);

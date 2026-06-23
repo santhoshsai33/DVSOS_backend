@@ -11,6 +11,11 @@ const userSelect = {
   createdAt: true,
   updatedAt: true,
   lastLoginAt: true,
+  dob: true,
+  licenceNumber: true,
+  emergencyContact: true,
+  gender: true,
+  address: true,
   role: {
     select: {
       id: true,
