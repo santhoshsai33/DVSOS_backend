@@ -22,7 +22,7 @@ module.exports = createAdminMasterService({
   label: 'Service center',
   select: serviceCenterSelect,
   fields: [
-    { name: 'serviceCenterCode', type: 'string', required: true },
+    { name: 'serviceCenterCode', type: 'string' },
     { name: 'serviceCenterName', type: 'string', required: true },
     { name: 'gstNumber', type: 'string' },
     { name: 'contactPhone', type: 'string' },
@@ -34,6 +34,7 @@ module.exports = createAdminMasterService({
   hasIsActive: true,
   hasCreatedById: true,
   hasModifiedById: true,
+  autoGenerateCode: true,
   uniqueFields: [
     { fieldName: 'serviceCenterCode', label: 'Service center code' }
   ],

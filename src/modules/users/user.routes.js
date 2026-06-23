@@ -15,7 +15,7 @@ const adminOnly = roleMiddleware(['admin']);
 
 router.use(authenticate);
 
-router.post('/create', adminOnly, validateUserPayload({ requirePassword: true }), userController.createUser);
+router.post('/create', adminOnly, validateUserPayload(), userController.createUser);
 router.put('/update/:id', adminOnly, validateIdParam, validateUserPayload(), userController.updateUser);
 router.get('/list', canViewUsers, userController.listUsers);
 router.get('/detail/:id', canViewUsers, validateIdParam, userController.getUserDetail);

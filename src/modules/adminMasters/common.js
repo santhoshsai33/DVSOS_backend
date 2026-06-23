@@ -1,6 +1,7 @@
 const prisma = require('../../config/db');
 const { apiResponse } = require('../../common/utils/apiResponse');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
+const { generateUniqueCode, getCodeConfig } = require('../../common/utils/code.util');
 const { buildChangeDetails, createAuditLog } = require('../../common/utils/audit.util');
 const { authMiddleware } = require('../../common/middleware/auth.middleware');
 const { roleMiddleware } = require('../../common/middleware/role.middleware');
@@ -200,6 +201,27 @@ const resolveSlug = async ({ model, source, excludeId }) => {
   });
 };
 
+const resolveGeneratedCode = async ({ model, codeConfig }) => {
+  const latestRecord = await prisma[model].findFirst({
+    where: {
+      [codeConfig.field]: { startsWith: codeConfig.prefix }
+    },
+    orderBy: { id: 'desc' },
+    select: { [codeConfig.field]: true }
+  });
+
+  return generateUniqueCode({
+    prefix: codeConfig.prefix,
+    latestCode: latestRecord ? latestRecord[codeConfig.field] : null,
+    existsCallback: (code) => {
+      return prisma[model].findFirst({
+        where: { [codeConfig.field]: code },
+        select: { id: true }
+      });
+    }
+  });
+};
+
 const createAdminMasterService = (config) => {
   const validateRelations = async (data) => {
     if (config.validateRelations) {
@@ -234,6 +256,21 @@ const createAdminMasterService = (config) => {
 
   const createRecord = async (payload, actorUserId) => {
     const data = pickData(payload, config.fields);
+
+    if (config.autoGenerateCode) {
+      const codeConfig = config.codeConfig || getCodeConfig(config.model);
+
+      if (!codeConfig) {
+        throw createHttpError(500, `${config.label} code configuration is missing`);
+      }
+
+      if (!data[codeConfig.field]) {
+        data[codeConfig.field] = await resolveGeneratedCode({
+          model: config.model,
+          codeConfig
+        });
+      }
+    }
 
     if (config.slugFrom) {
       data.slug = await resolveSlug({ model: config.model, source: data[config.slugFrom] });

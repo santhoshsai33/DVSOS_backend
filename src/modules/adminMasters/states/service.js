@@ -21,6 +21,7 @@ module.exports = createAdminMasterService({
   ],
   hasIsActive: true,
   uniqueFields: [
+    { fieldName: 'stateName', label: 'State name' },
     { fieldName: 'stateCode', label: 'State code' }
   ],
   searchFields: ['stateName', 'stateCode'],

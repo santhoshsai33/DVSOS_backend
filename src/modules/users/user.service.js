@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 
 const userRepository = require('./user.repository');
 
+const DEFAULT_USER_PASSWORD = 'Admin@123';
+
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -120,12 +122,13 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
   const normalizedEmail = email.trim();
   const normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
+  const initialPassword = typeof password === 'string' && password.trim() ? password : DEFAULT_USER_PASSWORD;
 
   await ensureRoleExists(parsedRoleId);
   await ensureUniqueEmail(normalizedEmail);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode);
 
-  const passwordHash = await hashPassword(password);
+  const passwordHash = await hashPassword(initialPassword);
 
   const user = await userRepository.createUser({
     fullName: fullName.trim(),

@@ -10,6 +10,10 @@ const adminServiceItemRoutes = require('../modules/adminMasters/serviceItems/rou
 const adminStateRoutes = require('../modules/adminMasters/states/routes');
 const healthRoutes = require('../modules/health/health.routes');
 const menuRoutes = require('../modules/menus/menu.routes');
+const {
+  mobileGateEntryRoutes,
+  crmGateEntryRoutes
+} = require('../modules/mobileGateEntry/mobileGateEntry.routes');
 const roleMenuPermissionRoutes = require('../modules/roleMenuPermissions/roleMenuPermission.routes');
 const roleRoutes = require('../modules/roles/role.routes');
 const serviceCategoryRoutes = require('../modules/service-categories/service-category.routes');
@@ -26,6 +30,8 @@ router.use('/admin/locations', adminLocationRoutes);
 router.use('/admin/dropdowns', adminDropdownRoutes);
 router.use('/health', healthRoutes);
 router.use('/menus', menuRoutes);
+router.use('/mobile/gate-entry', mobileGateEntryRoutes);
+router.use('/crm/gate-entries', crmGateEntryRoutes);
 router.use('/roles', roleRoutes);
 router.use('/roles/:roleId/menu-permissions', roleMenuPermissionRoutes);
 router.use('/service-categories', serviceCategoryRoutes);

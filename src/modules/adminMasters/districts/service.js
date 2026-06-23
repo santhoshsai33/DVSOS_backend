@@ -43,7 +43,7 @@ module.exports = createAdminMasterService({
         stateId: data.stateId,
         districtName: data.districtName
       },
-      label: 'District name inside state',
+      label: 'District name',
       excludeId
     });
   },
