@@ -26,6 +26,9 @@ module.exports = createAdminMasterService({
   hasCreatedById: true,
   hasModifiedById: true,
   slugFrom: 'name',
+  uniqueFields: [
+    { fieldName: 'name', label: 'Category name' }
+  ],
   searchFields: ['name', 'slug', 'description'],
   recordName: (category) => category.name
 });

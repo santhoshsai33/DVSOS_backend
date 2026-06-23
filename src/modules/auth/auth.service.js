@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 
 const authRepository = require('./auth.repository');
+const userRepository = require('../users/user.repository');
 const { signToken } = require('../../utils/jwt');
 const { getRedirectPath } = require('../../utils/redirectPath');
 
@@ -34,6 +35,7 @@ const toPublicUser = (user) => ({
   id: user.id,
   fullName: user.fullName,
   emailId: user.emailId,
+  mobileNo: user.mobileNo,
   role: {
     id: user.role.id,
     name: user.role.name,
@@ -157,11 +159,29 @@ const getCurrentUser = async (userId) => {
   return buildAuthResponse(user, false);
 };
 
+const updateProfile = async (userId, data) => {
+  const numericUserId = Number(userId);
+
+  const existingEmail = await userRepository.findUserByEmail(data.emailId, numericUserId);
+  if (existingEmail) {
+    throw createHttpError(400, 'Email already exists');
+  }
+
+  const updatedUser = await userRepository.updateUser(numericUserId, {
+    fullName: data.fullName,
+    emailId: data.emailId,
+    mobileNo: data.mobileNo
+  });
+
+  return buildAuthResponse(updatedUser, false);
+};
+
 module.exports = {
   LOGIN_ERROR_MESSAGE,
   toPublicUser,
   buildJwtPayload,
   getAllowedMenus,
   login,
-  getCurrentUser
+  getCurrentUser,
+  updateProfile
 };

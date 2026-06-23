@@ -38,6 +38,6 @@ module.exports = createAdminMasterService({
   uniqueFields: [
     { fieldName: 'serviceCenterCode', label: 'Service center code' }
   ],
-  searchFields: ['serviceCenterName', 'serviceCenterCode', 'contactPhone'],
+  searchFields: ['serviceCenterName', 'serviceCenterCode', 'contactPhone', 'contactEmail'],
   recordName: (serviceCenter) => serviceCenter.serviceCenterName
 });

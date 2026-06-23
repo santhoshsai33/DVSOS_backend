@@ -42,7 +42,7 @@ module.exports = createAdminMasterService({
   hasCreatedById: true,
   hasModifiedById: true,
   slugFrom: 'name',
-  searchFields: ['name', 'slug', 'description'],
+  searchFields: ['name', 'slug', 'description', 'category.name'],
   filterFields: ['categoryId'],
   validateRelations: async (data) => {
     await ensureForeignKey({ model: 'serviceCategory', id: data.categoryId, label: 'categoryId' });

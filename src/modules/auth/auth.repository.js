@@ -6,6 +6,7 @@ const userWithRoleSelect = {
   locationId: true,
   fullName: true,
   emailId: true,
+  mobileNo: true,
   passwordHash: true,
   isActive: true,
   lastLoginAt: true,
