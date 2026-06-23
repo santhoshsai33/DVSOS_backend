@@ -197,21 +197,6 @@ const assertMdCanAccessUser = (actor, targetUser) => {
   }
 };
 
-const createUserAudit = (tx, { actionType, actorUserId, user, comments, locationId, details }) => {
-  return createAuditLog(tx, {
-    moduleCode: 'user-management',
-    moduleName: 'User Management',
-    tableName: 'users',
-    recordId: user.id,
-    actionType,
-    performedByUserId: actorUserId,
-    recordName: user.fullName,
-    comments,
-    locationId: locationId || user.locationId || null,
-    details
-  });
-};
-
 const ensureUniqueEmail = async (email, excludeId) => {
   const existingUser = await userRepository.findUserByEmail(email, excludeId);
 
@@ -315,19 +300,6 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
       }
     });
 
-    await createUserAudit(tx, {
-      actionType: 'CREATE',
-      actorUserId: actor.userId,
-      user: createdUser,
-      comments: 'User created',
-      details: [
-        { fieldName: 'fullName', oldValue: null, newValue: createdUser.fullName, dataType: 'string' },
-        { fieldName: 'emailId', oldValue: null, newValue: createdUser.emailId, dataType: 'string' },
-        { fieldName: 'roleId', oldValue: null, newValue: createdUser.roleId, dataType: 'number' },
-        { fieldName: 'locationId', oldValue: null, newValue: createdUser.locationId, dataType: 'number' }
-      ]
-    });
-
     return createdUser;
   });
 
@@ -387,23 +359,6 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, l
           }
         }
       }
-    });
-
-    const details = buildChangeDetails(currentUser, updatedUser, [
-      'fullName',
-      'emailId',
-      'mobileNo',
-      'employeeCode',
-      'roleId',
-      'locationId'
-    ]);
-
-    await createUserAudit(tx, {
-      actionType: 'UPDATE',
-      actorUserId: actor.userId,
-      user: updatedUser,
-      comments: currentUser.locationId !== updatedUser.locationId ? 'User updated and location changed' : 'User updated',
-      details
     });
 
     return updatedUser;
@@ -489,14 +444,6 @@ const updateUserStatus = async (id, { isActive }, actor) => {
           }
         }
       }
-    });
-
-    await createUserAudit(tx, {
-      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
-      actorUserId: actor.userId,
-      user: updatedUser,
-      comments: isActive ? 'User activated' : 'User deactivated',
-      details: buildChangeDetails(currentUser, updatedUser, ['isActive'])
     });
 
     return updatedUser;

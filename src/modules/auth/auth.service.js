@@ -1,10 +1,8 @@
 const bcrypt = require('bcryptjs');
 
-const prisma = require('../../config/db');
 const authRepository = require('./auth.repository');
 const { signToken } = require('../../utils/jwt');
 const { getRedirectPath } = require('../../utils/redirectPath');
-const { createAuditLog } = require('../../common/utils/audit.util');
 
 const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
@@ -63,25 +61,6 @@ const assertUserCanAuthenticate = (user, genericLoginError = false) => {
   if (!user.role.isActive) {
     throw createHttpError(403, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User role is inactive');
   }
-};
-
-const auditBlockedLoginForMissingLocation = async (user) => {
-  await prisma.$transaction(async (tx) => {
-    await createAuditLog(tx, {
-      moduleCode: 'authentication',
-      moduleName: 'Authentication',
-      tableName: 'users',
-      recordId: user.id,
-      actionType: 'LOGIN_BLOCKED',
-      performedByUserId: user.id,
-      recordName: user.fullName,
-      comments: 'Login blocked due to missing location',
-      details: [
-        { fieldName: 'locationId', oldValue: null, newValue: null, dataType: 'number' },
-        { fieldName: 'roleSlug', oldValue: null, newValue: user.role.slug, dataType: 'string' }
-      ]
-    });
-  });
 };
 
 const comparePassword = (password, passwordHash) => {
@@ -158,7 +137,6 @@ const login = async ({ emailId, password }) => {
   }
 
   if (roleRequiresLocation(user.role.slug) && !user.locationId) {
-    await auditBlockedLoginForMissingLocation(user);
     throw createHttpError(403, 'Location is required for this role');
   }
 
