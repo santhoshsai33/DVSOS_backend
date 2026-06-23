@@ -95,7 +95,7 @@ module.exports = createAdminMasterService({
     { name: 'stateId', type: 'int', required: true },
     { name: 'districtId', type: 'int', required: true },
     { name: 'locationHeadUserId', type: 'optionalInt' },
-    { name: 'locationCode', type: 'string', required: true },
+    { name: 'locationCode', type: 'string' },
     { name: 'locationName', type: 'string', required: true },
     { name: 'locationType', type: 'string', required: true },
     { name: 'address', type: 'string' },
@@ -110,6 +110,7 @@ module.exports = createAdminMasterService({
   hasIsActive: true,
   hasCreatedById: true,
   hasModifiedById: true,
+  autoGenerateCode: true,
   uniqueFields: [
     { fieldName: 'locationCode', label: 'Location code' }
   ],
