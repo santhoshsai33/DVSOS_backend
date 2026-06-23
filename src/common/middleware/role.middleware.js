@@ -8,6 +8,8 @@ const normalizeAllowedRoles = (allowedRoles) => {
   return allowedRoles;
 };
 
+const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
+
 const roleMiddleware = (allowedRoles = [], options = {}) => {
   const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles])
     .map(r => r.toLowerCase().replace(/-/g, '_'));

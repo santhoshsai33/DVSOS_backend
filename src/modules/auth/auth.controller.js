@@ -27,7 +27,21 @@ const me = async (req, res, next) => {
   }
 };
 
+const updateProfile = async (req, res, next) => {
+  try {
+    const data = await authService.updateProfile(req.user.userId, req.body);
+
+    return apiResponse(res, {
+      message: 'Profile updated successfully',
+      data
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   login,
-  me
+  me,
+  updateProfile
 };

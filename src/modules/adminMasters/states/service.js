@@ -30,6 +30,22 @@ const baseService = createAdminMasterService({
   recordName: (state) => state.stateName
 });
 
+const ensureStateCanBeInactivated = async (stateId, isActive) => {
+  if (isActive !== false) {
+    return;
+  }
+
+  const districtCount = await prisma.district.count({
+    where: { stateId }
+  });
+
+  if (districtCount > 0) {
+    const error = new Error('State is already mapped with district and cannot be inactivated');
+    error.statusCode = 409;
+    throw error;
+  }
+};
+
 const createRecord = async (payload, actorUserId) => {
   if (!payload.stateCode) {
     const latestState = await prisma.state.findFirst({
@@ -49,7 +65,19 @@ const createRecord = async (payload, actorUserId) => {
   return baseService.createRecord(payload, actorUserId);
 };
 
+const updateRecord = async (id, payload, actorUserId) => {
+  await ensureStateCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateRecord(id, payload, actorUserId);
+};
+
+const updateStatus = async (id, payload, actorUserId) => {
+  await ensureStateCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateStatus(id, payload, actorUserId);
+};
+
 module.exports = {
   ...baseService,
-  createRecord
+  createRecord,
+  updateRecord,
+  updateStatus
 };

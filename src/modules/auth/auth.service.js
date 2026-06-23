@@ -1,10 +1,22 @@
 const bcrypt = require('bcryptjs');
 
 const authRepository = require('./auth.repository');
+const userRepository = require('../users/user.repository');
 const { signToken } = require('../../utils/jwt');
 const { getRedirectPath } = require('../../utils/redirectPath');
 
 const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
+const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
+const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
+  'managing_director',
+  'gate_security',
+  'gatekeeper',
+  'crm_team',
+  'floor_supervisor',
+  'body_shop_supervisor',
+  'water_wash_team',
+  'manager'
+]);
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -12,10 +24,18 @@ const createHttpError = (statusCode, message) => {
   return error;
 };
 
+const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
+
+const roleRequiresLocation = (roleSlug) => {
+  const normalizedRoleSlug = normalizeRoleSlug(roleSlug);
+  return LOCATION_REQUIRED_ROLE_SLUGS.has(normalizedRoleSlug) && !ADMIN_ROLE_SLUGS.has(normalizedRoleSlug);
+};
+
 const toPublicUser = (user) => ({
   id: user.id,
   fullName: user.fullName,
   emailId: user.emailId,
+  mobileNo: user.mobileNo,
   role: {
     id: user.role.id,
     name: user.role.name,
@@ -118,6 +138,10 @@ const login = async ({ emailId, password }) => {
     throw createHttpError(401, LOGIN_ERROR_MESSAGE);
   }
 
+  if (roleRequiresLocation(user.role.slug) && !user.locationId) {
+    throw createHttpError(403, 'Location is required for this role');
+  }
+
   await authRepository.updateLastLoginAt(user.id);
 
   return buildAuthResponse(user, true);
@@ -128,7 +152,28 @@ const getCurrentUser = async (userId) => {
 
   assertUserCanAuthenticate(user);
 
+  if (roleRequiresLocation(user.role.slug) && !user.locationId) {
+    throw createHttpError(403, 'Location is required for this role');
+  }
+
   return buildAuthResponse(user, false);
+};
+
+const updateProfile = async (userId, data) => {
+  const numericUserId = Number(userId);
+
+  const existingEmail = await userRepository.findUserByEmail(data.emailId, numericUserId);
+  if (existingEmail) {
+    throw createHttpError(400, 'Email already exists');
+  }
+
+  const updatedUser = await userRepository.updateUser(numericUserId, {
+    fullName: data.fullName,
+    emailId: data.emailId,
+    mobileNo: data.mobileNo
+  });
+
+  return buildAuthResponse(updatedUser, false);
 };
 
 module.exports = {
@@ -137,5 +182,6 @@ module.exports = {
   buildJwtPayload,
   getAllowedMenus,
   login,
-  getCurrentUser
+  getCurrentUser,
+  updateProfile
 };

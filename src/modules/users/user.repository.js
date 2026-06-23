@@ -8,6 +8,7 @@ const userSelect = {
   employeeCode: true,
   isActive: true,
   roleId: true,
+  locationId: true,
   createdAt: true,
   updatedAt: true,
   lastLoginAt: true,
@@ -37,7 +38,7 @@ const userWithRoleForChecksSelect = {
   }
 };
 
-const buildUserWhere = ({ search, roleId, isActive } = {}) => {
+const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
   const where = {};
 
   if (typeof isActive === 'boolean') {
@@ -46,6 +47,10 @@ const buildUserWhere = ({ search, roleId, isActive } = {}) => {
 
   if (roleId) {
     where.roleId = roleId;
+  }
+
+  if (locationId) {
+    where.locationId = locationId;
   }
 
   if (search) {
@@ -114,19 +119,35 @@ const findRoleById = (roleId) => {
   });
 };
 
+const findActiveLocationById = (locationId) => {
+  return prisma.location.findFirst({
+    where: {
+      id: locationId,
+      isActive: true
+    },
+    select: {
+      id: true,
+      locationCode: true,
+      locationName: true
+    }
+  });
+};
+
 const countActiveAdmins = () => {
   return prisma.user.count({
     where: {
       isActive: true,
       role: {
-        slug: 'admin'
+        slug: {
+          in: ['admin', 'super_admin']
+        }
       }
     }
   });
 };
 
-const listUsers = async ({ page, limit, search, roleId, isActive }) => {
-  const where = buildUserWhere({ search, roleId, isActive });
+const listUsers = async ({ page, limit, search, roleId, locationId, isActive }) => {
+  const where = buildUserWhere({ search, roleId, locationId, isActive });
   const skip = (page - 1) * limit;
 
   const [users, total] = await prisma.$transaction([
@@ -157,6 +178,7 @@ module.exports = {
   findUserByEmail,
   findUserByEmployeeCode,
   findRoleById,
+  findActiveLocationById,
   countActiveAdmins,
   listUsers,
   findLatestEmployeeCode

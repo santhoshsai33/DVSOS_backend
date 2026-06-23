@@ -1,9 +1,32 @@
 const bcrypt = require('bcryptjs');
 
+const prisma = require('../../config/db');
 const userRepository = require('./user.repository');
 const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 
 const DEFAULT_USER_PASSWORD = 'Admin@123';
+const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
+const MANAGING_DIRECTOR_ROLE = 'managing_director';
+const MD_BLOCKED_ROLE_SLUGS = new Set(['admin', 'super_admin', 'managing_director']);
+const MD_ALLOWED_ROLE_SLUGS = new Set([
+  'gate_security',
+  'gatekeeper',
+  'crm_team',
+  'floor_supervisor',
+  'body_shop_supervisor',
+  'water_wash_team',
+  'manager'
+]);
+const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
+  'managing_director',
+  'gate_security',
+  'gatekeeper',
+  'crm_team',
+  'floor_supervisor',
+  'body_shop_supervisor',
+  'water_wash_team',
+  'manager'
+]);
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -37,12 +60,28 @@ const parseBooleanFilter = (value) => {
   return undefined;
 };
 
+const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
+
+const isAdminRole = (roleSlug) => ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug));
+
+const isManagingDirector = (user) => normalizeRoleSlug(user && user.roleSlug) === MANAGING_DIRECTOR_ROLE;
+
+const parseOptionalPositiveInt = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : NaN;
+};
+
 const toPublicUser = (user) => ({
   id: user.id,
   fullName: user.fullName,
   email: user.emailId,
   mobile: user.mobileNo,
   employeeCode: user.employeeCode,
+  locationId: user.locationId,
   isActive: user.isActive,
   role: {
     id: user.role.id,
@@ -73,11 +112,94 @@ const ensureUserExists = async (id) => {
 const ensureRoleExists = async (roleId) => {
   const role = await userRepository.findRoleById(roleId);
 
-  if (!role) {
+  if (!role || !role.isActive) {
     throw createHttpError(400, 'roleId must reference an existing role');
   }
 
   return role;
+};
+
+const ensureActiveLocationExists = async (locationId) => {
+  const location = await userRepository.findActiveLocationById(locationId);
+
+  if (!location) {
+    throw createHttpError(400, 'Invalid or inactive location');
+  }
+
+  return location;
+};
+
+const resolveLocationForRole = async ({ actor, targetRole, requestedLocationId, currentLocationId }) => {
+  const targetRoleSlug = normalizeRoleSlug(targetRole.slug);
+  const parsedRequestedLocationId = parseOptionalPositiveInt(requestedLocationId);
+
+  if (Number.isNaN(parsedRequestedLocationId)) {
+    throw createHttpError(400, 'Invalid or inactive location');
+  }
+
+  if (isAdminRole(actor.roleSlug)) {
+    const nextLocationId = parsedRequestedLocationId || currentLocationId || null;
+
+    if (LOCATION_REQUIRED_ROLE_SLUGS.has(targetRoleSlug) && !nextLocationId) {
+      throw createHttpError(400, 'Location is required for this role');
+    }
+
+    if (nextLocationId) {
+      await ensureActiveLocationExists(nextLocationId);
+    }
+
+    return nextLocationId;
+  }
+
+  if (isManagingDirector(actor)) {
+    if (!actor.locationId) {
+      throw createHttpError(400, 'Managing Director is not assigned to any location');
+    }
+
+    if (parsedRequestedLocationId && parsedRequestedLocationId !== Number(actor.locationId)) {
+      throw createHttpError(403, 'You cannot create users for another location');
+    }
+
+    return Number(actor.locationId);
+  }
+
+  throw createHttpError(403, 'You do not have permission to manage this role');
+};
+
+const assertActorCanManageRole = (actor, targetRole) => {
+  const targetRoleSlug = normalizeRoleSlug(targetRole.slug);
+
+  if (isAdminRole(actor.roleSlug)) {
+    return;
+  }
+
+  if (isManagingDirector(actor)) {
+    if (MD_BLOCKED_ROLE_SLUGS.has(targetRoleSlug) || !MD_ALLOWED_ROLE_SLUGS.has(targetRoleSlug)) {
+      throw createHttpError(403, 'You do not have permission to manage this role');
+    }
+
+    return;
+  }
+
+  throw createHttpError(403, 'You do not have permission to manage this role');
+};
+
+const assertMdCanAccessUser = (actor, targetUser) => {
+  if (!isManagingDirector(actor)) {
+    return;
+  }
+
+  if (!actor.locationId) {
+    throw createHttpError(400, 'Managing Director is not assigned to any location');
+  }
+
+  if (targetUser.locationId !== Number(actor.locationId)) {
+    throw createHttpError(403, 'You can access only users from your assigned location');
+  }
+
+  if (MD_BLOCKED_ROLE_SLUGS.has(normalizeRoleSlug(targetUser.role.slug))) {
+    throw createHttpError(403, 'You do not have permission to manage this role');
+  }
 };
 
 const ensureUniqueEmail = async (email, excludeId) => {
@@ -101,7 +223,7 @@ const ensureUniqueEmployeeCode = async (employeeCode, excludeId) => {
 };
 
 const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextIsActive }) => {
-  const isCurrentActiveAdmin = currentUser.isActive && currentUser.role.slug === 'admin';
+  const isCurrentActiveAdmin = currentUser.isActive && isAdminRole(currentUser.role.slug);
 
   if (!isCurrentActiveAdmin) {
     return;
@@ -111,7 +233,7 @@ const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextI
     ? await ensureRoleExists(nextRoleId)
     : currentUser.role;
 
-  const remainsActiveAdmin = nextIsActive !== false && nextRole.slug === 'admin';
+  const remainsActiveAdmin = nextIsActive !== false && isAdminRole(nextRole.slug);
 
   if (remainsActiveAdmin) {
     return;
@@ -124,13 +246,19 @@ const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextI
   }
 };
 
-const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, dob, licenceNumber, emergencyContact, gender, address }, createdById) => {
+const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, dob, licenceNumber, emergencyContact, gender, address, locationId }, createdById) => {
   const normalizedEmail = email.trim();
   let normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
   const initialPassword = typeof password === 'string' && password.trim() ? password : DEFAULT_USER_PASSWORD;
 
-  await ensureRoleExists(parsedRoleId);
+  const role = await ensureRoleExists(parsedRoleId);
+  assertActorCanManageRole(actor, role);
+  const resolvedLocationId = await resolveLocationForRole({
+    actor,
+    targetRole: role,
+    requestedLocationId: locationId
+  });
   await ensureUniqueEmail(normalizedEmail);
 
   if (!normalizedEmployeeCode) {
@@ -164,18 +292,26 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
   return toPublicUser(user);
 };
 
-const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address }) => {
+const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address, locationId }) => {
   const userId = Number(id);
   const parsedRoleId = Number(roleId);
   const normalizedEmail = email.trim();
   const normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
 
   const currentUser = await ensureUserExists(userId);
-  await ensureRoleExists(parsedRoleId);
+  assertMdCanAccessUser(actor, currentUser);
+  const role = await ensureRoleExists(parsedRoleId);
+  assertActorCanManageRole(actor, role);
   await assertNotRemovingLastActiveAdmin({
     currentUser,
     nextRoleId: parsedRoleId,
     nextIsActive: currentUser.isActive
+  });
+  const resolvedLocationId = await resolveLocationForRole({
+    actor,
+    targetRole: role,
+    requestedLocationId: locationId,
+    currentLocationId: currentUser.locationId
   });
   await ensureUniqueEmail(normalizedEmail, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
@@ -196,18 +332,25 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
   return toPublicUser(user);
 };
 
-const listUsers = async (query) => {
+const listUsers = async (query, actor) => {
   const page = parsePositiveInt(query.page, 1);
   const limit = parsePositiveInt(query.limit, 10);
   const search = query.search ? query.search.trim() : undefined;
   const roleId = query.roleId ? parsePositiveInt(query.roleId, undefined) : undefined;
+  const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
+  const locationId = isManagingDirector(actor) ? Number(actor.locationId) : requestedLocationId;
   const isActive = parseBooleanFilter(query.isActive);
+
+  if (isManagingDirector(actor) && !actor.locationId) {
+    throw createHttpError(400, 'Managing Director is not assigned to any location');
+  }
 
   const { users, total } = await userRepository.listUsers({
     page,
     limit,
     search,
     roleId,
+    locationId,
     isActive
   });
 
@@ -222,15 +365,19 @@ const listUsers = async (query) => {
   };
 };
 
-const getUserDetail = async (id) => {
+const getUserDetail = async (id, actor) => {
   const user = await ensureUserExists(Number(id));
+  if (isManagingDirector(actor) && user.locationId !== Number(actor.locationId)) {
+    throw createHttpError(403, 'You can access only users from your assigned location');
+  }
 
   return toPublicUser(user);
 };
 
-const updateUserStatus = async (id, { isActive }) => {
+const updateUserStatus = async (id, { isActive }, actor) => {
   const userId = Number(id);
   const currentUser = await ensureUserExists(userId);
+  assertMdCanAccessUser(actor, currentUser);
 
   await assertNotRemovingLastActiveAdmin({
     currentUser,
@@ -238,7 +385,34 @@ const updateUserStatus = async (id, { isActive }) => {
     nextIsActive: isActive
   });
 
-  const user = await userRepository.updateUser(userId, { isActive });
+  const user = await prisma.$transaction(async (tx) => {
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: {
+        isActive,
+        modifiedById: actor.userId || null
+      },
+      select: {
+        id: true,
+        fullName: true,
+        emailId: true,
+        mobileNo: true,
+        employeeCode: true,
+        locationId: true,
+        isActive: true,
+        roleId: true,
+        role: {
+          select: {
+            id: true,
+            name: true,
+            slug: true
+          }
+        }
+      }
+    });
+
+    return updatedUser;
+  });
 
   return toPublicUser(user);
 };

@@ -31,7 +31,7 @@ module.exports = createAdminMasterService({
     { name: 'isActive', type: 'boolean' }
   ],
   hasIsActive: true,
-  searchFields: ['districtName'],
+  searchFields: ['districtName', 'state.stateName'],
   filterFields: ['stateId'],
   validateRelations: async (data) => {
     await ensureForeignKey({ model: 'state', id: data.stateId, label: 'stateId' });

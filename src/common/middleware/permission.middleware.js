@@ -1,6 +1,8 @@
 const prisma = require('../../config/db');
 const { apiResponse } = require('../utils/apiResponse');
 
+const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
+
 const permissionMiddleware = (menuPathOrOptions, actionArg = 'canRead') => {
   const options = typeof menuPathOrOptions === 'object'
     ? menuPathOrOptions || {}
@@ -13,7 +15,7 @@ const permissionMiddleware = (menuPathOrOptions, actionArg = 'canRead') => {
         return next();
       }
 
-      if (req.user.roleSlug === 'admin') {
+      if (['admin', 'super_admin'].includes(normalizeRoleSlug(req.user.roleSlug))) {
         return next();
       }
 
