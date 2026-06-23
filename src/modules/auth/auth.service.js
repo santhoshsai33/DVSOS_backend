@@ -8,7 +8,6 @@ const { getRedirectPath } = require('../../utils/redirectPath');
 const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
 const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
-  'managing_director',
   'gate_security',
   'gatekeeper',
   'crm_team',
