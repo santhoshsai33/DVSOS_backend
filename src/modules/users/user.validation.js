@@ -27,8 +27,9 @@ const validateIdParam = (req, res, next) => {
 
 const validateUserPayload = ({ requirePassword = false } = {}) => {
   return (req, res, next) => {
-    const { fullName, email, mobile, roleId, password } = req.body || {};
+    const { fullName, email, mobile, roleId, password, locationId } = req.body || {};
     const parsedRoleId = Number(roleId);
+    const parsedLocationId = Number(locationId);
 
     if (!isNonEmptyString(fullName)) {
       return sendValidationError(res, 'fullName is required');
@@ -48,6 +49,10 @@ const validateUserPayload = ({ requirePassword = false } = {}) => {
 
     if (!Number.isInteger(parsedRoleId) || parsedRoleId <= 0) {
       return sendValidationError(res, 'roleId is required');
+    }
+
+    if (locationId !== undefined && locationId !== null && locationId !== '' && (!Number.isInteger(parsedLocationId) || parsedLocationId <= 0)) {
+      return sendValidationError(res, 'locationId must be valid');
     }
 
     if (requirePassword && !isNonEmptyString(password)) {

@@ -58,8 +58,12 @@ const normalizeRegistrationOrThrow = (registrationNumber) => {
   return normalizedRegistrationNumber;
 };
 
-const isAdmin = (user) => user && user.roleSlug === 'admin';
-const isGateSecurity = (user) => user && user.roleSlug === 'gate_security';
+const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
+const isAdmin = (user) => user && ['admin', 'super_admin'].includes(normalizeRoleSlug(user.roleSlug));
+const isGateSecurity = (user) => user && ['gate_security', 'gatekeeper'].includes(normalizeRoleSlug(user.roleSlug));
+const isLocationScopedViewer = (user) => {
+  return ['gate_security', 'gatekeeper', 'crm_team', 'manager', 'managing_director'].includes(normalizeRoleSlug(user && user.roleSlug));
+};
 
 const resolveLocationId = (payload, user, { allowAdminBody = false } = {}) => {
   if (isGateSecurity(user)) {
@@ -101,7 +105,7 @@ const ensureActiveLocation = async (locationId) => {
   });
 
   if (!location) {
-    throw createHttpError(400, 'locationId must reference an active location');
+    throw createHttpError(400, 'Invalid or inactive location');
   }
 
   return location;
@@ -548,7 +552,10 @@ const buildHistoryWhere = (query, user) => {
     };
   }
 
-  if (isGateSecurity(user)) {
+  if (isLocationScopedViewer(user)) {
+    if (!user.locationId) {
+      throw createHttpError(400, 'Location is required for this role');
+    }
     where.locationId = resolveLocationId({}, user);
   } else if (query.locationId) {
     where.locationId = parsePositiveInt(query.locationId, undefined);
@@ -634,7 +641,12 @@ const pendingCrmEntries = async (query, user) => {
   }
 
   const queryLocationId = parsePositiveInt(query.locationId, undefined);
-  if (user.locationId) {
+  if (isLocationScopedViewer(user)) {
+    if (!user.locationId) {
+      throw createHttpError(400, 'Location is required for this role');
+    }
+    where.locationId = Number(user.locationId);
+  } else if (user.locationId) {
     where.locationId = Number(user.locationId);
   } else if (queryLocationId) {
     where.locationId = queryLocationId;

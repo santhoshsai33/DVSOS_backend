@@ -3,7 +3,7 @@ const userService = require('./user.service');
 
 const createUser = async (req, res, next) => {
   try {
-    const user = await userService.createUser(req.body, req.user.userId);
+    const user = await userService.createUser(req.body, req.user);
 
     return apiResponse(res, {
       statusCode: 201,
@@ -17,7 +17,7 @@ const createUser = async (req, res, next) => {
 
 const updateUser = async (req, res, next) => {
   try {
-    const user = await userService.updateUser(req.params.id, req.body);
+    const user = await userService.updateUser(req.params.id, req.body, req.user);
 
     return apiResponse(res, {
       message: 'User updated successfully',
@@ -30,7 +30,7 @@ const updateUser = async (req, res, next) => {
 
 const listUsers = async (req, res, next) => {
   try {
-    const { users, meta } = await userService.listUsers(req.query);
+    const { users, meta } = await userService.listUsers(req.query, req.user);
 
     return apiResponse(res, {
       message: 'Users fetched successfully',
@@ -44,7 +44,7 @@ const listUsers = async (req, res, next) => {
 
 const getUserDetail = async (req, res, next) => {
   try {
-    const user = await userService.getUserDetail(req.params.id);
+    const user = await userService.getUserDetail(req.params.id, req.user);
 
     return apiResponse(res, {
       message: 'User fetched successfully',
@@ -57,7 +57,7 @@ const getUserDetail = async (req, res, next) => {
 
 const updateUserStatus = async (req, res, next) => {
   try {
-    const user = await userService.updateUserStatus(req.params.id, req.body);
+    const user = await userService.updateUserStatus(req.params.id, req.body, req.user);
 
     return apiResponse(res, {
       message: user.isActive ? 'User activated successfully' : 'User deactivated successfully',

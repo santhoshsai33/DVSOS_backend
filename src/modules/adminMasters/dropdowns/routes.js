@@ -6,7 +6,7 @@ const { authMiddleware } = require('../../../common/middleware/auth.middleware')
 const { roleMiddleware } = require('../../../common/middleware/role.middleware');
 const { permissionMiddleware } = require('../../../common/middleware/permission.middleware');
 
-const adminOnly = roleMiddleware(['admin']);
+const adminOnly = roleMiddleware(['admin', 'super_admin']);
 const canRead = permissionMiddleware({ menuPath: '/admin-dashboard', action: 'canRead' });
 
 router.use(authMiddleware);

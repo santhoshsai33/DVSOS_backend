@@ -565,7 +565,7 @@ const createValidation = (requiredFields = []) => {
 
 const createAdminMasterRoutes = ({ controller, validation, menuPath }) => {
   const router = require('express').Router();
-  const adminOnly = roleMiddleware(['admin']);
+  const adminOnly = roleMiddleware(['admin', 'super_admin']);
   const canCreate = permissionMiddleware({ menuPath, action: 'canCreate' });
   const canRead = permissionMiddleware({ menuPath, action: 'canRead' });
   const canUpdate = permissionMiddleware({ menuPath, action: 'canUpdate' });
