@@ -13,6 +13,10 @@ const permissionMiddleware = (menuPathOrOptions, actionArg = 'canRead') => {
         return next();
       }
 
+      if (req.user.roleSlug === 'admin') {
+        return next();
+      }
+
       const permission = await prisma.roleMenuPermission.findFirst({
         where: {
           roleId: req.user.roleId,
