@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 
 const userRepository = require('./user.repository');
+const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 
 const DEFAULT_USER_PASSWORD = 'Admin@123';
 
@@ -120,13 +121,23 @@ const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextI
 
 const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password }, createdById) => {
   const normalizedEmail = email.trim();
-  const normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
+  let normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
   const initialPassword = typeof password === 'string' && password.trim() ? password : DEFAULT_USER_PASSWORD;
 
   await ensureRoleExists(parsedRoleId);
   await ensureUniqueEmail(normalizedEmail);
-  await ensureUniqueEmployeeCode(normalizedEmployeeCode);
+
+  if (!normalizedEmployeeCode) {
+    const latestUser = await userRepository.findLatestEmployeeCode();
+    normalizedEmployeeCode = await generateUniqueCode({
+      prefix: CODE_CONFIG.employee.prefix,
+      latestCode: latestUser?.employeeCode,
+      existsCallback: async (code) => !!(await userRepository.findUserByEmployeeCode(code))
+    });
+  } else {
+    await ensureUniqueEmployeeCode(normalizedEmployeeCode);
+  }
 
   const passwordHash = await hashPassword(initialPassword);
 

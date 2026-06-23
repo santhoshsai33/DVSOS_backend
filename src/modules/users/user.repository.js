@@ -138,6 +138,13 @@ const listUsers = async ({ page, limit, search, roleId, isActive }) => {
   return { users, total };
 };
 
+const findLatestEmployeeCode = () => {
+  return prisma.user.findFirst({
+    orderBy: { id: 'desc' },
+    select: { employeeCode: true }
+  });
+};
+
 module.exports = {
   createUser,
   updateUser,
@@ -146,5 +153,6 @@ module.exports = {
   findUserByEmployeeCode,
   findRoleById,
   countActiveAdmins,
-  listUsers
+  listUsers,
+  findLatestEmployeeCode
 };
