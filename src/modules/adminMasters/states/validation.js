@@ -1,6 +1,6 @@
 const { createValidation } = require('../common');
 
-module.exports = createValidation([
+const validation = createValidation([
   { name: 'stateName', type: 'string', maxLength: 100 }
 ]);
 
