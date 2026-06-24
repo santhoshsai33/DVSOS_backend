@@ -167,6 +167,7 @@ const updateRole = async (id, { name, description, isActive }, actorUserId) => {
   };
 
   if (typeof isActive === 'boolean') {
+    await ensureRoleCanBeInactivated(roleId, isActive);
     nextData.isActive = isActive;
   }
 
@@ -236,6 +237,8 @@ const getRoleDetail = async (id) => {
 const updateRoleStatus = async (id, { isActive }, actorUserId) => {
   const currentRole = await resolveRoleByIdentifier(id);
   const roleId = currentRole.id;
+
+  await ensureRoleCanBeInactivated(roleId, isActive);
 
   return prisma.$transaction(async (tx) => {
     const role = await tx.role.update({

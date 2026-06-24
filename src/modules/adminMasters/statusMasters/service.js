@@ -1,4 +1,4 @@
-const { createAdminMasterService } = require('../common');
+const { createAdminMasterService, ensureUniqueComposite } = require('../common');
 
 const statusMasterService = createAdminMasterService({
   model: 'statusMaster',
@@ -12,6 +12,17 @@ const statusMasterService = createAdminMasterService({
   uniqueFields: [
     { fieldName: 'statusCode', label: 'Status Code' }
   ],
+  validateUnique: async (data, excludeId) => {
+    await ensureUniqueComposite({
+      model: 'statusMaster',
+      fields: {
+        moduleId: data.moduleId,
+        statusName: data.statusName
+      },
+      label: 'Status name',
+      excludeId
+    });
+  },
   select: {
     id: true,
     moduleId: true,
