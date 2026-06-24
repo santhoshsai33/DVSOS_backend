@@ -50,17 +50,37 @@ const buildJwtPayload = (user) => ({
   locationId: user.locationId
 });
 
-const assertUserCanAuthenticate = (user, genericLoginError = false) => {
+const normalizeAuthErrorOptions = (options) => {
+  if (typeof options === 'boolean') {
+    return {
+      genericLoginError: options,
+      maskInactiveUser: options,
+      maskInactiveRole: options
+    };
+  }
+
+  const genericLoginError = Boolean(options?.genericLoginError);
+
+  return {
+    genericLoginError,
+    maskInactiveUser: options?.maskInactiveUser ?? genericLoginError,
+    maskInactiveRole: options?.maskInactiveRole ?? genericLoginError
+  };
+};
+
+const assertUserCanAuthenticate = (user, options = false) => {
+  const { genericLoginError, maskInactiveUser, maskInactiveRole } = normalizeAuthErrorOptions(options);
+
   if (!user || !user.role) {
     throw createHttpError(401, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User not found');
   }
 
   if (!user.isActive) {
-    throw createHttpError(403, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User account is inactive');
+    throw createHttpError(403, maskInactiveUser ? LOGIN_ERROR_MESSAGE : 'User account is inactive');
   }
 
   if (!user.role.isActive) {
-    throw createHttpError(403, genericLoginError ? LOGIN_ERROR_MESSAGE : 'User role is inactive');
+    throw createHttpError(403, maskInactiveRole ? LOGIN_ERROR_MESSAGE : 'User role is inactive');
   }
 };
 
@@ -129,7 +149,10 @@ const login = async ({ emailId, password }) => {
   const normalizedEmailId = emailId.trim();
   const user = await authRepository.findUserByEmailId(normalizedEmailId);
 
-  assertUserCanAuthenticate(user, true);
+  assertUserCanAuthenticate(user, {
+    genericLoginError: true,
+    maskInactiveUser: false
+  });
 
   const passwordMatches = await comparePassword(password, user.passwordHash);
 
@@ -160,6 +183,9 @@ const getCurrentUser = async (userId) => {
 
 const updateProfile = async (userId, data) => {
   const numericUserId = Number(userId);
+  const user = await authRepository.findUserById(numericUserId);
+
+  assertUserCanAuthenticate(user);
 
   const existingEmail = await userRepository.findUserByEmail(data.emailId, numericUserId);
   if (existingEmail) {
