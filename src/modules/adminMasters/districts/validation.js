@@ -2,5 +2,5 @@ const { createValidation } = require('../common');
 
 module.exports = createValidation([
   { name: 'stateId', type: 'int' },
-  { name: 'districtName', type: 'string' }
+  { name: 'districtName', type: 'string', maxLength: 100 }
 ]);

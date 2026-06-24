@@ -541,12 +541,20 @@ const createValidation = (requiredFields = []) => {
     for (const field of requiredFields) {
       const value = payload[field.name];
 
-      if (field.type === 'string' && !isNonEmptyString(value)) {
-        return sendValidationError(res, `${field.name} is required`);
+      const isRequired = field.required !== false;
+
+      if (field.type === 'string') {
+        if (!isNonEmptyString(value)) {
+          if (isRequired) return sendValidationError(res, `${field.name} is required`);
+        } else if (field.maxLength && value.length > field.maxLength) {
+          return sendValidationError(res, `${field.name} must not exceed ${field.maxLength} characters`);
+        }
       }
 
-      if ((field.type === 'int' || field.type === 'decimal') && (value === undefined || value === null || value === '')) {
-        return sendValidationError(res, `${field.name} is required`);
+      if (field.type === 'int' || field.type === 'decimal') {
+        if (value === undefined || value === null || value === '') {
+          if (isRequired) return sendValidationError(res, `${field.name} is required`);
+        }
       }
     }
 
