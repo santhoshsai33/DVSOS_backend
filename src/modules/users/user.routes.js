@@ -10,17 +10,17 @@ const {
 const { authenticate } = require('../../common/middleware/auth.middleware');
 const { roleMiddleware } = require('../../common/middleware/role.middleware');
 
-const canManageUsers = roleMiddleware(['admin', 'super_admin', 'managing_director']);
-const canViewUsers = roleMiddleware(['admin', 'super_admin', 'manager', 'managing_director']);
-const adminOnly = roleMiddleware(['admin', 'super_admin']);
+const canViewUsers = roleMiddleware(['admin', 'manager', 'managing_director']);
+const adminOrMd = roleMiddleware(['admin', 'managing_director']);
+const adminOnly = roleMiddleware(['admin']);
 
 router.use(authenticate);
 
-router.post('/create', canManageUsers, validateUserPayload(), userController.createUser);
-router.put('/update/:id', canManageUsers, validateIdParam, validateUserPayload(), userController.updateUser);
+router.post('/create', adminOrMd, validateUserPayload(), userController.createUser);
+router.put('/update/:id', adminOrMd, validateIdParam, validateUserPayload(), userController.updateUser);
 router.get('/list', canViewUsers, userController.listUsers);
 router.get('/detail/:id', canViewUsers, validateIdParam, userController.getUserDetail);
-router.patch('/status/:id', canManageUsers, validateIdParam, validateStatusPayload, userController.updateUserStatus);
-router.patch('/reset-password/:id', adminOnly, validateIdParam, validatePasswordPayload, userController.resetUserPassword);
+router.patch('/status/:id', adminOrMd, validateIdParam, validateStatusPayload, userController.updateUserStatus);
+router.patch('/reset-password/:id', adminOrMd, validateIdParam, validatePasswordPayload, userController.resetUserPassword);
 
 module.exports = router;

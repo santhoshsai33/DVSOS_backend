@@ -11,12 +11,13 @@ const normalizeAllowedRoles = (allowedRoles) => {
 const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
 
 const roleMiddleware = (allowedRoles = [], options = {}) => {
-  const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]).map(normalizeRoleSlug);
+  const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles])
+    .map(r => r.toLowerCase().replace(/-/g, '_'));
   const allowAdmin = options.allowAdmin === true;
 
   return (req, res, next) => {
-    const userRole = normalizeRoleSlug(req.user && req.user.roleSlug);
-    const canAccess = roles.includes(userRole) || (allowAdmin && ['admin', 'super_admin'].includes(userRole));
+    const userRole = req.user && req.user.roleSlug && req.user.roleSlug.toLowerCase().replace(/-/g, '_');
+    const canAccess = roles.includes(userRole) || (allowAdmin && userRole === 'admin');
 
     if (!userRole || !canAccess) {
       return apiResponse(res, {

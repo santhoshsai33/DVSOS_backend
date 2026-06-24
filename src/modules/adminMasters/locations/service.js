@@ -114,7 +114,7 @@ module.exports = createAdminMasterService({
   uniqueFields: [
     { fieldName: 'locationCode', label: 'Location code' }
   ],
-  searchFields: ['locationName', 'locationCode', 'city'],
+  searchFields: ['locationName', 'locationCode', 'city', 'serviceCenter.serviceCenterName'],
   filterFields: ['serviceCenterId', 'stateId', 'districtId'],
   validateRelations: validateLocationRelations,
   recordName: (location) => location.locationName

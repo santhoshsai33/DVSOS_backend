@@ -10,7 +10,9 @@ const ROLE_REDIRECT_PATHS = {
 };
 
 const getRedirectPath = (roleSlug) => {
-  return ROLE_REDIRECT_PATHS[roleSlug] || '/profile';
+  if (!roleSlug) return '/profile';
+  const normalized = roleSlug.toLowerCase().replace(/-/g, '_');
+  return ROLE_REDIRECT_PATHS[normalized] || '/profile';
 };
 
 module.exports = {

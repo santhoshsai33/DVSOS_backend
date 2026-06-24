@@ -75,9 +75,14 @@ const buildWhere = ({ search, searchFields = [], filters = {}, isActive }) => {
   });
 
   if (search && searchFields.length > 0) {
-    where.OR = searchFields.map((fieldName) => ({
-      [fieldName]: { contains: search }
-    }));
+    where.OR = searchFields.map((fieldName) => {
+      const parts = fieldName.split('.');
+      let current = { contains: search };
+      for (let i = parts.length - 1; i >= 0; i--) {
+        current = { [parts[i]]: current };
+      }
+      return current;
+    });
   }
 
   return where;

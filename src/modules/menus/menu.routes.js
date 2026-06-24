@@ -4,10 +4,10 @@ const menuController = require('./menu.controller');
 const { authenticate } = require('../../common/middleware/auth.middleware');
 const { roleMiddleware } = require('../../common/middleware/role.middleware');
 
-const adminOnly = roleMiddleware(['admin']);
+const canViewMenus = roleMiddleware(['admin', 'manager', 'managing_director']);
 
 router.use(authenticate);
-router.use(adminOnly);
+router.use(canViewMenus);
 
 router.get('/list', menuController.listMenus);
 router.get('/modules/list', menuController.listMenuModules);

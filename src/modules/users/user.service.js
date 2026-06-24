@@ -87,7 +87,12 @@ const toPublicUser = (user) => ({
     id: user.role.id,
     name: user.role.name,
     slug: user.role.slug
-  }
+  },
+  dob: user.dob,
+  licenceNumber: user.licenceNumber,
+  emergencyContact: user.emergencyContact,
+  gender: user.gender,
+  address: user.address
 });
 
 const hashPassword = (password) => {
@@ -241,7 +246,7 @@ const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextI
   }
 };
 
-const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, locationId }, actor) => {
+const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, dob, licenceNumber, emergencyContact, gender, address, locationId }, createdById) => {
   const normalizedEmail = email.trim();
   let normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
@@ -269,44 +274,25 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
 
   const passwordHash = await hashPassword(initialPassword);
 
-  const user = await prisma.$transaction(async (tx) => {
-    const createdUser = await tx.user.create({
-      data: {
-        fullName: fullName.trim(),
-        emailId: normalizedEmail,
-        mobileNo: mobile ? mobile.trim() : null,
-        employeeCode: normalizedEmployeeCode,
-        roleId: parsedRoleId,
-        locationId: resolvedLocationId,
-        passwordHash,
-        createdById: actor.userId || null
-      },
-      select: {
-        id: true,
-        fullName: true,
-        emailId: true,
-        mobileNo: true,
-        employeeCode: true,
-        locationId: true,
-        isActive: true,
-        roleId: true,
-        role: {
-          select: {
-            id: true,
-            name: true,
-            slug: true
-          }
-        }
-      }
-    });
-
-    return createdUser;
+  const user = await userRepository.createUser({
+    fullName: fullName.trim(),
+    emailId: normalizedEmail,
+    mobileNo: mobile ? mobile.trim() : null,
+    employeeCode: normalizedEmployeeCode,
+    roleId: parsedRoleId,
+    passwordHash,
+    dob: dob ? new Date(dob) : null,
+    licenceNumber: licenceNumber ? licenceNumber.trim() : null,
+    emergencyContact: emergencyContact ? emergencyContact.trim() : null,
+    gender: gender ? gender.trim() : null,
+    address: address ? address.trim() : null,
+    createdById: createdById || null
   });
 
   return toPublicUser(user);
 };
 
-const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, locationId }, actor) => {
+const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address, locationId }) => {
   const userId = Number(id);
   const parsedRoleId = Number(roleId);
   const normalizedEmail = email.trim();
@@ -330,38 +316,17 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, l
   await ensureUniqueEmail(normalizedEmail, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
-  const user = await prisma.$transaction(async (tx) => {
-    const updatedUser = await tx.user.update({
-      where: { id: userId },
-      data: {
-        fullName: fullName.trim(),
-        emailId: normalizedEmail,
-        mobileNo: mobile ? mobile.trim() : null,
-        employeeCode: normalizedEmployeeCode,
-        roleId: parsedRoleId,
-        locationId: resolvedLocationId,
-        modifiedById: actor.userId || null
-      },
-      select: {
-        id: true,
-        fullName: true,
-        emailId: true,
-        mobileNo: true,
-        employeeCode: true,
-        locationId: true,
-        isActive: true,
-        roleId: true,
-        role: {
-          select: {
-            id: true,
-            name: true,
-            slug: true
-          }
-        }
-      }
-    });
-
-    return updatedUser;
+  const user = await userRepository.updateUser(userId, {
+    fullName: fullName.trim(),
+    emailId: normalizedEmail,
+    mobileNo: mobile ? mobile.trim() : null,
+    employeeCode: normalizedEmployeeCode,
+    roleId: parsedRoleId,
+    dob: dob ? new Date(dob) : null,
+    licenceNumber: licenceNumber ? licenceNumber.trim() : null,
+    emergencyContact: emergencyContact ? emergencyContact.trim() : null,
+    gender: gender ? gender.trim() : null,
+    address: address ? address.trim() : null
   });
 
   return toPublicUser(user);
