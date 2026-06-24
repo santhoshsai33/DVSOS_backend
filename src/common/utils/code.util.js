@@ -32,6 +32,10 @@ const CODE_CONFIG = {
   module: {
     field: 'moduleCode',
     prefix: 'MOD'
+  },
+  statusMaster: {
+    field: 'statusCode',
+    prefix: 'STAT'
   }
 };
 

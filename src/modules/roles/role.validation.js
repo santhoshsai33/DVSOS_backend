@@ -33,6 +33,16 @@ const validateRolePayload = (req, res, next) => {
     });
   }
 
+  if (name.length > 100) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'role name must not exceed 100 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
   return next();
 };
 
