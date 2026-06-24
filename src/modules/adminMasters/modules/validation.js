@@ -1,14 +1,8 @@
 const { createValidation } = require('../common');
 
-<<<<<<< HEAD
-const validation = createValidation([
-  { name: 'moduleName', type: 'string' },
-  { name: 'description', type: 'string', required: false }
-=======
 module.exports = createValidation([
   { name: 'moduleName', type: 'string', maxLength: 100 },
   { name: 'description', type: 'string', required: false, maxLength: 500 }
->>>>>>> 1fd3428a5aa048971cd735ba5947b7e84e3389d6
 ]);
 
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
