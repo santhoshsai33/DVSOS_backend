@@ -27,6 +27,7 @@ const serviceItemSelect = {
 
 module.exports = createAdminMasterService({
   model: 'serviceItem',
+  identifierField: 'slug',
   tableName: 'service_items',
   label: 'Service item',
   select: serviceItemSelect,

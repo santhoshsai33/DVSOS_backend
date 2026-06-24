@@ -14,6 +14,7 @@ const serviceCategorySelect = {
 
 module.exports = createAdminMasterService({
   model: 'serviceCategory',
+  identifierField: 'slug',
   tableName: 'service_categories',
   label: 'Service category',
   select: serviceCategorySelect,

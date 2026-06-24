@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { generateSlug } = require('../src/common/utils/slug.util');
 
 const SERVICE_CENTER = {
   serviceCenterCode: 'DVSOS-HQ',
@@ -25,6 +26,7 @@ const LOCATION = {
 
 const seedServiceCentersLocations = async (prisma) => {
   await prisma.$transaction(async (tx) => {
+    const locationSlug = generateSlug(LOCATION.locationName);
     const state = await tx.state.findUnique({
       where: { stateCode: 'TN' },
       select: { id: true }
@@ -71,6 +73,7 @@ const seedServiceCentersLocations = async (prisma) => {
         districtId: district.id,
         locationHeadUserId: null,
         locationName: LOCATION.locationName,
+        slug: locationSlug,
         locationType: LOCATION.locationType,
         address: LOCATION.address,
         city: LOCATION.city,
@@ -86,6 +89,7 @@ const seedServiceCentersLocations = async (prisma) => {
         stateId: state.id,
         districtId: district.id,
         locationHeadUserId: null,
+        slug: locationSlug,
         ...LOCATION,
         isActive: true
       }

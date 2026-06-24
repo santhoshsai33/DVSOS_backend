@@ -4,6 +4,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const mobileRegex = /^\+?[0-9]{10,15}$/;
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+const isSlug = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
 
 const sendValidationError = (res, message) => {
   return apiResponse(res, {
@@ -16,10 +17,11 @@ const sendValidationError = (res, message) => {
 };
 
 const validateIdParam = (req, res, next) => {
-  const id = Number(req.params.id);
+  const identifier = req.params.id;
+  const id = Number(identifier);
 
-  if (!Number.isInteger(id) || id <= 0) {
-    return sendValidationError(res, 'Valid user id is required');
+  if ((!Number.isInteger(id) || id <= 0) && !isSlug(identifier)) {
+    return sendValidationError(res, 'Valid user identifier is required');
   }
 
   return next();

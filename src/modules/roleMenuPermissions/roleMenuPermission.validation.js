@@ -4,6 +4,7 @@ const isPositiveInt = (value) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0;
 };
+const isSlug = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
 
 const sendValidationError = (res, message) => {
   return apiResponse(res, {
@@ -16,8 +17,10 @@ const sendValidationError = (res, message) => {
 };
 
 const validateRoleIdParam = (req, res, next) => {
-  if (!isPositiveInt(Number(req.params.roleId))) {
-    return sendValidationError(res, 'Valid role id is required');
+  const roleIdentifier = req.params.roleId;
+
+  if (!isPositiveInt(Number(roleIdentifier)) && !isSlug(roleIdentifier)) {
+    return sendValidationError(res, 'Valid role identifier is required');
   }
 
   return next();

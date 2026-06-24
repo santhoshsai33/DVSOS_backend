@@ -1,5 +1,5 @@
 const prisma = require('../../config/db');
-const { createAuditLog } = require('../../common/utils/audit.util');
+const { createAuditLog, ensureAuditModule } = require('../../common/utils/audit.util');
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -8,10 +8,19 @@ const createHttpError = (statusCode, message) => {
 };
 
 const permissionFields = ['canRead', 'canCreate', 'canUpdate', 'canDelete'];
+const PERMISSION_TRANSACTION_OPTIONS = {
+  maxWait: 10000,
+  timeout: 30000
+};
 
-const ensureRoleExists = async (roleId) => {
+const resolveRoleByIdentifier = async (identifier) => {
+  const parsedRoleId = Number(identifier);
+  const where = Number.isInteger(parsedRoleId) && parsedRoleId > 0
+    ? { id: parsedRoleId }
+    : { slug: String(identifier || '').trim() };
+
   const role = await prisma.role.findUnique({
-    where: { id: roleId },
+    where,
     select: {
       id: true,
       name: true,
@@ -113,8 +122,8 @@ const formatPermissionResponse = (role, menus, permissionMap) => {
 };
 
 const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) => {
-  const parsedRoleId = Number(roleId);
-  const role = await ensureRoleExists(parsedRoleId);
+  const role = await resolveRoleByIdentifier(roleId);
+  const parsedRoleId = role.id;
   const menuIds = permissionPayload.map((permission) => Number(permission.menuId));
 
   await ensureMenusExist(menuIds);
@@ -123,6 +132,10 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
 
   const permissions = await prisma.$transaction(async (tx) => {
     const savedPermissions = [];
+    const auditModule = await ensureAuditModule(tx, {
+      moduleCode: 'role-management',
+      moduleName: 'Role Management'
+    });
 
     for (const permission of permissionPayload) {
       const menuId = Number(permission.menuId);
@@ -160,21 +173,22 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
         performedByUserId: actorUserId,
         recordName: `${role.slug}:${menuId}`,
         comments: existingPermission ? 'Role menu permission updated' : 'Role menu permission created',
-        details: buildPermissionAuditDetails(existingPermission, savedPermission)
+        details: buildPermissionAuditDetails(existingPermission, savedPermission),
+        moduleId: auditModule.id
       });
 
       savedPermissions.push(savedPermission);
     }
 
     return savedPermissions;
-  });
+  }, PERMISSION_TRANSACTION_OPTIONS);
 
   return permissions;
 };
 
 const getRoleMenuPermissions = async (roleId) => {
-  const parsedRoleId = Number(roleId);
-  const role = await ensureRoleExists(parsedRoleId);
+  const role = await resolveRoleByIdentifier(roleId);
+  const parsedRoleId = role.id;
 
   const [menus, permissions] = await prisma.$transaction([
     prisma.menu.findMany({
@@ -205,9 +219,9 @@ const getRoleMenuPermissions = async (roleId) => {
 };
 
 const deleteRoleMenuPermission = async (roleId, menuId, actorUserId) => {
-  const parsedRoleId = Number(roleId);
+  const role = await resolveRoleByIdentifier(roleId);
+  const parsedRoleId = role.id;
   const parsedMenuId = Number(menuId);
-  const role = await ensureRoleExists(parsedRoleId);
   await ensureMenusExist([parsedMenuId]);
 
   const existingPermission = await prisma.roleMenuPermission.findUnique({

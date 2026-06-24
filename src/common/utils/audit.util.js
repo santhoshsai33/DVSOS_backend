@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { generateSlug } = require('./slug.util');
 
 const serializeAuditValue = (value) => {
   if (value === undefined || value === null) {
@@ -17,15 +18,19 @@ const serializeAuditValue = (value) => {
 };
 
 const ensureAuditModule = (tx, { moduleCode, moduleName }) => {
+  const slug = generateSlug(moduleName || moduleCode);
+
   return tx.module.upsert({
     where: { moduleCode },
     update: {
       moduleName,
+      slug,
       isActive: true
     },
     create: {
       moduleCode,
       moduleName,
+      slug,
       isActive: true
     },
     select: { id: true }
@@ -44,13 +49,14 @@ const createAuditLog = async (
     recordName,
     comments,
     details = [],
-    locationId = null
+    locationId = null,
+    moduleId = null
   }
 ) => {
-  const module = await ensureAuditModule(tx, { moduleCode, moduleName });
+  const auditModule = moduleId ? { id: moduleId } : await ensureAuditModule(tx, { moduleCode, moduleName });
 
   const data = {
-    moduleId: module.id,
+    moduleId: auditModule.id,
     locationId,
     tableName,
     recordId: BigInt(recordId),
@@ -87,6 +93,7 @@ const buildChangeDetails = (oldRecord, newRecord, fields) => {
 };
 
 module.exports = {
+  ensureAuditModule,
   createAuditLog,
   buildChangeDetails
 };

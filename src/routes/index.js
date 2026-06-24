@@ -9,6 +9,8 @@ const adminServiceCenterRoutes = require('../modules/adminMasters/serviceCenters
 const adminServiceItemRoutes = require('../modules/adminMasters/serviceItems/routes');
 const adminStateRoutes = require('../modules/adminMasters/states/routes');
 const adminModuleRoutes = require('../modules/adminMasters/modules/routes');
+const adminStatusRoutes = require('../modules/adminMasters/statuses/routes');
+const dashboardRoutes = require('../modules/dashboards/dashboard.routes');
 const healthRoutes = require('../modules/health/health.routes');
 const menuRoutes = require('../modules/menus/menu.routes');
 const {
@@ -30,6 +32,8 @@ router.use('/admin/service-centers', adminServiceCenterRoutes);
 router.use('/admin/locations', adminLocationRoutes);
 router.use('/admin/dropdowns', adminDropdownRoutes);
 router.use('/admin/modules', adminModuleRoutes);
+router.use('/admin/statuses', adminStatusRoutes);
+router.use('/dashboard', dashboardRoutes);
 router.use('/health', healthRoutes);
 router.use('/menus', menuRoutes);
 router.use('/mobile/gate-entry', mobileGateEntryRoutes);

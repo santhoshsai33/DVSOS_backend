@@ -57,6 +57,16 @@ const ensureCategoryExists = async (id, onlyActive = false) => {
   return category;
 };
 
+const ensureCategoryExistsByIdentifier = async (identifier, onlyActive = false) => {
+  const category = await categoryRepository.findCategoryByIdentifier(identifier, onlyActive);
+
+  if (!category) {
+    throw createHttpError(404, 'Service category not found');
+  }
+
+  return category;
+};
+
 const ensureUniqueCategorySlug = async (slug, excludeId) => {
   const existingCategory = await categoryRepository.findCategoryBySlug(slug, excludeId);
 
@@ -94,14 +104,13 @@ const createCategory = async ({ name, slug, description }) => {
   });
 };
 
-const updateCategory = async (id, { name, slug, description }) => {
-  const categoryId = Number(id);
-  await ensureCategoryExists(categoryId);
+const updateCategory = async (identifier, { name, slug, description }) => {
+  const category = await ensureCategoryExistsByIdentifier(identifier);
 
   const normalizedName = name.trim();
-  const normalizedSlug = await resolveCategorySlug({ name: normalizedName, slug, excludeId: categoryId });
+  const normalizedSlug = await resolveCategorySlug({ name: normalizedName, slug, excludeId: category.id });
 
-  return categoryRepository.updateCategory(categoryId, {
+  return categoryRepository.updateCategory(category.id, {
     name: normalizedName,
     slug: normalizedSlug,
     description: description ? description.trim() : null
@@ -132,8 +141,8 @@ const listCategories = async (query, user) => {
   };
 };
 
-const getCategoryDetail = async (id, user) => {
-  return ensureCategoryExists(Number(id), shouldRestrictToActive(user));
+const getCategoryDetail = async (identifier, user) => {
+  return ensureCategoryExistsByIdentifier(identifier, shouldRestrictToActive(user));
 };
 
 const updateCategoryStatus = async (id, { isActive }, query = {}) => {

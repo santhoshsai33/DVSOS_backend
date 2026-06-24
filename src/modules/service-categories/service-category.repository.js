@@ -62,6 +62,19 @@ const findCategoryBySlug = (slug, excludeId) => {
   });
 };
 
+const findCategoryByIdentifier = (identifier, onlyActive = false) => {
+  const parsedId = Number(identifier);
+  const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+
+  return prisma.serviceCategory.findFirst({
+    where: {
+      ...(isNumericId ? { id: parsedId } : { slug: String(identifier).trim() }),
+      ...(onlyActive ? { isActive: true } : {})
+    },
+    select: categorySelect
+  });
+};
+
 const countActiveServiceItems = (categoryId) => {
   return prisma.serviceItem.count({
     where: {
@@ -113,6 +126,7 @@ module.exports = {
   updateCategory,
   findCategoryById,
   findCategoryBySlug,
+  findCategoryByIdentifier,
   countActiveServiceItems,
   deactivateCategoryAndItems,
   listCategories

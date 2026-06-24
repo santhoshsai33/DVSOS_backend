@@ -77,10 +77,12 @@ const buildWhere = ({ search, searchFields = [], filters = {}, isActive }) => {
   if (search && searchFields.length > 0) {
     where.OR = searchFields.map((fieldName) => {
       const parts = fieldName.split('.');
-      let current = { contains: search };
-      for (let i = parts.length - 1; i >= 0; i--) {
-        current = { [parts[i]]: current };
+      let current = { [parts[parts.length - 1]]: { contains: search } };
+
+      for (let i = parts.length - 2; i >= 0; i--) {
+        current = { [parts[i]]: { is: current } };
       }
+
       return current;
     });
   }
@@ -131,6 +133,24 @@ const pickData = (payload, fields) => {
 
 const ensureExists = async ({ model, id, label }) => {
   const record = await prisma[model].findUnique({ where: { id } });
+
+  if (!record) {
+    throw createHttpError(404, `${label} not found`);
+  }
+
+  return record;
+};
+
+const ensureExistsByIdentifier = async ({ model, identifier, identifierField, label }) => {
+  const parsedId = Number(identifier);
+  const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+  const where = isNumericId
+    ? { id: parsedId }
+    : identifierField
+      ? { [identifierField]: String(identifier).trim() }
+      : { id: parsedId };
+
+  const record = await prisma[model].findFirst({ where });
 
   if (!record) {
     throw createHttpError(404, `${label} not found`);
@@ -317,8 +337,13 @@ const createAdminMasterService = (config) => {
   };
 
   const updateRecord = async (id, payload, actorUserId) => {
-    const recordId = Number(id);
-    const currentRecord = await ensureExists({ model: config.model, id: recordId, label: config.label });
+    const currentRecord = await ensureExistsByIdentifier({
+      model: config.model,
+      identifier: id,
+      identifierField: config.identifierField,
+      label: config.label
+    });
+    const recordId = currentRecord.id;
     const data = pickData(payload, config.fields);
 
     if (config.slugFrom) {
@@ -399,8 +424,16 @@ const createAdminMasterService = (config) => {
   };
 
   const getRecord = async (id) => {
-    const record = await prisma[config.model].findUnique({
-      where: { id: Number(id) },
+    const parsedId = Number(id);
+    const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+    const where = isNumericId
+      ? { id: parsedId }
+      : config.identifierField
+        ? { [config.identifierField]: String(id).trim() }
+        : { id: parsedId };
+
+    const record = await prisma[config.model].findFirst({
+      where,
       select: config.select
     });
 
@@ -574,14 +607,15 @@ const createAdminMasterRoutes = ({ controller, validation, menuPath }) => {
   const canCreate = permissionMiddleware({ menuPath, action: 'canCreate' });
   const canRead = permissionMiddleware({ menuPath, action: 'canRead' });
   const canUpdate = permissionMiddleware({ menuPath, action: 'canUpdate' });
+  const validateIdentifierParam = validation.validateIdentifierParam || validation.validateIdParam;
 
   router.use(authMiddleware);
   router.use(adminOnly);
 
   router.post('/create', canCreate, validation.validatePayload, controller.create);
-  router.put('/update/:id', canUpdate, validation.validateIdParam, validation.validatePayload, controller.update);
+  router.put('/update/:id', canUpdate, validateIdentifierParam, validation.validatePayload, controller.update);
   router.get('/list', canRead, controller.list);
-  router.get('/detail/:id', canRead, validation.validateIdParam, controller.detail);
+  router.get('/detail/:id', canRead, validateIdentifierParam, controller.detail);
   router.patch('/status/:id', canUpdate, validation.validateIdParam, validation.validateStatusPayload, controller.status);
 
   return router;

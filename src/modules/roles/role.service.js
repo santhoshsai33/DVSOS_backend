@@ -64,9 +64,14 @@ const buildRoleWhere = ({ search, isActive } = {}) => {
   return where;
 };
 
-const ensureRoleExists = async (id) => {
+const resolveRoleByIdentifier = async (identifier) => {
+  const parsedId = Number(identifier);
+  const where = Number.isInteger(parsedId) && parsedId > 0
+    ? { id: parsedId }
+    : { slug: String(identifier || '').trim() };
+
   const role = await prisma.role.findUnique({
-    where: { id },
+    where,
     select: roleSelect
   });
 
@@ -147,8 +152,8 @@ const createRole = async ({ name, description, isActive }, actorUserId) => {
 };
 
 const updateRole = async (id, { name, description, isActive }, actorUserId) => {
-  const roleId = Number(id);
-  const currentRole = await ensureRoleExists(roleId);
+  const currentRole = await resolveRoleByIdentifier(id);
+  const roleId = currentRole.id;
   const normalizedName = name.trim();
   const normalizedSlug = await resolveRoleSlug(normalizedName, roleId);
 
@@ -225,12 +230,12 @@ const listRoles = async (query) => {
 };
 
 const getRoleDetail = async (id) => {
-  return ensureRoleExists(Number(id));
+  return resolveRoleByIdentifier(id);
 };
 
 const updateRoleStatus = async (id, { isActive }, actorUserId) => {
-  const roleId = Number(id);
-  const currentRole = await ensureRoleExists(roleId);
+  const currentRole = await resolveRoleByIdentifier(id);
+  const roleId = currentRole.id;
 
   return prisma.$transaction(async (tx) => {
     const role = await tx.role.update({

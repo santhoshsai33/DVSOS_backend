@@ -3,6 +3,7 @@ const router = require('express').Router();
 const categoryController = require('./service-category.controller');
 const {
   validateIdParam,
+  validateIdentifierParam,
   validateCategoryPayload,
   validateStatusPayload
 } = require('./service-category.validation');
@@ -22,9 +23,9 @@ const adminOnly = roleMiddleware(['admin']);
 router.use(authenticate);
 
 router.post('/create', adminOnly, validateCategoryPayload, categoryController.createCategory);
-router.put('/update/:id', adminOnly, validateIdParam, validateCategoryPayload, categoryController.updateCategory);
+router.put('/update/:id', adminOnly, validateIdentifierParam, validateCategoryPayload, categoryController.updateCategory);
 router.get('/list', canViewServiceMasters, categoryController.listCategories);
-router.get('/detail/:id', canViewServiceMasters, validateIdParam, categoryController.getCategoryDetail);
+router.get('/detail/:id', canViewServiceMasters, validateIdentifierParam, categoryController.getCategoryDetail);
 router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, categoryController.updateCategoryStatus);
 
 module.exports = router;
