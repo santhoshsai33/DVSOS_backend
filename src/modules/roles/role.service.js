@@ -64,6 +64,20 @@ const buildRoleWhere = ({ search, isActive } = {}) => {
   return where;
 };
 
+const ensureRoleCanBeInactivated = async (roleId, isActive) => {
+  if (isActive !== false) {
+    return;
+  }
+
+  const userCount = await prisma.user.count({
+    where: { roleId }
+  });
+
+  if (userCount > 0) {
+    throw createHttpError(409, 'Role is already mapped with users and cannot be inactivated');
+  }
+};
+
 const ensureRoleExists = async (id) => {
   const role = await prisma.role.findUnique({
     where: { id },
@@ -162,6 +176,7 @@ const updateRole = async (id, { name, description, isActive }, actorUserId) => {
   };
 
   if (typeof isActive === 'boolean') {
+    await ensureRoleCanBeInactivated(roleId, isActive);
     nextData.isActive = isActive;
   }
 
@@ -231,6 +246,8 @@ const getRoleDetail = async (id) => {
 const updateRoleStatus = async (id, { isActive }, actorUserId) => {
   const roleId = Number(id);
   const currentRole = await ensureRoleExists(roleId);
+
+  await ensureRoleCanBeInactivated(roleId, isActive);
 
   return prisma.$transaction(async (tx) => {
     const role = await tx.role.update({

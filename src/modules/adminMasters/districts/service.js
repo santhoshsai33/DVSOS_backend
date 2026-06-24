@@ -3,6 +3,7 @@ const {
   ensureForeignKey,
   ensureUniqueComposite
 } = require('../common');
+const prisma = require('../../../config/db');
 
 const districtSelect = {
   id: true,
@@ -20,7 +21,7 @@ const districtSelect = {
   }
 };
 
-module.exports = createAdminMasterService({
+const baseService = createAdminMasterService({
   model: 'district',
   tableName: 'districts',
   label: 'District',
@@ -49,3 +50,35 @@ module.exports = createAdminMasterService({
   },
   recordName: (district) => district.districtName
 });
+
+const ensureDistrictCanBeInactivated = async (districtId, isActive) => {
+  if (isActive !== false) {
+    return;
+  }
+
+  const locationCount = await prisma.location.count({
+    where: { districtId }
+  });
+
+  if (locationCount > 0) {
+    const error = new Error('District is already mapped with location and cannot be inactivated');
+    error.statusCode = 409;
+    throw error;
+  }
+};
+
+const updateRecord = async (id, payload, actorUserId) => {
+  await ensureDistrictCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateRecord(id, payload, actorUserId);
+};
+
+const updateStatus = async (id, payload, actorUserId) => {
+  await ensureDistrictCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateStatus(id, payload, actorUserId);
+};
+
+module.exports = {
+  ...baseService,
+  updateRecord,
+  updateStatus
+};

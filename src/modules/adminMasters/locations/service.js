@@ -85,7 +85,7 @@ const validateLocationRelations = async (data) => {
   }
 };
 
-module.exports = createAdminMasterService({
+const baseService = createAdminMasterService({
   model: 'location',
   tableName: 'locations',
   label: 'Location',
@@ -112,10 +112,45 @@ module.exports = createAdminMasterService({
   hasModifiedById: true,
   autoGenerateCode: true,
   uniqueFields: [
-    { fieldName: 'locationCode', label: 'Location code' }
+    { fieldName: 'locationCode', label: 'Location code' },
+    { fieldName: 'contactPhone', label: 'Mobile number' }
   ],
   searchFields: ['locationName', 'locationCode', 'city', 'serviceCenter.serviceCenterName'],
   filterFields: ['serviceCenterId', 'stateId', 'districtId'],
   validateRelations: validateLocationRelations,
   recordName: (location) => location.locationName
 });
+
+const ensureLocationCanBeInactivated = async (locationId, isActive) => {
+  if (isActive !== false) {
+    return;
+  }
+
+  const [userCount, customerCount, vehicleCount] = await Promise.all([
+    prisma.user.count({ where: { locationId } }),
+    prisma.customer.count({ where: { locationId } }),
+    prisma.vehicle.count({ where: { locationId } })
+  ]);
+
+  if (userCount > 0 || customerCount > 0 || vehicleCount > 0) {
+    const error = new Error('Location is already mapped with users, customers, or vehicles and cannot be inactivated');
+    error.statusCode = 409;
+    throw error;
+  }
+};
+
+const updateRecord = async (id, payload, actorUserId) => {
+  await ensureLocationCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateRecord(id, payload, actorUserId);
+};
+
+const updateStatus = async (id, payload, actorUserId) => {
+  await ensureLocationCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateStatus(id, payload, actorUserId);
+};
+
+module.exports = {
+  ...baseService,
+  updateRecord,
+  updateStatus
+};

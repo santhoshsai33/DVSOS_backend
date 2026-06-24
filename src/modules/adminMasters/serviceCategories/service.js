@@ -1,4 +1,5 @@
 const { createAdminMasterService } = require('../common');
+const prisma = require('../../../config/db');
 
 const serviceCategorySelect = {
   id: true,
@@ -12,7 +13,7 @@ const serviceCategorySelect = {
   updatedAt: true
 };
 
-module.exports = createAdminMasterService({
+const baseService = createAdminMasterService({
   model: 'serviceCategory',
   tableName: 'service_categories',
   label: 'Service category',
@@ -32,3 +33,35 @@ module.exports = createAdminMasterService({
   searchFields: ['name', 'slug', 'description'],
   recordName: (category) => category.name
 });
+
+const ensureServiceCategoryCanBeInactivated = async (categoryId, isActive) => {
+  if (isActive !== false) {
+    return;
+  }
+
+  const itemCount = await prisma.serviceItem.count({
+    where: { categoryId }
+  });
+
+  if (itemCount > 0) {
+    const error = new Error('Service category is already mapped with service items and cannot be inactivated');
+    error.statusCode = 409;
+    throw error;
+  }
+};
+
+const updateRecord = async (id, payload, actorUserId) => {
+  await ensureServiceCategoryCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateRecord(id, payload, actorUserId);
+};
+
+const updateStatus = async (id, payload, actorUserId) => {
+  await ensureServiceCategoryCanBeInactivated(Number(id), payload.isActive);
+  return baseService.updateStatus(id, payload, actorUserId);
+};
+
+module.exports = {
+  ...baseService,
+  updateRecord,
+  updateStatus
+};

@@ -210,6 +210,15 @@ const ensureUniqueEmail = async (email, excludeId) => {
   }
 };
 
+const ensureUniqueMobile = async (mobile, excludeId) => {
+  if (!mobile) return;
+  const existingUser = await userRepository.findUserByMobile(mobile, excludeId);
+
+  if (existingUser) {
+    throw createHttpError(409, 'Mobile number already exists');
+  }
+};
+
 const ensureUniqueEmployeeCode = async (employeeCode, excludeId) => {
   if (!employeeCode) {
     return;
@@ -260,6 +269,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
     requestedLocationId: locationId
   });
   await ensureUniqueEmail(normalizedEmail);
+  await ensureUniqueMobile(mobile ? mobile.trim() : null);
 
   if (!normalizedEmployeeCode) {
     const latestUser = await userRepository.findLatestEmployeeCode();
@@ -314,6 +324,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
     currentLocationId: currentUser.locationId
   });
   await ensureUniqueEmail(normalizedEmail, userId);
+  await ensureUniqueMobile(mobile ? mobile.trim() : null, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
   const user = await userRepository.updateUser(userId, {
