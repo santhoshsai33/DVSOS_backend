@@ -262,6 +262,15 @@ const ensureUniqueMobile = async (mobile, excludeId) => {
   }
 };
 
+const ensureUniqueLicenceNumber = async (licenceNumber, excludeId) => {
+  if (!licenceNumber) return;
+  const existingUser = await userRepository.findUserByLicenceNumber(licenceNumber, excludeId);
+
+  if (existingUser) {
+    throw createHttpError(409, 'Licence number already exists');
+  }
+};
+
 const ensureUniqueEmployeeCode = async (employeeCode, excludeId) => {
   if (!employeeCode) {
     return;
@@ -315,6 +324,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
   });
   await ensureUniqueEmail(normalizedEmail);
   await ensureUniqueMobile(mobile ? mobile.trim() : null);
+  await ensureUniqueLicenceNumber(licenceNumber ? licenceNumber.trim() : null);
 
   if (!normalizedEmployeeCode) {
     const latestUser = await userRepository.findLatestEmployeeCode();
@@ -374,6 +384,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
   });
   await ensureUniqueEmail(normalizedEmail, userId);
   await ensureUniqueMobile(mobile ? mobile.trim() : null, userId);
+  await ensureUniqueLicenceNumber(licenceNumber ? licenceNumber.trim() : null, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
   const user = await userRepository.updateUser(userId, {
