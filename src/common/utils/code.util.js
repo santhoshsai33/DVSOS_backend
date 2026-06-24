@@ -28,6 +28,10 @@ const CODE_CONFIG = {
   employee: {
     field: 'employeeCode',
     prefix: 'EMP'
+  },
+  module: {
+    field: 'moduleCode',
+    prefix: 'MOD'
   }
 };
 
