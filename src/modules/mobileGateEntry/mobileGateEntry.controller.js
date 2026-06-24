@@ -14,8 +14,8 @@ const createGateEntry = async (req, res, next) => {
   try {
     const data = await service.createGateEntry(req.body, req.user);
     return apiResponse(res, {
-      statusCode: 201,
-      message: 'Gate entry created successfully',
+      statusCode: data.isCreated ? 201 : 200,
+      message: data.message || 'Gate entry created successfully',
       data
     });
   } catch (error) {

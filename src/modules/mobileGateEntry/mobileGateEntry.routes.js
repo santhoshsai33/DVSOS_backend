@@ -15,7 +15,7 @@ router.get('/check-vehicle', gateAccess, validateRegistrationQuery, controller.c
 router.get('/history', gateViewAccess, controller.history);
 router.get('/active', gateAccess, validateRegistrationQuery, controller.activeByVehicle);
 router.post('/', gateAccess, validateCreateGateEntryPayload, controller.createGateEntry);
-router.patch('/:id/exit', gateAccess, validateIdParam, controller.submitExit);
+router.put('/exit/:id', gateAccess, validateIdParam, controller.submitExit);
 
 const crmRouter = require('express').Router();
 crmRouter.use(authMiddleware);

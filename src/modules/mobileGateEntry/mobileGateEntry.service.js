@@ -1,5 +1,6 @@
 const prisma = require('../../config/db');
 const { createAuditLog } = require('../../common/utils/audit.util');
+const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { generateGateEntryNo } = require('../../utils/generateGateEntryNo');
@@ -274,6 +275,31 @@ const createUniqueSlug = (tx, model, source) => {
   });
 };
 
+const generateCustomerCode = async (tx) => {
+  const latestCustomer = await tx.customer.findFirst({
+    where: {
+      customerCode: {
+        startsWith: CODE_CONFIG.customer.prefix
+      }
+    },
+    orderBy: { id: 'desc' },
+    select: { customerCode: true }
+  });
+
+  return generateUniqueCode({
+    prefix: CODE_CONFIG.customer.prefix,
+    latestCode: latestCustomer ? latestCustomer.customerCode : null,
+    existsCallback: async (code) => {
+      const existingCustomer = await tx.customer.findFirst({
+        where: { customerCode: code },
+        select: { id: true }
+      });
+
+      return !!existingCustomer;
+    }
+  });
+};
+
 const checkVehicle = async ({ registrationNumber }, user) => {
   const normalizedRegistrationNumber = normalizeRegistrationOrThrow(registrationNumber);
   const locationId = isGateSecurity(user) ? resolveLocationId({}, user) : null;
@@ -329,16 +355,14 @@ const createGateEntry = async (payload, user) => {
     const activeGateEntry = await findActiveGateEntry(existingVehicle.id);
 
     if (activeGateEntry) {
-      throw createHttpError(
-        409,
-        'Active gate entry already exists for this vehicle. Submit exit first.',
-        {
-          normalizedRegistrationNumber,
-          vehicle: toVehicleResponse(existingVehicle),
-          activeGateEntry: toGateEntryResponse(activeGateEntry),
-          nextAction: 'EXIT'
-        }
-      );
+      return {
+        normalizedRegistrationNumber,
+        vehicle: toVehicleResponse(existingVehicle),
+        customer: toCustomerResponse(existingVehicle.customer),
+        activeGateEntry: toGateEntryResponse(activeGateEntry),
+        nextAction: 'EXIT',
+        message: 'Active gate entry already exists for this vehicle. Submit exit first.'
+      };
     }
   }
 
@@ -360,10 +384,12 @@ const createGateEntry = async (payload, user) => {
       const whatsappNumber = String(payload.whatsappNumber || '').trim();
       const customerName = `Gate Customer ${whatsappNumber}`;
       const customerSlug = await createUniqueSlug(tx, 'customer', customerName);
+      const customerCode = await generateCustomerCode(tx);
 
       customer = await tx.customer.create({
         data: {
           locationId,
+          customerCode,
           slug: customerSlug,
           fullName: customerName,
           mobileNo: whatsappNumber,
@@ -464,7 +490,8 @@ const createGateEntry = async (payload, user) => {
       normalizedRegistrationNumber,
       isNewCustomer,
       isNewVehicle,
-      nextAction: 'WAITING_FOR_CRM'
+      nextAction: 'WAITING_FOR_CRM',
+      isCreated: true
     };
   });
 };
