@@ -64,23 +64,14 @@ const buildRoleWhere = ({ search, isActive } = {}) => {
   return where;
 };
 
-const ensureRoleCanBeInactivated = async (roleId, isActive) => {
-  if (isActive !== false) {
-    return;
-  }
+const resolveRoleByIdentifier = async (identifier) => {
+  const parsedId = Number(identifier);
+  const where = Number.isInteger(parsedId) && parsedId > 0
+    ? { id: parsedId }
+    : { slug: String(identifier || '').trim() };
 
-  const userCount = await prisma.user.count({
-    where: { roleId }
-  });
-
-  if (userCount > 0) {
-    throw createHttpError(409, 'Role is already mapped with users and cannot be inactivated');
-  }
-};
-
-const ensureRoleExists = async (id) => {
   const role = await prisma.role.findUnique({
-    where: { id },
+    where,
     select: roleSelect
   });
 
@@ -161,8 +152,8 @@ const createRole = async ({ name, description, isActive }, actorUserId) => {
 };
 
 const updateRole = async (id, { name, description, isActive }, actorUserId) => {
-  const roleId = Number(id);
-  const currentRole = await ensureRoleExists(roleId);
+  const currentRole = await resolveRoleByIdentifier(id);
+  const roleId = currentRole.id;
   const normalizedName = name.trim();
   const normalizedSlug = await resolveRoleSlug(normalizedName, roleId);
 
@@ -240,12 +231,12 @@ const listRoles = async (query) => {
 };
 
 const getRoleDetail = async (id) => {
-  return ensureRoleExists(Number(id));
+  return resolveRoleByIdentifier(id);
 };
 
 const updateRoleStatus = async (id, { isActive }, actorUserId) => {
-  const roleId = Number(id);
-  const currentRole = await ensureRoleExists(roleId);
+  const currentRole = await resolveRoleByIdentifier(id);
+  const roleId = currentRole.id;
 
   await ensureRoleCanBeInactivated(roleId, isActive);
 

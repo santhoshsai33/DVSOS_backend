@@ -84,6 +84,16 @@ const ensureServiceItemExists = async (id, options = {}) => {
   return serviceItem;
 };
 
+const ensureServiceItemExistsByIdentifier = async (identifier, options = {}) => {
+  const serviceItem = await serviceItemRepository.findServiceItemByIdentifier(identifier, options);
+
+  if (!serviceItem) {
+    throw createHttpError(404, 'Service item not found');
+  }
+
+  return serviceItem;
+};
+
 const ensureUniqueServiceItemSlug = async (slug, excludeId) => {
   const existingServiceItem = await serviceItemRepository.findServiceItemBySlug(slug, excludeId);
 
@@ -150,14 +160,13 @@ const createServiceItem = async (payload) => {
   return toServiceItemResource(serviceItem);
 };
 
-const updateServiceItem = async (id, payload) => {
-  const serviceItemId = Number(id);
-  const data = await buildServiceItemData(payload, serviceItemId);
+const updateServiceItem = async (identifier, payload) => {
+  const existingServiceItem = await ensureServiceItemExistsByIdentifier(identifier);
+  const data = await buildServiceItemData(payload, existingServiceItem.id);
 
-  await ensureServiceItemExists(serviceItemId);
   await ensureActiveCategoryExists(data.categoryId);
 
-  const serviceItem = await serviceItemRepository.updateServiceItem(serviceItemId, data);
+  const serviceItem = await serviceItemRepository.updateServiceItem(existingServiceItem.id, data);
   return toServiceItemResource(serviceItem);
 };
 
@@ -189,9 +198,9 @@ const listServiceItems = async (query, user) => {
   };
 };
 
-const getServiceItemDetail = async (id, user) => {
+const getServiceItemDetail = async (identifier, user) => {
   const activeOnlyViewer = shouldRestrictToActive(user);
-  const serviceItem = await ensureServiceItemExists(Number(id), {
+  const serviceItem = await ensureServiceItemExistsByIdentifier(identifier, {
     onlyActive: activeOnlyViewer,
     onlyActiveCategory: activeOnlyViewer
   });

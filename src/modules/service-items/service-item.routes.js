@@ -3,6 +3,7 @@ const router = require('express').Router();
 const serviceItemController = require('./service-item.controller');
 const {
   validateIdParam,
+  validateIdentifierParam,
   validateServiceItemPayload,
   validateStatusPayload
 } = require('./service-item.validation');
@@ -22,9 +23,9 @@ const adminOnly = roleMiddleware(['admin']);
 router.use(authenticate);
 
 router.post('/create', adminOnly, validateServiceItemPayload, serviceItemController.createServiceItem);
-router.put('/update/:id', adminOnly, validateIdParam, validateServiceItemPayload, serviceItemController.updateServiceItem);
+router.put('/update/:id', adminOnly, validateIdentifierParam, validateServiceItemPayload, serviceItemController.updateServiceItem);
 router.get('/list', canViewServiceMasters, serviceItemController.listServiceItems);
-router.get('/detail/:id', canViewServiceMasters, validateIdParam, serviceItemController.getServiceItemDetail);
+router.get('/detail/:id', canViewServiceMasters, validateIdentifierParam, serviceItemController.getServiceItemDetail);
 router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, serviceItemController.updateServiceItemStatus);
 
 module.exports = router;

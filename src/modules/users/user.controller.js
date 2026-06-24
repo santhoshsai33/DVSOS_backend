@@ -70,7 +70,7 @@ const updateUserStatus = async (req, res, next) => {
 
 const resetUserPassword = async (req, res, next) => {
   try {
-    const user = await userService.resetUserPassword(req.params.id, req.body);
+    const user = await userService.resetUserPassword(req.params.id, req.body, req.user);
 
     return apiResponse(res, {
       message: 'User password reset successfully',

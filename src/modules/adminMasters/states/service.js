@@ -6,6 +6,7 @@ const stateSelect = {
   id: true,
   stateName: true,
   stateCode: true,
+  slug: true,
   isActive: true,
   createdAt: true,
   updatedAt: true
@@ -13,6 +14,7 @@ const stateSelect = {
 
 const baseService = createAdminMasterService({
   model: 'state',
+  identifierField: 'slug',
   tableName: 'states',
   label: 'State',
   select: stateSelect,
@@ -22,6 +24,7 @@ const baseService = createAdminMasterService({
     { name: 'isActive', type: 'boolean' }
   ],
   hasIsActive: true,
+  slugFrom: 'stateName',
   uniqueFields: [
     { fieldName: 'stateName', label: 'State name' },
     { fieldName: 'stateCode', label: 'State code' }
@@ -46,6 +49,22 @@ const ensureStateCanBeInactivated = async (stateId, isActive) => {
   }
 };
 
+const resolveStateId = async (identifier) => {
+  const parsedId = Number(identifier);
+  const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+
+  if (isNumericId) {
+    return parsedId;
+  }
+
+  const state = await prisma.state.findUnique({
+    where: { slug: String(identifier).trim() },
+    select: { id: true }
+  });
+
+  return state ? state.id : parsedId;
+};
+
 const createRecord = async (payload, actorUserId) => {
   if (!payload.stateCode) {
     const latestState = await prisma.state.findFirst({
@@ -66,7 +85,7 @@ const createRecord = async (payload, actorUserId) => {
 };
 
 const updateRecord = async (id, payload, actorUserId) => {
-  await ensureStateCanBeInactivated(Number(id), payload.isActive);
+  await ensureStateCanBeInactivated(await resolveStateId(id), payload.isActive);
   return baseService.updateRecord(id, payload, actorUserId);
 };
 

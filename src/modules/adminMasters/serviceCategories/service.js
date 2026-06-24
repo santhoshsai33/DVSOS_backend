@@ -15,6 +15,7 @@ const serviceCategorySelect = {
 
 const baseService = createAdminMasterService({
   model: 'serviceCategory',
+  identifierField: 'slug',
   tableName: 'service_categories',
   label: 'Service category',
   select: serviceCategorySelect,

@@ -1,6 +1,7 @@
 const { apiResponse } = require('../../common/utils/apiResponse');
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const isValidNonNegativeNumber = (value) => {
   if (value === undefined || value === null || value === '') {
@@ -28,6 +29,25 @@ const validateIdParam = (req, res, next) => {
       statusCode: 400,
       success: false,
       message: 'Valid service item id is required',
+      data: {},
+      meta: {}
+    });
+  }
+
+  return next();
+};
+
+const validateIdentifierParam = (req, res, next) => {
+  const identifier = String(req.params.id || '').trim();
+  const numericIdentifier = Number(identifier);
+  const isValidId = Number.isInteger(numericIdentifier) && numericIdentifier > 0;
+  const isValidSlug = slugRegex.test(identifier);
+
+  if (!isValidId && !isValidSlug) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Valid service item id or slug is required',
       data: {},
       meta: {}
     });
@@ -99,6 +119,7 @@ const validateStatusPayload = (req, res, next) => {
 
 module.exports = {
   validateIdParam,
+  validateIdentifierParam,
   validateServiceItemPayload,
   validateStatusPayload
 };

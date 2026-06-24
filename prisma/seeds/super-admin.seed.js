@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { generateSlug } = require('../../src/common/utils/slug.util');
 
 const SUPER_ADMIN_ROLE = {
   name: 'Admin',
@@ -17,6 +18,7 @@ const SUPER_ADMIN_USER = {
 
 const seedSuperAdmin = async (prisma) => {
   await prisma.$transaction(async (tx) => {
+    const userSlug = generateSlug(SUPER_ADMIN_USER.fullName);
     const adminRole = await tx.role.upsert({
       where: { slug: SUPER_ADMIN_ROLE.slug },
       update: {
@@ -39,6 +41,7 @@ const seedSuperAdmin = async (prisma) => {
       update: {
         roleId: adminRole.id,
         fullName: SUPER_ADMIN_USER.fullName,
+        slug: userSlug,
         mobileNo: SUPER_ADMIN_USER.mobileNo,
         employeeCode: SUPER_ADMIN_USER.employeeCode,
         isActive: true
@@ -46,6 +49,7 @@ const seedSuperAdmin = async (prisma) => {
       create: {
         roleId: adminRole.id,
         fullName: SUPER_ADMIN_USER.fullName,
+        slug: userSlug,
         emailId: SUPER_ADMIN_USER.emailId,
         mobileNo: SUPER_ADMIN_USER.mobileNo,
         employeeCode: SUPER_ADMIN_USER.employeeCode,

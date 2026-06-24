@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../../config/db');
 const userRepository = require('./user.repository');
 const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
+const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 
 const DEFAULT_USER_PASSWORD = 'Admin@123';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
@@ -75,13 +76,22 @@ const parseOptionalPositiveInt = (value) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : NaN;
 };
 
+const hasLocationInput = (value) => value !== undefined;
+
 const toPublicUser = (user) => ({
   id: user.id,
+  slug: user.slug,
   fullName: user.fullName,
   email: user.emailId,
   mobile: user.mobileNo,
   employeeCode: user.employeeCode,
   locationId: user.locationId,
+  location: user.location ? {
+    id: user.location.id,
+    locationCode: user.location.locationCode,
+    locationName: user.location.locationName
+  } : null,
+  locationName: user.location ? user.location.locationName : null,
   isActive: user.isActive,
   role: {
     id: user.role.id,
@@ -92,7 +102,11 @@ const toPublicUser = (user) => ({
   licenceNumber: user.licenceNumber,
   emergencyContact: user.emergencyContact,
   gender: user.gender,
-  address: user.address
+  address: user.address,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  lastLoginAt: user.lastLoginAt,
+  lastLogin: user.lastLoginAt
 });
 
 const hashPassword = (password) => {
@@ -107,6 +121,32 @@ const ensureUserExists = async (id) => {
   }
 
   return user;
+};
+
+const resolveUserByIdentifier = async (identifier) => {
+  const parsedId = Number(identifier);
+  const user = Number.isInteger(parsedId) && parsedId > 0
+    ? await userRepository.findUserById(parsedId)
+    : await userRepository.findUserBySlug(String(identifier || '').trim());
+
+  if (!user) {
+    throw createHttpError(404, 'User not found');
+  }
+
+  return user;
+};
+
+const resolveUserSlug = async (fullName, excludeId) => {
+  const baseSlug = generateSlug(fullName);
+
+  if (!baseSlug) {
+    throw createHttpError(400, 'Valid user slug could not be generated from full name');
+  }
+
+  return generateUniqueSlug(baseSlug, async (slugValue) => {
+    const existingUser = await userRepository.findUserBySlug(slugValue);
+    return existingUser && existingUser.id !== excludeId;
+  });
 };
 
 const ensureRoleExists = async (roleId) => {
@@ -132,13 +172,16 @@ const ensureActiveLocationExists = async (locationId) => {
 const resolveLocationForRole = async ({ actor, targetRole, requestedLocationId, currentLocationId }) => {
   const targetRoleSlug = normalizeRoleSlug(targetRole.slug);
   const parsedRequestedLocationId = parseOptionalPositiveInt(requestedLocationId);
+  const shouldUseRequestedLocation = hasLocationInput(requestedLocationId);
 
   if (Number.isNaN(parsedRequestedLocationId)) {
     throw createHttpError(400, 'Invalid or inactive location');
   }
 
   if (isAdminRole(actor.roleSlug)) {
-    const nextLocationId = parsedRequestedLocationId || currentLocationId || null;
+    const nextLocationId = shouldUseRequestedLocation
+      ? parsedRequestedLocationId
+      : currentLocationId || null;
 
     if (LOCATION_REQUIRED_ROLE_SLUGS.has(targetRoleSlug) && !nextLocationId) {
       throw createHttpError(400, 'Location is required for this role');
@@ -255,13 +298,15 @@ const assertNotRemovingLastActiveAdmin = async ({ currentUser, nextRoleId, nextI
   }
 };
 
-const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, dob, licenceNumber, emergencyContact, gender, address, locationId }, createdById) => {
+const createUser = async ({ fullName, email, mobile, employeeCode, roleId, password, dob, licenceNumber, emergencyContact, gender, address, locationId }, actor) => {
   const normalizedEmail = email.trim();
   let normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
   const initialPassword = typeof password === 'string' && password.trim() ? password : DEFAULT_USER_PASSWORD;
 
   const role = await ensureRoleExists(parsedRoleId);
+  const normalizedFullName = fullName.trim();
+  const normalizedSlug = await resolveUserSlug(normalizedFullName);
   assertActorCanManageRole(actor, role);
   const resolvedLocationId = await resolveLocationForRole({
     actor,
@@ -285,30 +330,34 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
   const passwordHash = await hashPassword(initialPassword);
 
   const user = await userRepository.createUser({
-    fullName: fullName.trim(),
+    fullName: normalizedFullName,
+    slug: normalizedSlug,
     emailId: normalizedEmail,
     mobileNo: mobile ? mobile.trim() : null,
     employeeCode: normalizedEmployeeCode,
     roleId: parsedRoleId,
+    locationId: resolvedLocationId,
     passwordHash,
     dob: dob ? new Date(dob) : null,
     licenceNumber: licenceNumber ? licenceNumber.trim() : null,
     emergencyContact: emergencyContact ? emergencyContact.trim() : null,
     gender: gender ? gender.trim() : null,
     address: address ? address.trim() : null,
-    createdById: createdById || null
+    createdById: actor.userId || null
   });
 
   return toPublicUser(user);
 };
 
-const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address, locationId }) => {
-  const userId = Number(id);
+const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address, locationId }, actor) => {
   const parsedRoleId = Number(roleId);
   const normalizedEmail = email.trim();
   const normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
 
-  const currentUser = await ensureUserExists(userId);
+  const currentUser = await resolveUserByIdentifier(id);
+  const userId = currentUser.id;
+  const normalizedFullName = fullName.trim();
+  const normalizedSlug = await resolveUserSlug(normalizedFullName, userId);
   assertMdCanAccessUser(actor, currentUser);
   const role = await ensureRoleExists(parsedRoleId);
   assertActorCanManageRole(actor, role);
@@ -328,11 +377,13 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
   const user = await userRepository.updateUser(userId, {
-    fullName: fullName.trim(),
+    fullName: normalizedFullName,
+    slug: normalizedSlug,
     emailId: normalizedEmail,
     mobileNo: mobile ? mobile.trim() : null,
     employeeCode: normalizedEmployeeCode,
     roleId: parsedRoleId,
+    locationId: resolvedLocationId,
     dob: dob ? new Date(dob) : null,
     licenceNumber: licenceNumber ? licenceNumber.trim() : null,
     emergencyContact: emergencyContact ? emergencyContact.trim() : null,
@@ -377,17 +428,15 @@ const listUsers = async (query, actor) => {
 };
 
 const getUserDetail = async (id, actor) => {
-  const user = await ensureUserExists(Number(id));
-  if (isManagingDirector(actor) && user.locationId !== Number(actor.locationId)) {
-    throw createHttpError(403, 'You can access only users from your assigned location');
-  }
+  const user = await resolveUserByIdentifier(id);
+  assertMdCanAccessUser(actor, user);
 
   return toPublicUser(user);
 };
 
 const updateUserStatus = async (id, { isActive }, actor) => {
-  const userId = Number(id);
-  const currentUser = await ensureUserExists(userId);
+  const currentUser = await resolveUserByIdentifier(id);
+  const userId = currentUser.id;
   assertMdCanAccessUser(actor, currentUser);
 
   await assertNotRemovingLastActiveAdmin({
@@ -405,6 +454,7 @@ const updateUserStatus = async (id, { isActive }, actor) => {
       },
       select: {
         id: true,
+        slug: true,
         fullName: true,
         emailId: true,
         mobileNo: true,
@@ -418,6 +468,13 @@ const updateUserStatus = async (id, { isActive }, actor) => {
             name: true,
             slug: true
           }
+        },
+        location: {
+          select: {
+            id: true,
+            locationCode: true,
+            locationName: true
+          }
         }
       }
     });
@@ -428,9 +485,10 @@ const updateUserStatus = async (id, { isActive }, actor) => {
   return toPublicUser(user);
 };
 
-const resetUserPassword = async (id, { password }) => {
-  const userId = Number(id);
-  await ensureUserExists(userId);
+const resetUserPassword = async (id, { password }, actor) => {
+  const currentUser = await resolveUserByIdentifier(id);
+  const userId = currentUser.id;
+  assertMdCanAccessUser(actor, currentUser);
 
   const passwordHash = await hashPassword(password);
   const user = await userRepository.updateUser(userId, { passwordHash });

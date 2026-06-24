@@ -12,6 +12,7 @@ const locationSelect = {
   locationHeadUserId: true,
   locationCode: true,
   locationName: true,
+  slug: true,
   locationType: true,
   address: true,
   city: true,
@@ -87,6 +88,7 @@ const validateLocationRelations = async (data) => {
 
 const baseService = createAdminMasterService({
   model: 'location',
+  identifierField: 'slug',
   tableName: 'locations',
   label: 'Location',
   select: locationSelect,
@@ -111,11 +113,12 @@ const baseService = createAdminMasterService({
   hasCreatedById: true,
   hasModifiedById: true,
   autoGenerateCode: true,
+  slugFrom: 'locationName',
   uniqueFields: [
     { fieldName: 'locationCode', label: 'Location code' },
     { fieldName: 'contactPhone', label: 'Mobile number' }
   ],
-  searchFields: ['locationName', 'locationCode', 'city', 'serviceCenter.serviceCenterName'],
+  searchFields: ['locationName', 'slug', 'locationCode', 'city', 'serviceCenter.serviceCenterName'],
   filterFields: ['serviceCenterId', 'stateId', 'districtId'],
   validateRelations: validateLocationRelations,
   recordName: (location) => location.locationName

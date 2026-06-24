@@ -1,15 +1,17 @@
 const { apiResponse } = require('../../common/utils/apiResponse');
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+const isSlug = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
 
 const validateIdParam = (req, res, next) => {
-  const id = Number(req.params.id);
+  const identifier = req.params.id;
+  const id = Number(identifier);
 
-  if (!Number.isInteger(id) || id <= 0) {
+  if ((!Number.isInteger(id) || id <= 0) && !isSlug(identifier)) {
     return apiResponse(res, {
       statusCode: 400,
       success: false,
-      message: 'Valid role id is required',
+      message: 'Valid role identifier is required',
       data: {},
       meta: {}
     });

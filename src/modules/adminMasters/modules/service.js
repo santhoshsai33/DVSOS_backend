@@ -6,6 +6,7 @@ const moduleSelect = {
   id: true,
   moduleName: true,
   moduleCode: true,
+  slug: true,
   description: true,
   isActive: true,
   createdAt: true,
@@ -14,6 +15,7 @@ const moduleSelect = {
 
 const baseService = createAdminMasterService({
   model: 'module',
+  identifierField: 'slug',
   tableName: 'modules',
   label: 'Module',
   select: moduleSelect,
@@ -24,6 +26,7 @@ const baseService = createAdminMasterService({
     { name: 'isActive', type: 'boolean' }
   ],
   hasIsActive: true,
+  slugFrom: 'moduleName',
   uniqueFields: [
     { fieldName: 'moduleName', label: 'Module name' },
     { fieldName: 'moduleCode', label: 'Module code' }
@@ -48,6 +51,22 @@ const ensureModuleCanBeInactivated = async (moduleId, isActive) => {
   }
 };
 
+const resolveModuleId = async (identifier) => {
+  const parsedId = Number(identifier);
+  const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+
+  if (isNumericId) {
+    return parsedId;
+  }
+
+  const module = await prisma.module.findUnique({
+    where: { slug: String(identifier).trim() },
+    select: { id: true }
+  });
+
+  return module ? module.id : parsedId;
+};
+
 const createRecord = async (payload, actorUserId) => {
   if (!payload.moduleCode) {
     const latestModule = await prisma.module.findFirst({
@@ -69,7 +88,7 @@ const createRecord = async (payload, actorUserId) => {
 
 const updateRecord = async (id, payload, actorUserId) => {
   if (payload.isActive !== undefined) {
-    await ensureModuleCanBeInactivated(Number(id), payload.isActive);
+    await ensureModuleCanBeInactivated(await resolveModuleId(id), payload.isActive);
   }
   return baseService.updateRecord(id, payload, actorUserId);
 };

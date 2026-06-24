@@ -43,6 +43,7 @@ model State {
   id        Int    @id @default(autoincrement())
   stateName String @map("state_name") @db.NVarChar(100)
   stateCode String @unique @map("state_code") @db.NVarChar(20)
+  slug      String @unique @db.NVarChar(150)
 
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
@@ -58,6 +59,7 @@ model District {
   id           Int    @id @default(autoincrement())
   stateId      Int    @map("state_id")
   districtName String @map("district_name") @db.NVarChar(100)
+  slug         String @unique @db.NVarChar(180)
 
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
@@ -79,6 +81,7 @@ model Location {
 
   locationCode String @unique @map("location_code") @db.NVarChar(50)
   locationName String @map("location_name") @db.NVarChar(200)
+  slug         String @unique @db.NVarChar(220)
   locationType String @map("location_type") @db.NVarChar(50)
 
   address String?
@@ -122,6 +125,7 @@ model Module {
   id          Int     @id @default(autoincrement())
   moduleCode  String  @unique @map("module_code") @db.NVarChar(100)
   moduleName  String  @map("module_name") @db.NVarChar(150)
+  slug        String  @unique @db.NVarChar(180)
   description String? @db.NVarChar(500)
 
   isActive     Boolean  @default(true) @map("is_active")
@@ -144,6 +148,7 @@ model StatusMaster {
   moduleId    Int     @map("module_id")
   statusCode  String  @map("status_code") @db.NVarChar(100)
   statusName  String  @map("status_name") @db.NVarChar(150)
+  slug        String  @db.NVarChar(180)
   description String? @db.NVarChar(500)
   sortOrder   Int     @default(0) @map("sort_order")
   isFinal     Boolean @default(false) @map("is_final")
@@ -170,6 +175,7 @@ model StatusMaster {
   stageTimeLimits         StageTimeLimit[]
 
   @@unique([moduleId, statusCode])
+  @@unique([moduleId, slug])
   @@map("status_master")
 }
 
@@ -240,15 +246,11 @@ model RoleMenuPermission {
 
 model User {
   id           Int  @id @default(autoincrement())
-  roleId       Int  @map("role_id")
-  locationId   Int? @map("location_id")
-  createdById  Int? @map("created_by")
-  modifiedById Int? @map("modified_by")
-
   fullName         String    @map("full_name") @db.NVarChar(150)
   emailId          String    @unique @map("email_id") @db.NVarChar(150)
   mobileNo         String?   @map("mobile_no") @db.NVarChar(20)
   dob              DateTime? @db.Date
+  slug             String  @unique @db.NVarChar(120)
   licenceNumber    String?   @map("licence_number") @db.NVarChar(100)
   emergencyContact String?   @map("emergency_contact") @db.NVarChar(20)
   gender           String?   @db.NVarChar(20)
@@ -259,6 +261,10 @@ model User {
   lastLoginAt      DateTime? @map("last_login_at") @db.DateTime2
   createdAt        DateTime  @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.DateTime2
+  roleId       Int  @map("role_id")
+  locationId   Int? @map("location_id")
+  createdById  Int? @map("created_by")
+  modifiedById Int? @map("modified_by")
 
   role          Role      @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   location      Location? @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)

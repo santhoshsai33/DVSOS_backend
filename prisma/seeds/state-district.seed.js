@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { generateSlug } = require('../../src/common/utils/slug.util');
 
 const TAMIL_NADU_STATE = {
   stateName: 'Tamil Nadu',
@@ -47,14 +48,17 @@ const TAMIL_NADU_DISTRICTS = [
 ];
 
 const seedStateDistricts = async (prisma) => {
+  const stateSlug = generateSlug(TAMIL_NADU_STATE.stateName);
   const state = await prisma.state.upsert({
     where: { stateCode: TAMIL_NADU_STATE.stateCode },
     update: {
       stateName: TAMIL_NADU_STATE.stateName,
+      slug: stateSlug,
       isActive: true
     },
     create: {
       ...TAMIL_NADU_STATE,
+      slug: stateSlug,
       isActive: true
     }
   });
@@ -62,6 +66,8 @@ const seedStateDistricts = async (prisma) => {
   console.log('Tamil Nadu state seeded');
 
   for (const districtName of TAMIL_NADU_DISTRICTS) {
+    const districtSlug = generateSlug(districtName);
+
     await prisma.district.upsert({
       where: {
         stateId_districtName: {
@@ -71,11 +77,13 @@ const seedStateDistricts = async (prisma) => {
       },
       update: {
         districtName,
+        slug: districtSlug,
         isActive: true
       },
       create: {
         stateId: state.id,
         districtName,
+        slug: districtSlug,
         isActive: true
       }
     });

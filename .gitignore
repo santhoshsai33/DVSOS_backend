@@ -11,3 +11,10 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 prisma/migrations/
+prisma/add-location-slugs.sql
+prisma/add-module-status-slugs.sql
+prisma/add-state-district-slugs.sql
+prisma/add-user-slugs.sql
+prisma/ensureSeedSchema.js
+
+

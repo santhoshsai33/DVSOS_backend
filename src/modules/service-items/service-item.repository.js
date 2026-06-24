@@ -75,14 +75,27 @@ const findServiceItemById = (id, { onlyActive = false, onlyActiveCategory = fals
   });
 };
 
-const findServiceItemBySlug = (slug, excludeId) => {
+const findServiceItemBySlug = (slug, excludeId, { onlyActive = false, onlyActiveCategory = false } = {}) => {
   return prisma.serviceItem.findFirst({
     where: {
       slug,
-      ...(excludeId ? { id: { not: excludeId } } : {})
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      ...(onlyActive ? { isActive: true } : {}),
+      ...(onlyActiveCategory ? { category: { isActive: true } } : {})
     },
     select: serviceItemSelect
   });
+};
+
+const findServiceItemByIdentifier = (identifier, options = {}) => {
+  const parsedId = Number(identifier);
+  const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+
+  if (isNumericId) {
+    return findServiceItemById(parsedId, options);
+  }
+
+  return findServiceItemBySlug(String(identifier).trim(), undefined, options);
 };
 
 const findCategoryById = (id) => {
@@ -115,6 +128,7 @@ module.exports = {
   updateServiceItem,
   findServiceItemById,
   findServiceItemBySlug,
+  findServiceItemByIdentifier,
   findCategoryById,
   listServiceItems
 };

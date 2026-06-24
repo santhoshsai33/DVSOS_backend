@@ -9,6 +9,7 @@ const districtSelect = {
   id: true,
   stateId: true,
   districtName: true,
+  slug: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
@@ -16,13 +17,15 @@ const districtSelect = {
     select: {
       id: true,
       stateName: true,
-      stateCode: true
+      stateCode: true,
+      slug: true
     }
   }
 };
 
 const baseService = createAdminMasterService({
   model: 'district',
+  identifierField: 'slug',
   tableName: 'districts',
   label: 'District',
   select: districtSelect,
@@ -32,6 +35,7 @@ const baseService = createAdminMasterService({
     { name: 'isActive', type: 'boolean' }
   ],
   hasIsActive: true,
+  slugFrom: 'districtName',
   searchFields: ['districtName', 'state.stateName'],
   filterFields: ['stateId'],
   validateRelations: async (data) => {

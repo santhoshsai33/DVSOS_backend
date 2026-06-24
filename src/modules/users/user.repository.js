@@ -3,6 +3,7 @@ const prisma = require('../../config/db');
 const userSelect = {
   id: true,
   fullName: true,
+  slug: true,
   emailId: true,
   mobileNo: true,
   employeeCode: true,
@@ -22,6 +23,13 @@ const userSelect = {
       id: true,
       name: true,
       slug: true
+    }
+  },
+  location: {
+    select: {
+      id: true,
+      locationCode: true,
+      locationName: true
     }
   }
 };
@@ -56,6 +64,7 @@ const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
   if (search) {
     where.OR = [
       { fullName: { contains: search } },
+      { slug: { contains: search } },
       { emailId: { contains: search } },
       { mobileNo: { contains: search } },
       { employeeCode: { contains: search } }
@@ -83,6 +92,13 @@ const updateUser = (id, data) => {
 const findUserById = (id) => {
   return prisma.user.findUnique({
     where: { id },
+    select: userWithRoleForChecksSelect
+  });
+};
+
+const findUserBySlug = (slug) => {
+  return prisma.user.findUnique({
+    where: { slug },
     select: userWithRoleForChecksSelect
   });
 };
@@ -185,6 +201,7 @@ module.exports = {
   createUser,
   updateUser,
   findUserById,
+  findUserBySlug,
   findUserByEmail,
   findUserByMobile,
   findUserByEmployeeCode,
