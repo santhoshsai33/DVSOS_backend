@@ -23,6 +23,9 @@ const roleRoutes = require('../modules/roles/role.routes');
 const serviceCategoryRoutes = require('../modules/service-categories/service-category.routes');
 const serviceItemRoutes = require('../modules/service-items/service-item.routes');
 const userRoutes = require('../modules/users/user.routes');
+const customerRoutes = require('../modules/customers/customer.routes');
+
+const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 
 router.use('/auth', authRoutes);
 router.use('/admin/states', adminStateRoutes);
@@ -40,10 +43,12 @@ router.use('/health', healthRoutes);
 router.use('/menus', menuRoutes);
 router.use('/mobile/gate-entry', mobileGateEntryRoutes);
 router.use('/crm/gate-entries', crmGateEntryRoutes);
+router.use('/gate-entries', webGateEntryRoutes);
 router.use('/roles', roleRoutes);
 router.use('/roles/:roleId/menu-permissions', roleMenuPermissionRoutes);
 router.use('/service-categories', serviceCategoryRoutes);
 router.use('/service-items', serviceItemRoutes);
 router.use('/users', userRoutes);
+router.use('/customers', customerRoutes);
 
 module.exports = router;
