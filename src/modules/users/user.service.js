@@ -217,7 +217,7 @@ const assertActorCanManageRole = (actor, targetRole) => {
   }
 
   if (isManagingDirector(actor)) {
-    if (MD_BLOCKED_ROLE_SLUGS.has(targetRoleSlug) || !MD_ALLOWED_ROLE_SLUGS.has(targetRoleSlug)) {
+    if (MD_BLOCKED_ROLE_SLUGS.has(targetRoleSlug)) {
       throw createHttpError(403, 'You do not have permission to manage this role');
     }
 
