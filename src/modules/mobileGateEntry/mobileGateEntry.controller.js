@@ -37,10 +37,16 @@ const submitExit = async (req, res, next) => {
 
 const history = async (req, res, next) => {
   try {
-    const { entries, meta } = await service.history(req.query, req.user);
+    const { entries, records, groups, summary, filters, meta } = await service.history(req.query, req.user);
     return apiResponse(res, {
       message: 'Gate entry history fetched successfully',
-      data: { entries },
+      data: {
+        entries,
+        records,
+        groups,
+        summary,
+        filters
+      },
       meta
     });
   } catch (error) {

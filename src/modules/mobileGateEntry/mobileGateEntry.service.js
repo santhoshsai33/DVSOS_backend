@@ -13,6 +13,14 @@ const ENTRY_TYPE_MAP = {
   pickup: 'PICKUP',
   enquiry: 'ENQUIRY'
 };
+const ENTRY_TYPE_ALIASES = {
+  all: null,
+  service: 'SERVICE',
+  pickup: 'PICKUP',
+  enquiry: 'ENQUIRY',
+  visitor: 'ENQUIRY'
+};
+const HISTORY_RECORD_TYPES = ['all', 'entries', 'exits', 'inside'];
 
 const createHttpError = (statusCode, message, data = {}) => {
   const error = new Error(message);
@@ -44,6 +52,26 @@ const parseDate = (value, endOfDay = false) => {
 
   return date;
 };
+
+const normalizeHistoryRecordType = (value) => {
+  const recordType = String(value || 'all').trim().toLowerCase();
+  return HISTORY_RECORD_TYPES.includes(recordType) ? recordType : 'all';
+};
+
+const formatDateKey = (date) => {
+  if (!date) {
+    return null;
+  }
+
+  return new Date(date).toISOString().slice(0, 10);
+};
+
+const buildGateCustomerName = (mobileNo) => {
+  const lastFiveDigits = String(mobileNo || '').slice(-5);
+  return `New Customer ${lastFiveDigits}`;
+};
+
+const buildCustomerCodeSlugSource = (customerCode) => `Customer ${customerCode}`;
 
 const normalizeRegistrationOrThrow = (registrationNumber) => {
   const normalizedRegistrationNumber = normalizeVehicleNumber(registrationNumber);
@@ -126,6 +154,23 @@ const findVehicleByRegistration = (registrationNo) => {
           mobileNo: true
         }
       }
+    }
+  });
+};
+
+const findCustomerByMobileNo = (mobileNo, locationId) => {
+  return prisma.customer.findFirst({
+    where: {
+      mobileNo,
+      ...(locationId ? { locationId } : {})
+    },
+    orderBy: {
+      id: 'asc'
+    },
+    select: {
+      id: true,
+      fullName: true,
+      mobileNo: true
     }
   });
 };
@@ -338,6 +383,8 @@ const createGateEntry = async (payload, user) => {
   const locationId = resolveLocationId(payload, user, { allowAdminBody: true });
   const location = await ensureActiveLocation(locationId);
   const existingVehicle = await findVehicleByRegistration(normalizedRegistrationNumber);
+  const whatsappNumber = String(payload.whatsappNumber || '').trim();
+  let existingCustomerByMobile = null;
 
   if (existingVehicle) {
     if (!existingVehicle.customerId || !existingVehicle.customer) {
@@ -367,54 +414,55 @@ const createGateEntry = async (payload, user) => {
   }
 
   if (!existingVehicle) {
-    const whatsappNumber = String(payload.whatsappNumber || '').trim();
-
     if (!indianMobileRegex.test(whatsappNumber)) {
       throw createHttpError(400, 'whatsappNumber is required for new vehicle and must be a valid 10 digit India mobile number');
     }
+
+    existingCustomerByMobile = await findCustomerByMobileNo(whatsappNumber, locationId);
   }
 
   return prisma.$transaction(async (tx) => {
-    let customer = existingVehicle ? existingVehicle.customer : null;
+    let customer = existingVehicle ? existingVehicle.customer : existingCustomerByMobile;
     let vehicle = existingVehicle;
     let isNewCustomer = false;
     let isNewVehicle = false;
 
     if (!vehicle) {
-      const whatsappNumber = String(payload.whatsappNumber || '').trim();
-      const customerName = `Gate Customer ${whatsappNumber}`;
-      const customerSlug = await createUniqueSlug(tx, 'customer', customerName);
-      const customerCode = await generateCustomerCode(tx);
+      if (!customer) {
+        const customerName = buildGateCustomerName(whatsappNumber);
+        const customerCode = await generateCustomerCode(tx);
+        const customerSlug = await createUniqueSlug(tx, 'customer', buildCustomerCodeSlugSource(customerCode));
 
-      customer = await tx.customer.create({
-        data: {
+        customer = await tx.customer.create({
+          data: {
+            locationId,
+            customerCode,
+            slug: customerSlug,
+            fullName: customerName,
+            mobileNo: whatsappNumber,
+            createdById: user.userId || null
+          },
+          select: {
+            id: true,
+            fullName: true,
+            mobileNo: true
+          }
+        });
+        isNewCustomer = true;
+
+        await createAudit(tx, {
+          tableName: 'customers',
+          recordId: customer.id,
+          actionType: 'CREATE',
+          actorUserId: user.userId,
+          recordName: customer.fullName,
+          comments: 'Customer created from gate entry',
           locationId,
-          customerCode,
-          slug: customerSlug,
-          fullName: customerName,
-          mobileNo: whatsappNumber,
-          createdById: user.userId || null
-        },
-        select: {
-          id: true,
-          fullName: true,
-          mobileNo: true
-        }
-      });
-      isNewCustomer = true;
-
-      await createAudit(tx, {
-        tableName: 'customers',
-        recordId: customer.id,
-        actionType: 'CREATE',
-        actorUserId: user.userId,
-        recordName: customer.fullName,
-        comments: 'Customer created from gate entry',
-        locationId,
-        details: [
-          { fieldName: 'mobileNo', oldValue: null, newValue: customer.mobileNo, dataType: 'string' }
-        ]
-      });
+          details: [
+            { fieldName: 'mobileNo', oldValue: null, newValue: customer.mobileNo, dataType: 'string' }
+          ]
+        });
+      }
 
       const vehicleSlug = await createUniqueSlug(tx, 'vehicle', normalizedRegistrationNumber);
       vehicle = await tx.vehicle.create({
@@ -554,29 +602,60 @@ const submitExit = async (id, payload, user) => {
   });
 };
 
-const buildHistoryWhere = (query, user) => {
-  const where = {};
-  const fromDate = parseDate(query.fromDate);
-  const toDate = parseDate(query.toDate, true);
+const getHistoryDateRange = (query) => {
+  const fromDate = parseDate(query.fromDate || query.date);
+  const toDate = parseDate(query.toDate || query.date, true);
 
-  if (fromDate || toDate) {
-    where.entryTime = {
-      ...(fromDate ? { gte: fromDate } : {}),
-      ...(toDate ? { lte: toDate } : {})
-    };
+  if (!fromDate && !toDate) {
+    return null;
   }
 
-  if (query.entryType) {
-    const entryType = ENTRY_TYPE_MAP[String(query.entryType).trim().toLowerCase()];
+  return {
+    ...(fromDate ? { gte: fromDate } : {}),
+    ...(toDate ? { lte: toDate } : {})
+  };
+};
+
+const buildHistoryBaseWhere = (query, user) => {
+  const where = {};
+
+  if (query.entryType && String(query.entryType).trim().toLowerCase() !== 'all') {
+    const entryType = ENTRY_TYPE_ALIASES[String(query.entryType).trim().toLowerCase()];
     if (entryType) {
       where.entryType = entryType;
     }
   }
 
-  if (query.registrationNumber) {
-    where.vehicle = {
-      registrationNo: normalizeRegistrationOrThrow(query.registrationNumber)
-    };
+  const search = String(query.search || query.registrationNumber || query.mobileNo || '').trim();
+  if (search) {
+    const normalizedSearch = normalizeVehicleNumber(search);
+    where.OR = [
+      ...(normalizedSearch
+        ? [
+          {
+            vehicle: {
+              registrationNo: {
+                contains: normalizedSearch
+              }
+            }
+          }
+        ]
+        : []),
+      {
+        customer: {
+          mobileNo: {
+            contains: search
+          }
+        }
+      },
+      {
+        customer: {
+          alternateMobileNo: {
+            contains: search
+          }
+        }
+      }
+    ];
   }
 
   if (isLocationScopedViewer(user)) {
@@ -593,14 +672,160 @@ const buildHistoryWhere = (query, user) => {
   return where;
 };
 
+const withEventDateFilter = (baseWhere, recordType, dateRange) => {
+  if (recordType === 'entries') {
+    return {
+      ...baseWhere,
+      ...(dateRange ? { entryTime: dateRange } : {})
+    };
+  }
+
+  if (recordType === 'exits') {
+    return {
+      ...baseWhere,
+      exitTime: {
+        not: null,
+        ...(dateRange || {})
+      }
+    };
+  }
+
+  if (recordType === 'inside') {
+    return {
+      ...baseWhere,
+      exitTime: null,
+      ...(dateRange ? { entryTime: dateRange } : {})
+    };
+  }
+
+  if (!dateRange) {
+    return baseWhere;
+  }
+
+  const { OR: baseOr, ...baseFilters } = baseWhere;
+  return {
+    ...baseFilters,
+    AND: [
+      ...(baseOr ? [{ OR: baseOr }] : []),
+      {
+        OR: [
+          {
+            entryTime: dateRange
+          },
+          {
+            exitTime: {
+              not: null,
+              ...dateRange
+            }
+          }
+        ]
+      }
+    ]
+  };
+};
+
+const isRecordWithinDateRange = (date, dateRange) => {
+  if (!date || !dateRange) {
+    return true;
+  }
+
+  const time = new Date(date).getTime();
+  if (dateRange.gte && time < new Date(dateRange.gte).getTime()) {
+    return false;
+  }
+
+  if (dateRange.lte && time > new Date(dateRange.lte).getTime()) {
+    return false;
+  }
+
+  return true;
+};
+
+const toHistoryRecordResponse = (entry, direction, happenedAt) => ({
+  id: `${entry.id}-${direction.toLowerCase()}`,
+  gateEntryId: entry.id,
+  gateEntryNo: entry.gateEntryNo,
+  direction,
+  eventType: direction.toLowerCase(),
+  happenedAt,
+  entryType: String(entry.entryType || '').toLowerCase(),
+  entryTime: entry.entryTime,
+  exitTime: entry.exitTime,
+  remarks: entry.remarks,
+  status: entry.status
+    ? {
+      id: entry.status.id,
+      code: entry.status.statusCode,
+      name: entry.status.statusName
+    }
+    : null,
+  customer: toCustomerResponse(entry.customer),
+  vehicle: entry.vehicle ? toVehicleResponse(entry.vehicle) : null,
+  location: entry.location || null
+});
+
+const buildHistoryRecords = (entries, recordType, dateRange) => {
+  const records = [];
+
+  entries.forEach((entry) => {
+    if ((recordType === 'all' || recordType === 'entries') && isRecordWithinDateRange(entry.entryTime, dateRange)) {
+      records.push(toHistoryRecordResponse(entry, 'ENTRY', entry.entryTime));
+    }
+
+    if ((recordType === 'all' || recordType === 'exits') && entry.exitTime && isRecordWithinDateRange(entry.exitTime, dateRange)) {
+      records.push(toHistoryRecordResponse(entry, 'EXIT', entry.exitTime));
+    }
+
+    if (recordType === 'inside' && !entry.exitTime && isRecordWithinDateRange(entry.entryTime, dateRange)) {
+      records.push(toHistoryRecordResponse(entry, 'INSIDE', entry.entryTime));
+    }
+  });
+
+  return records.sort((first, second) => new Date(second.happenedAt).getTime() - new Date(first.happenedAt).getTime());
+};
+
+const groupHistoryRecords = (records, allRecords = records) => {
+  const groups = [];
+  const groupMap = new Map();
+  const totalByDate = allRecords.reduce((acc, record) => {
+    const dateKey = formatDateKey(record.happenedAt);
+    acc[dateKey] = (acc[dateKey] || 0) + 1;
+    return acc;
+  }, {});
+
+  records.forEach((record) => {
+    const dateKey = formatDateKey(record.happenedAt);
+    if (!groupMap.has(dateKey)) {
+      const group = {
+        date: dateKey,
+        totalRecords: totalByDate[dateKey] || 0,
+        records: []
+      };
+      groupMap.set(dateKey, group);
+      groups.push(group);
+    }
+
+    const group = groupMap.get(dateKey);
+    group.records.push(record);
+  });
+
+  return groups;
+};
+
 const history = async (query, user) => {
   const page = parsePositiveInt(query.page, 1);
   const limit = parsePositiveInt(query.limit, 10);
-  const where = buildHistoryWhere(query, user);
+  const recordType = normalizeHistoryRecordType(query.recordType || query.logType || query.tab || query.status);
+  const dateRange = getHistoryDateRange(query);
+  const baseWhere = buildHistoryBaseWhere(query, user);
+  const entriesWhere = withEventDateFilter(baseWhere, 'entries', dateRange);
+  const exitsWhere = withEventDateFilter(baseWhere, 'exits', dateRange);
+  const insideWhere = withEventDateFilter(baseWhere, 'inside', dateRange);
+  const recordsWhere = withEventDateFilter(baseWhere, recordType, dateRange);
 
-  const [entries, total] = await prisma.$transaction([
+  const [entries, totalEntries, historyEntries, summaryEntries, summaryExits, summaryInside] = await prisma.$transaction([
     prisma.gateEntry.findMany({
-      where,
+      where: entriesWhere,
       select: gateEntrySelect,
       orderBy: {
         entryTime: 'desc'
@@ -608,16 +833,45 @@ const history = async (query, user) => {
       skip: (page - 1) * limit,
       take: limit
     }),
-    prisma.gateEntry.count({ where })
+    prisma.gateEntry.count({ where: entriesWhere }),
+    prisma.gateEntry.findMany({
+      where: recordsWhere,
+      select: gateEntrySelect,
+      orderBy: {
+        entryTime: 'desc'
+      }
+    }),
+    prisma.gateEntry.count({ where: entriesWhere }),
+    prisma.gateEntry.count({ where: exitsWhere }),
+    prisma.gateEntry.count({ where: insideWhere })
   ]);
+  const allRecords = buildHistoryRecords(historyEntries, recordType, dateRange);
+  const records = allRecords.slice((page - 1) * limit, page * limit);
+  const totalRecords = allRecords.length;
 
   return {
     entries: entries.map(toGateEntryResponse),
+    records,
+    groups: groupHistoryRecords(records, allRecords),
+    summary: {
+      totalEntries: summaryEntries,
+      totalExits: summaryExits,
+      currentlyInside: summaryInside,
+      totalRecords: summaryEntries + summaryExits
+    },
+    filters: {
+      recordType,
+      entryType: query.entryType ? String(query.entryType).trim().toLowerCase() : 'all',
+      search: String(query.search || query.registrationNumber || query.mobileNo || '').trim() || null,
+      fromDate: query.fromDate || query.date || null,
+      toDate: query.toDate || query.date || null
+    },
     meta: {
       page,
       limit,
-      total,
-      totalPages: Math.ceil(total / limit)
+      total: totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+      entriesTotal: totalEntries
     }
   };
 };

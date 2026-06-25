@@ -1,0 +1,110 @@
+const { apiResponse } = require('../../common/utils/apiResponse');
+
+const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+
+const sendValidationError = (res, message) => {
+  return apiResponse(res, {
+    statusCode: 400,
+    success: false,
+    message,
+    data: {},
+    meta: {}
+  });
+};
+
+const parseJsonField = (payload, fieldName) => {
+  if (typeof payload[fieldName] !== 'string') {
+    return;
+  }
+
+  const value = payload[fieldName].trim();
+  if (!value) {
+    return;
+  }
+
+  payload[fieldName] = JSON.parse(value);
+};
+
+const normalizeCreateJobCardPayload = (req, res, next) => {
+  try {
+    req.body = req.body || {};
+
+    ['serviceItems', 'vehicleInfo', 'customerInfo', 'billing', 'photoCategories'].forEach((fieldName) => {
+      parseJsonField(req.body, fieldName);
+    });
+
+    return next();
+  } catch (error) {
+    return sendValidationError(res, 'Invalid JSON payload field');
+  }
+};
+
+const validateIdParam = (req, res, next) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return sendValidationError(res, 'Valid id is required');
+  }
+
+  return next();
+};
+
+const validateCreateJobCardPayload = (req, res, next) => {
+  const { gateEntryId, expectedDeliveryAt, serviceItems, vehicleInfo, customerInfo, billing, photoCategories } = req.body || {};
+  const resolvedGateEntryId = Number(gateEntryId);
+
+  if (!Number.isInteger(resolvedGateEntryId) || resolvedGateEntryId <= 0) {
+    return sendValidationError(res, 'Valid gateEntryId is required');
+  }
+
+  if (!isNonEmptyString(expectedDeliveryAt)) {
+    return sendValidationError(res, 'expectedDeliveryAt is required');
+  }
+
+  const deliveryDate = new Date(expectedDeliveryAt);
+  if (Number.isNaN(deliveryDate.getTime())) {
+    return sendValidationError(res, 'expectedDeliveryAt must be a valid date time');
+  }
+
+  if (!Array.isArray(serviceItems) || serviceItems.length === 0) {
+    return sendValidationError(res, 'At least one service item is required');
+  }
+
+  for (const item of serviceItems) {
+    const serviceItemId = Number(typeof item === 'object' ? item.serviceItemId : item);
+    const quantity = Number(typeof item === 'object' && item.quantity !== undefined ? item.quantity : 1);
+
+    if (!Number.isInteger(serviceItemId) || serviceItemId <= 0) {
+      return sendValidationError(res, 'Each service item must have a valid serviceItemId');
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return sendValidationError(res, 'Service item quantity must be a positive integer');
+    }
+  }
+
+  if (vehicleInfo !== undefined && !isPlainObject(vehicleInfo)) {
+    return sendValidationError(res, 'vehicleInfo must be an object');
+  }
+
+  if (customerInfo !== undefined && !isPlainObject(customerInfo)) {
+    return sendValidationError(res, 'customerInfo must be an object');
+  }
+
+  if (billing !== undefined && !isPlainObject(billing)) {
+    return sendValidationError(res, 'billing must be an object');
+  }
+
+  if (photoCategories !== undefined && !Array.isArray(photoCategories)) {
+    return sendValidationError(res, 'photoCategories must be an array');
+  }
+
+  return next();
+};
+
+module.exports = {
+  normalizeCreateJobCardPayload,
+  validateIdParam,
+  validateCreateJobCardPayload
+};
