@@ -1,0 +1,111 @@
+const customerRepository = require('./customer.repository');
+const createHttpError = (statusCode, message) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const resolveCustomerByIdentifier = async (identifier) => {
+  const parsedId = Number(identifier);
+  const customer = Number.isInteger(parsedId) && parsedId > 0
+    ? await customerRepository.findCustomerById(parsedId)
+    : await customerRepository.findCustomerBySlug(String(identifier || '').trim());
+
+  if (!customer) {
+    throw createHttpError(404, 'Customer not found');
+  }
+
+  return customer;
+};
+
+const listCustomers = async (query) => {
+  const page = parseInt(query.page, 10) || 1;
+  const limit = parseInt(query.limit, 10) || 10;
+  const search = query.search || '';
+
+  let isActive;
+  if (query.status === 'active') isActive = true;
+  if (query.status === 'inactive') isActive = false;
+
+  const locationId = query.locationId ? parseInt(query.locationId, 10) : undefined;
+
+  const { customers, total } = await customerRepository.listCustomers({
+    page,
+    limit,
+    search,
+    isActive,
+    locationId
+  });
+
+  return {
+    customers,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+};
+
+const getCustomerById = async (id) => {
+  const customer = await resolveCustomerByIdentifier(id);
+  return customer;
+};
+
+const updateCustomer = async (id, payload, modifiedBy) => {
+  const customer = await resolveCustomerByIdentifier(id);
+
+  if (payload.emailId) {
+    const existingEmail = await customerRepository.findCustomerByEmail(payload.emailId, customer.id);
+    if (existingEmail) {
+      throw createHttpError(409, 'Email address is already in use by another customer');
+    }
+  }
+
+  if (payload.mobileNo) {
+    const existingMobile = await customerRepository.findCustomerByMobile(payload.mobileNo, customer.id);
+    if (existingMobile) {
+      throw createHttpError(409, 'Mobile number is already in use by another customer');
+    }
+  }
+
+  const dataToUpdate = {
+    fullName: payload.fullName,
+    mobileNo: payload.mobileNo,
+    alternateMobileNo: payload.alternateMobileNo,
+    emailId: payload.emailId,
+    address: payload.address,
+    modifiedById: modifiedBy
+  };
+
+  if (payload.locationId) {
+    dataToUpdate.locationId = parseInt(payload.locationId, 10);
+  }
+
+  const updatedCustomer = await customerRepository.updateCustomer(customer.id, dataToUpdate);
+
+  return updatedCustomer;
+};
+
+const updateCustomerStatus = async (id, isActive, modifiedBy) => {
+  const customer = await resolveCustomerByIdentifier(id);
+
+  if (customer.isActive === isActive) {
+    throw createHttpError(400, `Customer is already ${isActive ? 'active' : 'inactive'}`);
+  }
+
+  const updatedCustomer = await customerRepository.updateCustomer(customer.id, {
+    isActive,
+    modifiedById: modifiedBy
+  });
+
+  return updatedCustomer;
+};
+
+module.exports = {
+  listCustomers,
+  getCustomerById,
+  updateCustomer,
+  updateCustomerStatus
+};

@@ -114,6 +114,18 @@ const resolveRoleSlug = async (name, excludeId) => {
   });
 };
 
+const ensureRoleCanBeInactivated = async (roleId, isActive) => {
+  if (isActive === false) {
+    const activeUsers = await prisma.user.findFirst({
+      where: { roleId, isActive: true },
+      select: { id: true }
+    });
+    if (activeUsers) {
+      throw createHttpError(400, 'Cannot deactivate this role because it is currently assigned to active users.');
+    }
+  }
+};
+
 const createRole = async ({ name, description, isActive }, actorUserId) => {
   const normalizedName = name.trim();
   const normalizedSlug = await resolveRoleSlug(normalizedName);

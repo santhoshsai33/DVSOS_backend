@@ -42,6 +42,14 @@ const updateLastLoginAt = (userId) => {
   });
 };
 
+const updatePassword = (userId, passwordHash) => {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+    select: { id: true }
+  });
+};
+
 const findReadableMenusByRoleId = (roleId) => {
   return prisma.roleMenuPermission.findMany({
     where: {
@@ -77,5 +85,6 @@ module.exports = {
   findUserByEmailId,
   findUserById,
   updateLastLoginAt,
+  updatePassword,
   findReadableMenusByRoleId
 };

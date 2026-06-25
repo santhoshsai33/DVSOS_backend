@@ -123,6 +123,16 @@ const findUserByMobile = (mobile, excludeId) => {
   });
 };
 
+const findUserByLicenceNumber = (licenceNumber, excludeId) => {
+  return prisma.user.findFirst({
+    where: {
+      licenceNumber,
+      ...(excludeId ? { id: { not: excludeId } } : {})
+    },
+    select: userSelect
+  });
+};
+
 const findUserByEmployeeCode = (employeeCode, excludeId) => {
   return prisma.user.findFirst({
     where: {
@@ -204,6 +214,7 @@ module.exports = {
   findUserBySlug,
   findUserByEmail,
   findUserByMobile,
+  findUserByLicenceNumber,
   findUserByEmployeeCode,
   findRoleById,
   findActiveLocationById,

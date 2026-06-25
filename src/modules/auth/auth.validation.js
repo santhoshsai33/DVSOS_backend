@@ -64,7 +64,61 @@ const validateUpdateProfile = (req, res, next) => {
   return next();
 };
 
+const validateForgotPassword = (req, res, next) => {
+  const { emailId } = req.body || {};
+
+  if (!isNonEmptyString(emailId)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'emailId is required',
+      data: {},
+      meta: {}
+    });
+  }
+
+  return next();
+};
+
+const validateResetPassword = (req, res, next) => {
+  const { token, password, confirmPassword } = req.body || {};
+
+  if (!isNonEmptyString(token)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'token is required',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (!isNonEmptyString(password)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'password is required',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (password !== confirmPassword) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'passwords do not match',
+      data: {},
+      meta: {}
+    });
+  }
+
+  return next();
+};
+
 module.exports = {
   validateLogin,
-  validateUpdateProfile
+  validateUpdateProfile,
+  validateForgotPassword,
+  validateResetPassword
 };

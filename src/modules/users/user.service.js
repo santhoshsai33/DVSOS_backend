@@ -217,7 +217,7 @@ const assertActorCanManageRole = (actor, targetRole) => {
   }
 
   if (isManagingDirector(actor)) {
-    if (MD_BLOCKED_ROLE_SLUGS.has(targetRoleSlug) || !MD_ALLOWED_ROLE_SLUGS.has(targetRoleSlug)) {
+    if (MD_BLOCKED_ROLE_SLUGS.has(targetRoleSlug)) {
       throw createHttpError(403, 'You do not have permission to manage this role');
     }
 
@@ -259,6 +259,15 @@ const ensureUniqueMobile = async (mobile, excludeId) => {
 
   if (existingUser) {
     throw createHttpError(409, 'Mobile number already exists');
+  }
+};
+
+const ensureUniqueLicenceNumber = async (licenceNumber, excludeId) => {
+  if (!licenceNumber) return;
+  const existingUser = await userRepository.findUserByLicenceNumber(licenceNumber, excludeId);
+
+  if (existingUser) {
+    throw createHttpError(409, 'Licence number already exists');
   }
 };
 
@@ -315,6 +324,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
   });
   await ensureUniqueEmail(normalizedEmail);
   await ensureUniqueMobile(mobile ? mobile.trim() : null);
+  await ensureUniqueLicenceNumber(licenceNumber ? licenceNumber.trim() : null);
 
   if (!normalizedEmployeeCode) {
     const latestUser = await userRepository.findLatestEmployeeCode();
@@ -374,6 +384,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
   });
   await ensureUniqueEmail(normalizedEmail, userId);
   await ensureUniqueMobile(mobile ? mobile.trim() : null, userId);
+  await ensureUniqueLicenceNumber(licenceNumber ? licenceNumber.trim() : null, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
   const user = await userRepository.updateUser(userId, {

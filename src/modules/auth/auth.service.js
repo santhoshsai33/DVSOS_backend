@@ -1,9 +1,12 @@
 const bcrypt = require('bcryptjs');
 
+const env = require('../../config/env');
+const jwt = require('jsonwebtoken');
 const authRepository = require('./auth.repository');
 const userRepository = require('../users/user.repository');
-const { signToken } = require('../../utils/jwt');
+const { signToken, verifyToken } = require('../../utils/jwt');
 const { getRedirectPath } = require('../../utils/redirectPath');
+const { sendPasswordResetEmail } = require('../../utils/email');
 
 const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
@@ -201,6 +204,39 @@ const updateProfile = async (userId, data) => {
   return buildAuthResponse(updatedUser, false);
 };
 
+const forgotPassword = async (emailId) => {
+  const normalizedEmailId = emailId.trim();
+  const user = await authRepository.findUserByEmailId(normalizedEmailId);
+
+  if (!user) {
+    throw createHttpError(404, 'No account found with this email.');
+  }
+
+  const resetToken = jwt.sign(
+    { userId: user.id },
+    env.jwtSecret,
+    { expiresIn: '15m' }
+  );
+
+  const resetLink = `${env.frontendUrl}/reset-password/${resetToken}`;
+
+  await sendPasswordResetEmail(user.emailId, resetLink);
+};
+
+const resetPassword = async (token, newPassword) => {
+  let payload;
+  try {
+    payload = verifyToken(token);
+  } catch (err) {
+    throw createHttpError(400, 'Invalid or expired reset token.');
+  }
+
+  const userId = payload.userId;
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+
+  await authRepository.updatePassword(userId, passwordHash);
+};
+
 module.exports = {
   LOGIN_ERROR_MESSAGE,
   toPublicUser,
@@ -208,5 +244,7 @@ module.exports = {
   getAllowedMenus,
   login,
   getCurrentUser,
-  updateProfile
+  updateProfile,
+  forgotPassword,
+  resetPassword
 };

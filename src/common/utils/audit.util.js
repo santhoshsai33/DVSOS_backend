@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { generateSlug } = require('./slug.util');
+const { generateSlug, generateUniqueSlug } = require('./slug.util');
 
 const serializeAuditValue = (value) => {
   if (value === undefined || value === null) {
@@ -17,24 +17,47 @@ const serializeAuditValue = (value) => {
   return String(value);
 };
 
-const ensureAuditModule = (tx, { moduleCode, moduleName }) => {
-  const slug = generateSlug(moduleName || moduleCode);
-
-  return tx.module.upsert({
+const ensureAuditModule = async (tx, { moduleCode, moduleName }) => {
+  let existingModule = await tx.module.findUnique({
     where: { moduleCode },
-    update: {
-      moduleName,
-      slug,
-      isActive: true
-    },
-    create: {
-      moduleCode,
-      moduleName,
-      slug,
-      isActive: true
-    },
     select: { id: true }
   });
+
+  if (existingModule) {
+    return existingModule;
+  }
+
+  const baseSlug = generateSlug(moduleName || moduleCode);
+  const slug = await generateUniqueSlug(baseSlug, async (s) => {
+    const found = await tx.module.findFirst({ where: { slug: s }, select: { id: true } });
+    return !!found;
+  });
+
+  try {
+    return await tx.module.upsert({
+      where: { moduleCode },
+      update: {
+        moduleName,
+        isActive: true
+      },
+      create: {
+        moduleCode,
+        moduleName,
+        slug,
+        isActive: true
+      },
+      select: { id: true }
+    });
+  } catch (err) {
+    if (err.code === 'P2002') {
+      const raceExisting = await tx.module.findUnique({
+        where: { moduleCode },
+        select: { id: true }
+      });
+      if (raceExisting) return raceExisting;
+    }
+    throw err;
+  }
 };
 
 const createAuditLog = async (
