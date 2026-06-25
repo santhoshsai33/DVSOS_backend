@@ -40,8 +40,34 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+const forgotPassword = async (req, res, next) => {
+  try {
+    await authService.forgotPassword(req.body.emailId);
+
+    return apiResponse(res, {
+      message: 'Password reset link sent to your email successfully.'
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    await authService.resetPassword(req.body.token, req.body.password);
+
+    return apiResponse(res, {
+      message: 'Password reset successfully.'
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   login,
   me,
-  updateProfile
+  updateProfile,
+  forgotPassword,
+  resetPassword
 };
