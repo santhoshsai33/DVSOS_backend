@@ -6,6 +6,11 @@ const list = async (query, user) => {
   const skip = (page - 1) * limit;
 
   const where = {};
+
+  if (user && user.locationId) {
+    where.locationId = Number(user.locationId);
+  }
+
   if (query.search) {
     where.OR = [
       { vehicle: { registrationNo: { contains: query.search } } },

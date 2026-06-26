@@ -3,6 +3,9 @@ const { apiResponse } = require('../../common/utils/apiResponse');
 
 const getCustomers = async (req, res, next) => {
   try {
+    if (req.user && req.user.locationId) {
+      req.query.locationId = req.user.locationId;
+    }
     const result = await customerService.listCustomers(req.query);
 
     return apiResponse(res, {
