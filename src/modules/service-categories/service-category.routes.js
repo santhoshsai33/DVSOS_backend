@@ -28,4 +28,13 @@ router.get('/list', canViewServiceMasters, categoryController.listCategories);
 router.get('/detail/:id', canViewServiceMasters, validateIdentifierParam, categoryController.getCategoryDetail);
 router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, categoryController.updateCategoryStatus);
 
-module.exports = router;
+const crmOnly = roleMiddleware(['crm_team', 'crm-team']);
+
+const crmRouter = require('express').Router();
+crmRouter.use(authenticate);
+crmRouter.get('/list', crmOnly, categoryController.listCategories);
+
+module.exports = {
+  serviceCategoryRoutes: router,
+  crmServiceCategoryRoutes: crmRouter
+};
