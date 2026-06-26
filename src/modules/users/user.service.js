@@ -362,9 +362,9 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
 const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, dob, licenceNumber, emergencyContact, gender, address, locationId }, actor) => {
   const parsedRoleId = Number(roleId);
   const normalizedEmail = email.trim();
-  const normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
 
   const currentUser = await resolveUserByIdentifier(id);
+  const normalizedEmployeeCode = employeeCode ? employeeCode.trim() : currentUser.employeeCode;
   const userId = currentUser.id;
   const normalizedFullName = fullName.trim();
   const normalizedSlug = await resolveUserSlug(normalizedFullName, userId);

@@ -21,8 +21,8 @@ const {
 const mobileJobCardRoutes = require('../modules/mobileJobCard/mobileJobCard.routes');
 const roleMenuPermissionRoutes = require('../modules/roleMenuPermissions/roleMenuPermission.routes');
 const roleRoutes = require('../modules/roles/role.routes');
-const serviceCategoryRoutes = require('../modules/service-categories/service-category.routes');
-const serviceItemRoutes = require('../modules/service-items/service-item.routes');
+const { serviceCategoryRoutes, crmServiceCategoryRoutes } = require('../modules/service-categories/service-category.routes');
+const { serviceItemRoutes, crmServiceItemRoutes } = require('../modules/service-items/service-item.routes');
 const userRoutes = require('../modules/users/user.routes');
 const customerRoutes = require('../modules/customers/customer.routes');
 
@@ -49,7 +49,9 @@ router.use('/gate-entries', webGateEntryRoutes);
 router.use('/roles', roleRoutes);
 router.use('/roles/:roleId/menu-permissions', roleMenuPermissionRoutes);
 router.use('/service-categories', serviceCategoryRoutes);
+router.use('/crm/service-categories', crmServiceCategoryRoutes);
 router.use('/service-items', serviceItemRoutes);
+router.use('/crm/service-items', crmServiceItemRoutes);
 router.use('/users', userRoutes);
 router.use('/customers', customerRoutes);
 
