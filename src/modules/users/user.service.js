@@ -4,6 +4,7 @@ const prisma = require('../../config/db');
 const userRepository = require('./user.repository');
 const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
+const { generateRandomPassword, sendWelcomeEmail } = require('../../utils/welcomeEmailHelper');
 
 const DEFAULT_USER_PASSWORD = 'Admin@123';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
@@ -311,7 +312,12 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
   const normalizedEmail = email.trim();
   let normalizedEmployeeCode = employeeCode ? employeeCode.trim() : null;
   const parsedRoleId = Number(roleId);
+
+
   const initialPassword = typeof password === 'string' && password.trim() ? password : DEFAULT_USER_PASSWORD;
+
+  // const isRandomPasswordGenerated = !(typeof password === 'string' && password.trim());
+  // const initialPassword = isRandomPasswordGenerated ? generateRandomPassword(8) : password.trim();
 
   const role = await ensureRoleExists(parsedRoleId);
   const normalizedFullName = fullName.trim();
@@ -355,6 +361,14 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
     address: address ? address.trim() : null,
     createdById: actor.userId || null
   });
+
+  // if (isRandomPasswordGenerated && normalizedEmail) {
+  //   try {
+  //     await sendWelcomeEmail(normalizedEmail, initialPassword);
+  //   } catch (error) {
+  //     console.error('Failed to send welcome email:', error);
+  //   }
+  // }
 
   return toPublicUser(user);
 };

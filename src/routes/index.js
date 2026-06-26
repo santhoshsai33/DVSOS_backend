@@ -25,6 +25,8 @@ const { serviceCategoryRoutes, crmServiceCategoryRoutes } = require('../modules/
 const { serviceItemRoutes, crmServiceItemRoutes } = require('../modules/service-items/service-item.routes');
 const userRoutes = require('../modules/users/user.routes');
 const customerRoutes = require('../modules/customers/customer.routes');
+const vehicleRoutes = require('../modules/vehicles/vehicle.routes');
+const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 
@@ -54,5 +56,7 @@ router.use('/service-items', serviceItemRoutes);
 router.use('/crm/service-items', crmServiceItemRoutes);
 router.use('/users', userRoutes);
 router.use('/customers', customerRoutes);
+router.use('/vehicles', vehicleRoutes);
+router.use('/job-cards', jobCardRoutes);
 
 module.exports = router;
