@@ -10,15 +10,8 @@ const jobCardAccess = roleMiddleware(['crm_team', 'admin', 'super_admin', 'manag
 
 router.use(authMiddleware);
 
+router.get('/list', jobCardAccess, controller.jobCardList);
 router.get('/queue', jobCardAccess, controller.pendingQueue);
 router.get('/queue/:id', jobCardAccess, validateIdParam, controller.queueDetail);
-router.post(
-  '/create-from-gate-entry',
-  jobCardAccess,
-  uploadVehiclePhotos,
-  normalizeCreateJobCardPayload,
-  validateCreateJobCardPayload,
-  controller.createFromGateEntry
-);
-
+router.post( '/create-from-gate-entry', jobCardAccess, uploadVehiclePhotos, normalizeCreateJobCardPayload, validateCreateJobCardPayload, controller.createFromGateEntry );
 module.exports = router;

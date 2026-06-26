@@ -38,6 +38,27 @@ const toOptionalNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const isDateOnlyString = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+
+const parseDateQuery = (value, fieldName, endOfDay = false) => {
+  const trimmed = toTrimmedString(value);
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    throw createHttpError(400, `${fieldName} must be a valid date`);
+  }
+
+  if (endOfDay && isDateOnlyString(trimmed)) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+
+  return date;
+};
+
 const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
 const isLocationScopedViewer = (user) => {
   return ['crm_team', 'manager', 'managing_director'].includes(normalizeRoleSlug(user && user.roleSlug));
@@ -246,13 +267,15 @@ const buildBillingSummary = (billing = {}, serviceSubtotal) => {
   const taxRate = Math.max(0, toOptionalNumber(billing.taxRate) || 0);
   const taxAmount = Math.max(0, toOptionalNumber(billing.taxAmount) ?? ((serviceSubtotal * taxRate) / 100));
   const finalAmount = Math.max(0, toOptionalNumber(billing.finalAmount) ?? (serviceSubtotal + taxAmount - discountAmount));
+  const discountReason = toTrimmedString(billing.discountReason);
 
   return {
     serviceSubtotal,
     taxRate,
     taxAmount,
     discountAmount,
-    finalAmount
+    finalAmount,
+    discountReason
   };
 };
 
@@ -454,6 +477,306 @@ const toQueueEntryResponse = (entry) => ({
   canCreateJobCard: !entry.jobCards || entry.jobCards.length === 0
 });
 
+const jobCardListSelect = {
+  id: true,
+  jobCardNo: true,
+  gateEntryId: true,
+  expectedDeliveryAt: true,
+  totalEstimate: true,
+  serviceSubtotal: true,
+  taxRate: true,
+  taxAmount: true,
+  discountAmount: true,
+  finalAmount: true,
+  discountReason: true,
+  customerComplaint: true,
+  additionalNotes: true,
+  createdAt: true,
+  updatedAt: true,
+  location: {
+    select: {
+      id: true,
+      locationCode: true,
+      locationName: true
+    }
+  },
+  gateEntry: {
+    select: {
+      id: true,
+      gateEntryNo: true,
+      entryTime: true
+    }
+  },
+  createdBy: {
+    select: {
+      id: true,
+      fullName: true,
+      employeeCode: true
+    }
+  },
+  currentStatus: {
+    select: {
+      id: true,
+      statusCode: true,
+      statusName: true
+    }
+  },
+  approvalStatus: {
+    select: {
+      id: true,
+      statusCode: true,
+      statusName: true
+    }
+  },
+  customer: {
+    select: {
+      id: true,
+      fullName: true,
+      mobileNo: true,
+      alternateMobileNo: true,
+      emailId: true,
+      address: true
+    }
+  },
+  vehicle: {
+    select: {
+      id: true,
+      registrationNo: true,
+      model: true,
+      variant: true,
+      fuelType: true,
+      vehicleColor: true,
+      chassisNo: true,
+      engineNo: true,
+      brand: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
+    }
+  },
+  services: {
+    select: {
+      id: true,
+      serviceItemId: true,
+      serviceName: true,
+      price: true,
+      quantity: true,
+      isAdditional: true
+    },
+    orderBy: {
+      id: 'asc'
+    }
+  },
+  _count: {
+    select: {
+      services: true
+    }
+  }
+};
+
+const toStatusResponse = (status) => {
+  if (!status) {
+    return null;
+  }
+
+  return {
+    id: status.id,
+    code: status.statusCode,
+    name: status.statusName
+  };
+};
+
+const toJobCardListResponse = (jobCard) => ({
+  id: jobCard.id,
+  jobCardNo: jobCard.jobCardNo,
+  gateEntryId: jobCard.gateEntryId,
+  gateEntry: jobCard.gateEntry
+    ? {
+      id: jobCard.gateEntry.id,
+      gateEntryNo: jobCard.gateEntry.gateEntryNo,
+      entryTime: jobCard.gateEntry.entryTime
+    }
+    : null,
+  location: jobCard.location || null,
+  createdBy: jobCard.createdBy
+    ? {
+      id: jobCard.createdBy.id,
+      name: jobCard.createdBy.fullName,
+      employeeCode: jobCard.createdBy.employeeCode
+    }
+    : null,
+  expectedDeliveryAt: jobCard.expectedDeliveryAt,
+  totalEstimate: Number(jobCard.totalEstimate),
+  billing: {
+    serviceSubtotal: jobCard.serviceSubtotal === null || jobCard.serviceSubtotal === undefined ? null : Number(jobCard.serviceSubtotal),
+    taxRate: jobCard.taxRate === null || jobCard.taxRate === undefined ? null : Number(jobCard.taxRate),
+    taxAmount: jobCard.taxAmount === null || jobCard.taxAmount === undefined ? null : Number(jobCard.taxAmount),
+    discountAmount: jobCard.discountAmount === null || jobCard.discountAmount === undefined ? null : Number(jobCard.discountAmount),
+    finalAmount: jobCard.finalAmount === null || jobCard.finalAmount === undefined ? null : Number(jobCard.finalAmount),
+    discountReason: jobCard.discountReason || null
+  },
+  customerComplaint: jobCard.customerComplaint,
+  additionalNotes: jobCard.additionalNotes,
+  createdAt: jobCard.createdAt,
+  updatedAt: jobCard.updatedAt,
+  currentStatus: toStatusResponse(jobCard.currentStatus),
+  approvalStatus: toStatusResponse(jobCard.approvalStatus),
+  customer: jobCard.customer
+    ? {
+      id: jobCard.customer.id,
+      name: jobCard.customer.fullName,
+      mobileNo: jobCard.customer.mobileNo,
+      alternateMobileNo: jobCard.customer.alternateMobileNo,
+      emailId: jobCard.customer.emailId,
+      address: jobCard.customer.address
+    }
+    : null,
+  vehicle: jobCard.vehicle
+    ? {
+      id: jobCard.vehicle.id,
+      registrationNumber: jobCard.vehicle.registrationNo,
+      model: jobCard.vehicle.model,
+      make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+      variant: jobCard.vehicle.variant,
+      fuelType: jobCard.vehicle.fuelType,
+      color: jobCard.vehicle.vehicleColor,
+      chassisNo: jobCard.vehicle.chassisNo,
+      engineNo: jobCard.vehicle.engineNo
+    }
+    : null,
+  serviceCount: jobCard._count ? jobCard._count.services : (jobCard.services || []).length,
+  services: (jobCard.services || []).map((service) => ({
+    id: service.id,
+    serviceItemId: service.serviceItemId,
+    name: service.serviceName,
+    price: Number(service.price),
+    quantity: service.quantity,
+    isAdditional: service.isAdditional
+  }))
+});
+
+const resolveCreatedByFilter = (query, user) => {
+  const roleSlug = normalizeRoleSlug(user && user.roleSlug);
+
+  if (roleSlug === 'crm_team') {
+    return Number(user.userId);
+  }
+
+  return parsePositiveInt(query.createdById, Number(user && user.userId));
+};
+
+const buildJobCardListWhere = (query, user) => {
+  const where = {};
+  const locationId = resolveLocationFilter(query, user);
+  const createdById = resolveCreatedByFilter(query, user);
+
+  if (locationId) {
+    where.locationId = locationId;
+  }
+
+  if (createdById) {
+    where.createdById = createdById;
+  }
+
+  const customerName = toTrimmedString(query.customerName);
+  if (customerName) {
+    where.customer = {
+      fullName: {
+        contains: customerName
+      }
+    };
+  }
+
+  const vehicleNumber = toTrimmedString(query.vehicleNumber || query.registrationNo || query.registrationNumber);
+  const normalizedVehicleNumber = vehicleNumber ? normalizeVehicleNumber(vehicleNumber) : null;
+  if (normalizedVehicleNumber) {
+    where.vehicle = {
+      registrationNo: {
+        contains: normalizedVehicleNumber
+      }
+    };
+  }
+
+  const fromDate = parseDateQuery(query.fromDate || query.createdFrom || query.createdAtFrom, 'fromDate');
+  const toDate = parseDateQuery(query.toDate || query.createdTo || query.createdAtTo, 'toDate', true);
+  if (fromDate && toDate && fromDate > toDate) {
+    throw createHttpError(400, 'fromDate must be before or equal to toDate');
+  }
+
+  if (fromDate || toDate) {
+    where.createdAt = {
+      ...(fromDate ? { gte: fromDate } : {}),
+      ...(toDate ? { lte: toDate } : {})
+    };
+  }
+
+  const currentStatusCode = toTrimmedString(query.currentStatusCode || query.statusCode);
+  if (currentStatusCode) {
+    where.currentStatus = {
+      is: {
+        statusCode: currentStatusCode.toUpperCase()
+      }
+    };
+  }
+
+  const approvalStatusCode = toTrimmedString(query.approvalStatusCode);
+  if (approvalStatusCode) {
+    where.approvalStatus = {
+      is: {
+        statusCode: approvalStatusCode.toUpperCase()
+      }
+    };
+  }
+
+  const search = String(query.search || '').trim();
+  if (search) {
+    const normalizedSearch = normalizeVehicleNumber(search);
+    where.OR = [
+      {
+        jobCardNo: {
+          contains: search
+        }
+      },
+      {
+        gateEntry: {
+          gateEntryNo: {
+            contains: search
+          }
+        }
+      },
+      ...(normalizedSearch
+        ? [
+          {
+            vehicle: {
+              registrationNo: {
+                contains: normalizedSearch
+              }
+            }
+          }
+        ]
+        : []),
+      {
+        customer: {
+          fullName: {
+            contains: search
+          }
+        }
+      },
+      {
+        customer: {
+          mobileNo: {
+            contains: search
+          }
+        }
+      }
+    ];
+  }
+
+  return where;
+};
+
 const buildQueueWhere = (query, user) => {
   const where = {
     exitTime: null,
@@ -504,6 +827,62 @@ const buildQueueWhere = (query, user) => {
   }
 
   return where;
+};
+
+const jobCardList = async (query, user) => {
+  const page = parsePositiveInt(query.page, 1);
+  const limit = parsePositiveInt(query.limit, 10);
+  const where = buildJobCardListWhere(query, user);
+  const activeWhere = {
+    AND: [
+      where,
+      {
+        OR: [
+          {
+            currentStatusId: null
+          },
+          {
+            currentStatus: {
+              is: {
+                statusCode: {
+                  notIn: ['DELIVERED', 'REJECTED']
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  };
+
+  const [jobCards, total, activeCount] = await prisma.$transaction([
+    prisma.jobCard.findMany({
+      where,
+      select: jobCardListSelect,
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip: (page - 1) * limit,
+      take: limit
+    }),
+    prisma.jobCard.count({ where }),
+    prisma.jobCard.count({ where: activeWhere })
+  ]);
+
+  return {
+    jobCards: jobCards.map(toJobCardListResponse),
+    summary: {
+      total,
+      active: activeCount,
+      completed: Math.max(0, total - activeCount)
+    },
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
 };
 
 const pendingQueue = async (query, user) => {
@@ -609,6 +988,14 @@ const toJobCardResponse = (jobCard) => ({
   gateEntryId: jobCard.gateEntryId,
   expectedDeliveryAt: jobCard.expectedDeliveryAt,
   totalEstimate: Number(jobCard.totalEstimate),
+  billing: {
+    serviceSubtotal: jobCard.serviceSubtotal === null || jobCard.serviceSubtotal === undefined ? null : Number(jobCard.serviceSubtotal),
+    taxRate: jobCard.taxRate === null || jobCard.taxRate === undefined ? null : Number(jobCard.taxRate),
+    taxAmount: jobCard.taxAmount === null || jobCard.taxAmount === undefined ? null : Number(jobCard.taxAmount),
+    discountAmount: jobCard.discountAmount === null || jobCard.discountAmount === undefined ? null : Number(jobCard.discountAmount),
+    finalAmount: jobCard.finalAmount === null || jobCard.finalAmount === undefined ? null : Number(jobCard.finalAmount),
+    discountReason: jobCard.discountReason || null
+  },
   customerComplaint: jobCard.customerComplaint,
   additionalNotes: jobCard.additionalNotes,
   currentStatus: jobCard.currentStatus
@@ -788,6 +1175,12 @@ const createFromGateEntry = async (payload, user, files = []) => {
         expectedDeliveryAt,
         currentStatusId,
         totalEstimate: billingSummary.finalAmount,
+        serviceSubtotal: billingSummary.serviceSubtotal,
+        taxRate: billingSummary.taxRate,
+        taxAmount: billingSummary.taxAmount,
+        discountAmount: billingSummary.discountAmount,
+        finalAmount: billingSummary.finalAmount,
+        discountReason: billingSummary.discountReason,
         customerComplaint: payload.customerComplaint ? String(payload.customerComplaint).trim() : null,
         additionalNotes,
         createdById: user.userId || null
@@ -859,6 +1252,12 @@ const createFromGateEntry = async (payload, user, files = []) => {
         gateEntryId: true,
         expectedDeliveryAt: true,
         totalEstimate: true,
+        serviceSubtotal: true,
+        taxRate: true,
+        taxAmount: true,
+        discountAmount: true,
+        finalAmount: true,
+        discountReason: true,
         customerComplaint: true,
         additionalNotes: true,
         currentStatus: {
@@ -933,6 +1332,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
 
 module.exports = {
   pendingQueue,
+  jobCardList,
   queueDetail,
   createFromGateEntry
 };

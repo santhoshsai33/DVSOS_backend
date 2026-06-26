@@ -17,6 +17,22 @@ const pendingQueue = async (req, res, next) => {
   }
 };
 
+const jobCardList = async (req, res, next) => {
+  try {
+    const { jobCards, summary, meta } = await service.jobCardList(req.query, req.user);
+    return apiResponse(res, {
+      message: 'Job card list fetched successfully',
+      data: {
+        jobCards,
+        summary
+      },
+      meta
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const queueDetail = async (req, res, next) => {
   try {
     const data = await service.queueDetail(req.params.id, req.user);
@@ -44,6 +60,7 @@ const createFromGateEntry = async (req, res, next) => {
 
 module.exports = {
   pendingQueue,
+  jobCardList,
   queueDetail,
   createFromGateEntry
 };
