@@ -16,7 +16,8 @@ const queueViewAccess = roleMiddleware([
   'managing_director',
   'floor_supervisor',
   'body_shop_supervisor',
-  'water_wash_team'
+  'water_wash_team',
+  'water_wash'
 ]);
 
 const queueAssignAccess = roleMiddleware([
@@ -24,7 +25,8 @@ const queueAssignAccess = roleMiddleware([
   'manager',
   'floor_supervisor',
   'body_shop_supervisor',
-  'water_wash_team'
+  'water_wash_team',
+  'water_wash'
 ]);
 
 router.use(authenticate);

@@ -9,7 +9,7 @@ const {
 const { authenticate } = require('../../common/middleware/auth.middleware');
 const { roleMiddleware } = require('../../common/middleware/role.middleware');
 
-const canViewCustomers = roleMiddleware(['admin', 'manager', 'managing_director', 'service_advisor', 'technician']);
+const canViewCustomers = roleMiddleware(['admin', 'manager', 'managing_director', 'service_advisor', 'technician', 'crm_team', 'water_wash_team', 'water_wash']);
 const canEditCustomers = roleMiddleware(['admin', 'manager', 'managing_director', 'service_advisor']);
 
 router.use(authenticate);
