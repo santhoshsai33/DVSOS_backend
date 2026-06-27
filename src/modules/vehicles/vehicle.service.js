@@ -54,6 +54,48 @@ const listVehicles = async (query, user) => {
   };
 };
 
+const getVehicleById = async (id, user) => {
+  const vehicleId = parseInt(id, 10);
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { id: vehicleId },
+    include: {
+      customer: {
+        select: { id: true, fullName: true, mobileNo: true, emailId: true, address: true }
+      },
+      brand: {
+        select: { id: true, name: true }
+      },
+      location: {
+        select: { id: true, locationName: true, locationCode: true }
+      }
+    }
+  });
+
+  if (!vehicle) {
+    throw new Error('Vehicle not found');
+  }
+
+  // Ensure location matches if user is restricted
+  if (user && user.locationId && vehicle.locationId !== user.locationId) {
+    throw new Error('Unauthorized to view this Vehicle');
+  }
+
+  // Fetch media files (images) associated with this vehicle
+  const mediaFiles = await prisma.mediaFile.findMany({
+    where: {
+      moduleName: 'Vehicle',
+      moduleRecordId: vehicleId
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return {
+    ...vehicle,
+    images: mediaFiles
+  };
+};
+
 module.exports = {
-  listVehicles
+  listVehicles,
+  getVehicleById
 };

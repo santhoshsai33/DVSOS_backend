@@ -8,5 +8,6 @@ const canViewVehicles = roleMiddleware(['admin', 'manager', 'managing_director',
 router.use(authenticate);
 
 router.get('/list', canViewVehicles, vehicleController.getVehicles);
+router.get('/detail/:id', canViewVehicles, vehicleController.getVehicle);
 
 module.exports = router;

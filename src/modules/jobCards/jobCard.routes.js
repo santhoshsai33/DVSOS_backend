@@ -8,5 +8,6 @@ const canViewJobCards = roleMiddleware(['admin', 'manager', 'managing_director',
 router.use(authenticate);
 
 router.get('/list', canViewJobCards, jobCardController.getJobCards);
+router.get('/detail/:id', canViewJobCards, jobCardController.getJobCard);
 
 module.exports = router;

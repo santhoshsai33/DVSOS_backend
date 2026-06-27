@@ -60,6 +60,55 @@ const listJobCards = async (query, user) => {
   };
 };
 
+const getJobCardById = async (id, user) => {
+  const jobCard = await prisma.jobCard.findUnique({
+    where: { id: parseInt(id, 10) },
+    include: {
+      customer: {
+        select: { id: true, fullName: true, mobileNo: true, emailId: true, address: true }
+      },
+      vehicle: {
+        select: { id: true, registrationNo: true, model: true, variant: true, fuelType: true, vehicleColor: true }
+      },
+      currentStatus: {
+        select: { id: true, statusCode: true, statusName: true }
+      },
+      location: {
+        select: { id: true, locationName: true, locationCode: true }
+      },
+      gateEntry: {
+        select: { id: true, entryType: true, gateEntryNo: true }
+      },
+      services: {
+        include: {
+          serviceItem: true,
+          serviceStatus: true
+        }
+      },
+      workAssignments: {
+        include: {
+          assignedUser: {
+            select: { id: true, fullName: true, mobileNo: true }
+          },
+          status: true
+        }
+      }
+    }
+  });
+
+  if (!jobCard) {
+    throw new Error('Job Card not found');
+  }
+
+  // Ensure location matches if user is restricted
+  if (user && user.locationId && jobCard.locationId !== user.locationId) {
+    throw new Error('Unauthorized to view this Job Card');
+  }
+
+  return jobCard;
+};
+
 module.exports = {
-  listJobCards
+  listJobCards,
+  getJobCardById
 };
