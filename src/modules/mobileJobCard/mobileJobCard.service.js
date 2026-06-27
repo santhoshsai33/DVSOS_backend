@@ -657,6 +657,177 @@ const toJobCardListResponse = (jobCard) => ({
   }))
 });
 
+const jobCardDetailSelect = {
+  ...jobCardListSelect,
+  slug: true,
+  statusLogs: {
+    select: {
+      id: true,
+      remarks: true,
+      createdAt: true,
+      status: {
+        select: {
+          id: true,
+          statusCode: true,
+          statusName: true
+        }
+      },
+      changedBy: {
+        select: {
+          id: true,
+          fullName: true,
+          employeeCode: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    },
+    take: 10
+  }
+};
+
+const toMoney = (value, fallback = 0) => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  return Number(value);
+};
+
+const buildJobCardDetailBilling = (jobCard) => {
+  const serviceSubtotal = toMoney(jobCard.serviceSubtotal, (jobCard.services || []).reduce((sum, service) => {
+    return sum + (Number(service.price) * service.quantity);
+  }, 0));
+  const taxRate = toMoney(jobCard.taxRate, null);
+  const taxAmount = toMoney(jobCard.taxAmount, 0);
+  const discountAmount = toMoney(jobCard.discountAmount, 0);
+  const finalAmount = toMoney(jobCard.finalAmount, toMoney(jobCard.totalEstimate, serviceSubtotal + taxAmount - discountAmount));
+
+  return {
+    serviceSubtotal,
+    taxRate,
+    taxAmount,
+    discountAmount,
+    finalAmount,
+    grandTotalEstimate: finalAmount,
+    discountReason: jobCard.discountReason || null
+  };
+};
+
+const toMediaResponse = (mediaFile) => ({
+  id: mediaFile.id,
+  moduleName: mediaFile.moduleName,
+  moduleRecordId: mediaFile.moduleRecordId,
+  category: mediaFile.category,
+  fileType: mediaFile.fileType,
+  fileName: mediaFile.fileName,
+  fileUrl: mediaFile.fileUrl,
+  mimeType: mediaFile.mimeType,
+  fileSizeKb: mediaFile.fileSizeKb,
+  createdAt: mediaFile.createdAt
+});
+
+const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
+  const services = (jobCard.services || []).map((service) => {
+    const price = Number(service.price);
+    const quantity = service.quantity;
+
+    return {
+      id: service.id,
+      serviceItemId: service.serviceItemId,
+      name: service.serviceName,
+      description: service.serviceName,
+      price,
+      quantity,
+      total: price * quantity,
+      isAdditional: service.isAdditional
+    };
+  });
+
+  return {
+    jobCard: {
+      id: jobCard.id,
+      jobCardNo: jobCard.jobCardNo,
+      slug: jobCard.slug,
+      gateEntryId: jobCard.gateEntryId,
+      expectedDeliveryAt: jobCard.expectedDeliveryAt,
+      customerComplaint: jobCard.customerComplaint,
+      additionalNotes: jobCard.additionalNotes,
+      createdAt: jobCard.createdAt,
+      updatedAt: jobCard.updatedAt,
+      currentStatus: toStatusResponse(jobCard.currentStatus),
+      approvalStatus: toStatusResponse(jobCard.approvalStatus)
+    },
+    header: {
+      customerName: jobCard.customer ? jobCard.customer.fullName : null,
+      mobileNo: jobCard.customer ? jobCard.customer.mobileNo : null,
+      emailId: jobCard.customer ? jobCard.customer.emailId : null,
+      registrationNumber: jobCard.vehicle ? jobCard.vehicle.registrationNo : null,
+      expectedDeliveryAt: jobCard.expectedDeliveryAt
+    },
+    vehicleSpecifications: jobCard.vehicle
+      ? {
+        id: jobCard.vehicle.id,
+        make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+        brand: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+        model: jobCard.vehicle.model,
+        variant: jobCard.vehicle.variant,
+        fuelType: jobCard.vehicle.fuelType,
+        color: jobCard.vehicle.vehicleColor,
+        chassisNo: jobCard.vehicle.chassisNo,
+        engineNo: jobCard.vehicle.engineNo,
+        registrationNumber: jobCard.vehicle.registrationNo
+      }
+      : null,
+    customerDetails: jobCard.customer
+      ? {
+        id: jobCard.customer.id,
+        name: jobCard.customer.fullName,
+        mobileNo: jobCard.customer.mobileNo,
+        alternateMobileNo: jobCard.customer.alternateMobileNo,
+        emailId: jobCard.customer.emailId,
+        billingAddress: jobCard.customer.address,
+        address: jobCard.customer.address
+      }
+      : null,
+    servicesAndMaintenanceTasks: {
+      items: services,
+      serviceSubtotal: services.reduce((sum, service) => sum + service.total, 0),
+      billing: buildJobCardDetailBilling(jobCard)
+    },
+    digitalConditionPhotos: mediaFiles.map(toMediaResponse),
+    gateEntry: jobCard.gateEntry
+      ? {
+        id: jobCard.gateEntry.id,
+        gateEntryNo: jobCard.gateEntry.gateEntryNo,
+        entryTime: jobCard.gateEntry.entryTime
+      }
+      : null,
+    location: jobCard.location || null,
+    createdBy: jobCard.createdBy
+      ? {
+        id: jobCard.createdBy.id,
+        name: jobCard.createdBy.fullName,
+        employeeCode: jobCard.createdBy.employeeCode
+      }
+      : null,
+    statusLogs: (jobCard.statusLogs || []).map((log) => ({
+      id: log.id,
+      status: toStatusResponse(log.status),
+      remarks: log.remarks,
+      changedBy: log.changedBy
+        ? {
+          id: log.changedBy.id,
+          name: log.changedBy.fullName,
+          employeeCode: log.changedBy.employeeCode
+        }
+        : null,
+      createdAt: log.createdAt
+    }))
+  };
+};
+
 const resolveCreatedByFilter = (query, user) => {
   const roleSlug = normalizeRoleSlug(user && user.roleSlug);
 
@@ -964,6 +1135,58 @@ const queueDetail = async (id, user) => {
       ...toQueueEntryResponse(gateEntry),
       remarks: gateEntry.remarks || null
     }
+  };
+};
+
+const jobCardDetail = async (id, user) => {
+  const jobCardId = Number(id);
+  const where = {
+    id: jobCardId,
+    ...(user && user.locationId ? { locationId: Number(user.locationId) } : {})
+  };
+
+  const jobCard = await prisma.jobCard.findFirst({
+    where,
+    select: jobCardDetailSelect
+  });
+
+  if (!jobCard) {
+    throw createHttpError(404, 'Job card not found');
+  }
+
+  const mediaFiles = await prisma.mediaFile.findMany({
+    where: {
+      OR: [
+        {
+          moduleName: 'JOB_CARD',
+          moduleRecordId: jobCard.id
+        },
+        {
+          moduleName: 'VEHICLE',
+          moduleRecordId: jobCard.vehicle.id
+        }
+      ],
+      fileType: 'IMAGE'
+    },
+    select: {
+      id: true,
+      moduleRecordId: true,
+      moduleName: true,
+      fileType: true,
+      category: true,
+      fileName: true,
+      fileUrl: true,
+      mimeType: true,
+      fileSizeKb: true,
+      createdAt: true
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return {
+    record: toJobCardDetailResponse(jobCard, mediaFiles)
   };
 };
 
@@ -1334,5 +1557,6 @@ module.exports = {
   pendingQueue,
   jobCardList,
   queueDetail,
+  jobCardDetail,
   createFromGateEntry
 };
