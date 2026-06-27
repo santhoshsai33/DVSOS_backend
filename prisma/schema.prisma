@@ -525,6 +525,12 @@ model JobCard {
   approvalStatusId   Int?      @map("approval_status_id")
   currentStatusId    Int?      @map("current_status_id")
   totalEstimate      Decimal   @default(0) @map("total_estimate") @db.Decimal(10, 2)
+  serviceSubtotal    Decimal?  @map("service_subtotal") @db.Decimal(10, 2)
+  taxRate            Decimal?  @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount          Decimal?  @map("tax_amount") @db.Decimal(10, 2)
+  discountAmount     Decimal?  @map("discount_amount") @db.Decimal(10, 2)
+  finalAmount        Decimal?  @map("final_amount") @db.Decimal(10, 2)
+  discountReason     String?   @map("discount_reason") @db.NVarChar(255)
   customerComplaint  String?   @map("customer_complaint")
   additionalNotes    String?   @map("additional_notes")
   createdAt          DateTime  @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2

@@ -17,11 +17,39 @@ const pendingQueue = async (req, res, next) => {
   }
 };
 
+const jobCardList = async (req, res, next) => {
+  try {
+    const { jobCards, summary, meta } = await service.jobCardList(req.query, req.user);
+    return apiResponse(res, {
+      message: 'Job card list fetched successfully',
+      data: {
+        jobCards,
+        summary
+      },
+      meta
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const queueDetail = async (req, res, next) => {
   try {
     const data = await service.queueDetail(req.params.id, req.user);
     return apiResponse(res, {
       message: 'Gate entry detail fetched successfully',
+      data
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const jobCardDetail = async (req, res, next) => {
+  try {
+    const data = await service.jobCardDetail(req.params.id, req.user);
+    return apiResponse(res, {
+      message: 'Job card detail fetched successfully',
       data
     });
   } catch (error) {
@@ -44,6 +72,8 @@ const createFromGateEntry = async (req, res, next) => {
 
 module.exports = {
   pendingQueue,
+  jobCardList,
   queueDetail,
+  jobCardDetail,
   createFromGateEntry
 };

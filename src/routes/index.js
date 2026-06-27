@@ -27,6 +27,7 @@ const userRoutes = require('../modules/users/user.routes');
 const customerRoutes = require('../modules/customers/customer.routes');
 const vehicleRoutes = require('../modules/vehicles/vehicle.routes');
 const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
+const queueRoutes = require('../modules/queues/queue.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 
@@ -58,5 +59,6 @@ router.use('/users', userRoutes);
 router.use('/customers', customerRoutes);
 router.use('/vehicles', vehicleRoutes);
 router.use('/job-cards', jobCardRoutes);
+router.use('/queues', queueRoutes);
 
 module.exports = router;
