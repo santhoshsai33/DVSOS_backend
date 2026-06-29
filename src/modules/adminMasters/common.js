@@ -405,7 +405,7 @@ const createAdminMasterService = (config) => {
       prisma[config.model].findMany({
         where,
         select: config.select,
-        orderBy: config.orderBy || { id: 'asc' },
+        orderBy: config.orderBy || { id: 'desc' },
         skip: (page - 1) * limit,
         take: limit
       }),
