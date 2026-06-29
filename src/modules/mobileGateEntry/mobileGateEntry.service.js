@@ -1,5 +1,5 @@
 const prisma = require('../../config/db');
-const { createAuditLog } = require('../../common/utils/audit.util');
+const { createAuditLog, ensureAuditModule } = require('../../common/utils/audit.util');
 const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
@@ -268,14 +268,28 @@ const toGateEntryResponse = (entry) => {
   };
 };
 
-const createAudit = async (tx, { tableName, recordId, actionType, actorUserId, recordName, comments, locationId, details = [] }) => {
+const GATE_ENTRY_AUDIT_MODULE = {
+  moduleCode: 'gate-entry',
+  moduleName: 'Gate Entry'
+};
+
+const resolveGateEntryAuditModuleId = async (actorUserId) => {
+  if (!actorUserId) {
+    return null;
+  }
+
+  const auditModule = await ensureAuditModule(prisma, GATE_ENTRY_AUDIT_MODULE);
+  return auditModule.id;
+};
+
+const createAudit = async (tx, { tableName, recordId, actionType, actorUserId, recordName, comments, locationId, details = [], moduleId = null }) => {
   if (!actorUserId) {
     return null;
   }
 
   return createAuditLog(tx, {
-    moduleCode: 'gate-entry',
-    moduleName: 'Gate Entry',
+    ...GATE_ENTRY_AUDIT_MODULE,
+    moduleId,
     tableName,
     recordId,
     actionType,
@@ -403,6 +417,8 @@ const createGateEntry = async (payload, user) => {
     existingCustomerByMobile = await findCustomerByMobileNo(whatsappNumber, locationId);
   }
 
+  const auditModuleId = await resolveGateEntryAuditModuleId(user.userId);
+
   return prisma.$transaction(async (tx) => {
     let customer = existingVehicle ? existingVehicle.customer : existingCustomerByMobile;
     let vehicle = existingVehicle;
@@ -440,6 +456,7 @@ const createGateEntry = async (payload, user) => {
           recordName: customer.fullName,
           comments: 'Customer created from gate entry',
           locationId,
+          moduleId: auditModuleId,
           details: [
             { fieldName: 'mobileNo', oldValue: null, newValue: customer.mobileNo, dataType: 'string' }
           ]
@@ -471,6 +488,7 @@ const createGateEntry = async (payload, user) => {
         recordName: vehicle.registrationNo,
         comments: 'Vehicle created from gate entry',
         locationId,
+        moduleId: auditModuleId,
         details: [
           { fieldName: 'registrationNo', oldValue: null, newValue: vehicle.registrationNo, dataType: 'string' }
         ]
@@ -508,6 +526,7 @@ const createGateEntry = async (payload, user) => {
       recordName: gateEntry.gateEntryNo,
       comments: 'Gate entry created',
       locationId,
+      moduleId: auditModuleId,
       details: [
         { fieldName: 'registrationNo', oldValue: null, newValue: normalizedRegistrationNumber, dataType: 'string' },
         { fieldName: 'entryType', oldValue: null, newValue: entryType, dataType: 'string' }
@@ -523,7 +542,7 @@ const createGateEntry = async (payload, user) => {
       nextAction: 'WAITING_FOR_CRM',
       isCreated: true
     };
-  });
+  }, { timeout: 20000 });
 };
 
 const submitExit = async (id, payload, user) => {
@@ -551,6 +570,8 @@ const submitExit = async (id, payload, user) => {
     throw createHttpError(409, 'Gate entry exit is already submitted');
   }
 
+  const auditModuleId = await resolveGateEntryAuditModuleId(user.userId);
+
   return prisma.$transaction(async (tx) => {
     const exitStatusId = await resolveStatusIdFromCodes(tx, STATUS_MODULE_CODES.GATE_ENTRY, EXIT_STATUS_CODES);
     const gateEntry = await tx.gateEntry.update({
@@ -572,6 +593,7 @@ const submitExit = async (id, payload, user) => {
       recordName: gateEntry.gateEntryNo,
       comments: 'Gate entry exited',
       locationId: gateEntry.location.id,
+      moduleId: auditModuleId,
       details: [
         { fieldName: 'exitTime', oldValue: null, newValue: gateEntry.exitTime, dataType: 'date' }
       ]
@@ -581,7 +603,7 @@ const submitExit = async (id, payload, user) => {
       gateEntry: toGateEntryResponse(gateEntry),
       nextAction: 'EXIT_SUBMITTED'
     };
-  });
+  }, { timeout: 20000 });
 };
 
 const getHistoryDateRange = (query) => {
