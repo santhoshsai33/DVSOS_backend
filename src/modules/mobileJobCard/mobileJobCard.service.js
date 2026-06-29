@@ -1,6 +1,6 @@
 const fs = require('fs/promises');
 const prisma = require('../../config/db');
-const { createAuditLog } = require('../../common/utils/audit.util');
+const { createAuditLog, ensureAuditModule } = require('../../common/utils/audit.util');
 const { CODE_CONFIG, generateUniqueCode } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
@@ -353,14 +353,28 @@ const buildMediaRows = ({ uploadedPhotos = [], vehicleId }) => {
   }));
 };
 
-const createAudit = async (tx, { tableName, recordId, actionType, actorUserId, recordName, comments, locationId, details = [] }) => {
+const JOB_CARD_AUDIT_MODULE = {
+  moduleCode: 'job-card',
+  moduleName: 'Job Card'
+};
+
+const resolveJobCardAuditModuleId = async (actorUserId) => {
+  if (!actorUserId) {
+    return null;
+  }
+
+  const auditModule = await ensureAuditModule(prisma, JOB_CARD_AUDIT_MODULE);
+  return auditModule.id;
+};
+
+const createAudit = async (tx, { tableName, recordId, actionType, actorUserId, recordName, comments, locationId, details = [], moduleId = null }) => {
   if (!actorUserId) {
     return null;
   }
 
   return createAuditLog(tx, {
-    moduleCode: 'job-card',
-    moduleName: 'Job Card',
+    ...JOB_CARD_AUDIT_MODULE,
+    moduleId,
     tableName,
     recordId,
     actionType,
@@ -1324,6 +1338,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
   }, 0);
   const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal);
   const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
+  const auditModuleId = await resolveJobCardAuditModuleId(user.userId);
 
   return prisma.$transaction(async (tx) => {
     const existingJobCard = await tx.jobCard.findFirst({
@@ -1453,6 +1468,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
       recordName: jobCard.jobCardNo,
       comments: 'Job card created from mobile job card app',
       locationId: gateEntry.locationId,
+      moduleId: auditModuleId,
       details: [
         { fieldName: 'gateEntryNo', oldValue: null, newValue: gateEntry.gateEntryNo, dataType: 'string' },
         { fieldName: 'totalEstimate', oldValue: null, newValue: billingSummary.finalAmount, dataType: 'number' }
@@ -1544,7 +1560,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
       },
       nextAction: 'JOB_CARD_CREATED'
     };
-  });
+  }, { timeout: 20000 });
 };
 
 module.exports = {
