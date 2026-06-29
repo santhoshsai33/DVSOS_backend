@@ -4,7 +4,10 @@ const service = require('./mobileGateEntry.service');
 const checkVehicle = async (req, res, next) => {
   try {
     const data = await service.checkVehicle(req.query, req.user);
-    return apiResponse(res, { data });
+    return apiResponse(res, {
+      message: 'Vehicle lookup completed successfully',
+      data
+    });
   } catch (error) {
     return next(error);
   }
@@ -57,7 +60,10 @@ const history = async (req, res, next) => {
 const activeByVehicle = async (req, res, next) => {
   try {
     const data = await service.activeByVehicle(req.query, req.user);
-    return apiResponse(res, { data });
+    return apiResponse(res, {
+      message: 'Active gate entry fetched successfully',
+      data
+    });
   } catch (error) {
     return next(error);
   }

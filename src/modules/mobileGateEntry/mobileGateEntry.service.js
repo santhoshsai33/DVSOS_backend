@@ -5,6 +5,7 @@ const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.ut
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { generateGateEntryNo } = require('../../utils/generateGateEntryNo');
 const { indianMobileRegex } = require('./mobileGateEntry.validation');
+const { STATUS_MODULE_CODES, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
 
 const ENTRY_STATUS_CODES = ['ACTIVE', 'OPEN', 'ENTERED', 'ENTRY_CREATED'];
 const EXIT_STATUS_CODES = ['EXITED', 'CLOSED'];
@@ -267,25 +268,6 @@ const toGateEntryResponse = (entry) => {
   };
 };
 
-const resolveStatusId = async (tx, codes) => {
-  const status = await tx.statusMaster.findFirst({
-    where: {
-      isActive: true,
-      statusCode: {
-        in: codes
-      }
-    },
-    orderBy: {
-      id: 'asc'
-    },
-    select: {
-      id: true
-    }
-  });
-
-  return status ? status.id : null;
-};
-
 const createAudit = async (tx, { tableName, recordId, actionType, actorUserId, recordName, comments, locationId, details = [] }) => {
   if (!actorUserId) {
     return null;
@@ -495,7 +477,7 @@ const createGateEntry = async (payload, user) => {
       });
     }
 
-    const entryStatusId = await resolveStatusId(tx, ENTRY_STATUS_CODES);
+    const entryStatusId = await resolveStatusIdFromCodes(tx, STATUS_MODULE_CODES.GATE_ENTRY, ENTRY_STATUS_CODES);
     const gateEntryNo = await generateGateEntryNo({ tx, locationCode: location.locationCode });
     const gateEntrySlug = await createUniqueSlug(tx, 'gateEntry', gateEntryNo);
     const gateEntry = await tx.gateEntry.create({
@@ -570,7 +552,7 @@ const submitExit = async (id, payload, user) => {
   }
 
   return prisma.$transaction(async (tx) => {
-    const exitStatusId = await resolveStatusId(tx, EXIT_STATUS_CODES);
+    const exitStatusId = await resolveStatusIdFromCodes(tx, STATUS_MODULE_CODES.GATE_ENTRY, EXIT_STATUS_CODES);
     const gateEntry = await tx.gateEntry.update({
       where: { id: gateEntryId },
       data: {

@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { generateSlug } = require('../src/common/utils/slug.util');
+const { generateSlug } = require('../../src/common/utils/slug.util');
 
 const SERVICE_CENTER = {
   serviceCenterCode: 'DVSOS-HQ',

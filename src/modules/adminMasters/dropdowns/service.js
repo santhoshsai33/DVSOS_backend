@@ -95,11 +95,53 @@ const listLocations = (query = {}) => {
   });
 };
 
+const listStatuses = (query = {}) => {
+  const moduleCode = String(query.moduleCode || '').trim().toLowerCase();
+
+  return prisma.statusMaster.findMany({
+    where: {
+      isActive: true,
+      ...(moduleCode
+        ? {
+          module: {
+            is: {
+              moduleCode,
+              isActive: true
+            }
+          }
+        }
+        : {})
+    },
+    select: {
+      id: true,
+      moduleId: true,
+      statusCode: true,
+      statusName: true,
+      slug: true,
+      sortOrder: true,
+      isFinal: true,
+      module: {
+        select: {
+          id: true,
+          moduleCode: true,
+          moduleName: true
+        }
+      }
+    },
+    orderBy: [
+      { moduleId: 'asc' },
+      { sortOrder: 'asc' },
+      { id: 'asc' }
+    ]
+  });
+};
+
 module.exports = {
   listStates,
   listDistricts,
   listServiceCategories,
   listServiceItems,
   listServiceCenters,
-  listLocations
+  listLocations,
+  listStatuses
 };

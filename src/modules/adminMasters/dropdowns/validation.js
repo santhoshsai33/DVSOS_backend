@@ -22,6 +22,30 @@ const validateOptionalPositiveInt = (fieldName) => (req, res, next) => {
   return next();
 };
 
+const validateOptionalModuleCode = (req, res, next) => {
+  const value = req.query.moduleCode;
+
+  if (value === undefined || value === '') {
+    return next();
+  }
+
+  const moduleCode = String(value).trim().toLowerCase();
+
+  if (!/^[a-z0-9-]+$/.test(moduleCode)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'moduleCode must be a valid module code',
+      data: {},
+      meta: {}
+    });
+  }
+
+  req.query.moduleCode = moduleCode;
+  return next();
+};
+
 module.exports = {
-  validateOptionalPositiveInt
+  validateOptionalPositiveInt,
+  validateOptionalModuleCode
 };

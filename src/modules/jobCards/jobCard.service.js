@@ -1,4 +1,5 @@
 const prisma = require('../../config/db');
+const { STATUS_MODULE_CODES, statusModuleFilter } = require('../../common/utils/status.util');
 
 const listJobCards = async (query, user) => {
   const page = parseInt(query.page, 10) || 1;
@@ -22,7 +23,12 @@ const listJobCards = async (query, user) => {
   }
 
   if (query.status) {
-    where.currentStatus = { statusCode: query.status };
+    where.currentStatus = {
+      is: {
+        statusCode: String(query.status).trim().toUpperCase(),
+        ...statusModuleFilter(STATUS_MODULE_CODES.JOB_CARD_STATUS)
+      }
+    };
   }
 
   const [jobCards, total] = await Promise.all([

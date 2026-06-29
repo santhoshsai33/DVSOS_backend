@@ -1,4 +1,5 @@
 const prisma = require('../../config/db');
+const { STATUS_MODULE_CODES, statusModuleFilter } = require('../../common/utils/status.util');
 
 const list = async (query, user) => {
   const page = Number(query.page) || 1;
@@ -20,7 +21,12 @@ const list = async (query, user) => {
   }
   
   if (query.status) {
-    where.status = { statusCode: query.status };
+    where.status = {
+      is: {
+        statusCode: String(query.status).trim().toUpperCase(),
+        ...statusModuleFilter(STATUS_MODULE_CODES.GATE_ENTRY)
+      }
+    };
   }
   
   if (query.serviceType) {

@@ -1,4 +1,8 @@
 const prisma = require('../../config/db');
+const {
+  STATUS_MODULE_CODES,
+  resolveStatusIdFromCodes
+} = require('../../common/utils/status.util');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
@@ -57,25 +61,6 @@ const getServiceDepartment = (service) => {
 };
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
-
-const resolveStatusId = async (tx, codes) => {
-  const status = await tx.statusMaster.findFirst({
-    where: {
-      isActive: true,
-      statusCode: {
-        in: codes
-      }
-    },
-    orderBy: {
-      id: 'asc'
-    },
-    select: {
-      id: true
-    }
-  });
-
-  return status ? status.id : null;
-};
 
 const getDepartmentServices = (jobCard, department) => {
   return (jobCard.services || []).filter((service) => getServiceDepartment(service) === department);
@@ -417,7 +402,11 @@ const assignWork = async (jobCardId, payload, user) => {
       throw createHttpError(400, 'No unassigned services found for this queue category');
     }
 
-    const statusId = await resolveStatusId(tx, ASSIGNMENT_STATUS_CODES[department].assigned);
+    const statusId = await resolveStatusIdFromCodes(
+      tx,
+      STATUS_MODULE_CODES.WORK_ASSIGNMENT,
+      ASSIGNMENT_STATUS_CODES[department].assigned
+    );
 
     await tx.workAssignment.createMany({
       data: serviceIds.map((jobCardServiceId) => ({
@@ -432,7 +421,11 @@ const assignWork = async (jobCardId, payload, user) => {
       }))
     });
 
-    const jobCardStatusId = await resolveStatusId(tx, ASSIGNMENT_STATUS_CODES[department].assigned);
+    const jobCardStatusId = await resolveStatusIdFromCodes(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_STATUS,
+      ASSIGNMENT_STATUS_CODES[department].assigned
+    );
 
     await tx.jobCard.update({
       where: { id: jobCard.id },
@@ -523,7 +516,16 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
     const statusCodes = requestedStatus === 'COMPLETED'
       ? ASSIGNMENT_STATUS_CODES[department].completed
       : ASSIGNMENT_STATUS_CODES[department].inProgress;
-    const statusId = await resolveStatusId(tx, statusCodes);
+    const statusId = await resolveStatusIdFromCodes(
+      tx,
+      STATUS_MODULE_CODES.WORK_ASSIGNMENT,
+      statusCodes
+    );
+    const jobCardStatusId = await resolveStatusIdFromCodes(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_STATUS,
+      statusCodes
+    );
     const now = new Date();
     const updateData = {
       statusId,
@@ -580,7 +582,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
             id: assignment.jobCardId
           },
           data: {
-            currentStatusId: statusId,
+            currentStatusId: jobCardStatusId,
             modifiedById: user && user.userId ? user.userId : null
           }
         });
@@ -588,7 +590,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         await tx.jobCardStatusLog.create({
           data: {
             jobCardId: assignment.jobCardId,
-            statusId,
+            statusId: jobCardStatusId,
             changedById: user && user.userId ? user.userId : null,
             remarks: `${department} work completed`
           }
@@ -600,7 +602,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
           id: assignment.jobCardId
         },
         data: {
-          currentStatusId: statusId,
+          currentStatusId: jobCardStatusId,
           modifiedById: user && user.userId ? user.userId : null
         }
       });
@@ -608,7 +610,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
       await tx.jobCardStatusLog.create({
         data: {
           jobCardId: assignment.jobCardId,
-          statusId,
+          statusId: jobCardStatusId,
           changedById: user && user.userId ? user.userId : null,
           remarks: `${department} work in progress`
         }

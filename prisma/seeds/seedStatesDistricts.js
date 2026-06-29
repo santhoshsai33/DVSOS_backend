@@ -3,7 +3,7 @@ const {
   seedStateDistricts,
   TAMIL_NADU_STATE,
   TAMIL_NADU_DISTRICTS
-} = require('./seeds/state-district.seed');
+} = require('./state-district.seed');
 
 const run = async () => {
   const prisma = new PrismaClient();

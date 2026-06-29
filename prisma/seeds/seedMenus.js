@@ -68,6 +68,7 @@ const MENU_SEED_DATA = [
     module: 'managing-director',
     menus: [
       { name: 'MD Dashboard', path: '/md-dashboard', icon: 'LayoutDashboard' },
+      { name: 'Stage Schedules', path: '/md-stage-schedules', icon: 'Clock' },
       { name: 'Role Management', path: '/roles', icon: 'ShieldCheck' },
       { name: 'User Management', path: '/users', icon: 'Users' },
       { name: 'Customers', path: '/customers', icon: 'Users' },

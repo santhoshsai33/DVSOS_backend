@@ -5,6 +5,11 @@ const { CODE_CONFIG, generateUniqueCode } = require('../../common/utils/code.uti
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { createStorageProvider } = require('../../providers/storage/storage.provider');
+const {
+  STATUS_MODULE_CODES,
+  resolveStatusIdFromCodes,
+  statusModuleFilter
+} = require('../../common/utils/status.util');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
 
@@ -78,25 +83,6 @@ const resolveLocationFilter = (query, user) => {
   }
 
   return parsePositiveInt(query.locationId, undefined);
-};
-
-const resolveStatusId = async (tx, codes) => {
-  const status = await tx.statusMaster.findFirst({
-    where: {
-      isActive: true,
-      statusCode: {
-        in: codes
-      }
-    },
-    orderBy: {
-      id: 'asc'
-    },
-    select: {
-      id: true
-    }
-  });
-
-  return status ? status.id : null;
 };
 
 const createUniqueSlug = (tx, model, source) => {
@@ -887,7 +873,8 @@ const buildJobCardListWhere = (query, user) => {
   if (currentStatusCode) {
     where.currentStatus = {
       is: {
-        statusCode: currentStatusCode.toUpperCase()
+        statusCode: currentStatusCode.toUpperCase(),
+        ...statusModuleFilter(STATUS_MODULE_CODES.JOB_CARD_STATUS)
       }
     };
   }
@@ -896,7 +883,8 @@ const buildJobCardListWhere = (query, user) => {
   if (approvalStatusCode) {
     where.approvalStatus = {
       is: {
-        statusCode: approvalStatusCode.toUpperCase()
+        statusCode: approvalStatusCode.toUpperCase(),
+        ...statusModuleFilter(STATUS_MODULE_CODES.APPROVAL_STATUS)
       }
     };
   }
@@ -1017,7 +1005,8 @@ const jobCardList = async (query, user) => {
               is: {
                 statusCode: {
                   notIn: ['DELIVERED', 'REJECTED']
-                }
+                },
+                ...statusModuleFilter(STATUS_MODULE_CODES.JOB_CARD_STATUS)
               }
             }
           }
@@ -1071,7 +1060,8 @@ const pendingQueue = async (query, user) => {
           is: {
             statusCode: {
               notIn: ['DELIVERED', 'REJECTED']
-            }
+            },
+            ...statusModuleFilter(STATUS_MODULE_CODES.JOB_CARD_STATUS)
           }
         }
       }
@@ -1382,7 +1372,11 @@ const createFromGateEntry = async (payload, user, files = []) => {
       });
     }
 
-    const currentStatusId = await resolveStatusId(tx, JOB_CARD_CREATED_STATUS_CODES);
+    const currentStatusId = await resolveStatusIdFromCodes(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_STATUS,
+      JOB_CARD_CREATED_STATUS_CODES
+    );
     const jobCardNo = await generateJobCardNo(tx);
     const jobCardSlug = await createUniqueSlug(tx, 'jobCard', jobCardNo);
     const additionalNotes = buildAdditionalNotes(payload);
