@@ -81,10 +81,11 @@ const findReadableMenusByRoleId = (roleId) => {
   });
 };
 
-const findActiveMenus = () => {
+const findActiveMenus = (modules) => {
   return prisma.menu.findMany({
     where: {
-      isActive: true
+      isActive: true,
+      ...(modules && modules.length > 0 ? { module: { in: modules } } : {})
     },
     select: {
       id: true,

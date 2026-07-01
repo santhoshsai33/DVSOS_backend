@@ -126,8 +126,8 @@ const groupMenusByModule = (permissions) => {
   }));
 };
 
-const getAllMenus = async () => {
-  const menus = await authRepository.findActiveMenus();
+const getAllMenus = async (modules) => {
+  const menus = await authRepository.findActiveMenus(modules);
   return groupMenusByModule(menus.map((menu) => ({
     menu: {
       module: menu.module,
@@ -146,11 +146,16 @@ const getAllMenus = async () => {
 };
 
 const getAllowedMenus = async (roleId, roleSlug) => {
-  if (ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug))) {
-    return getAllMenus();
+  const permissions = await authRepository.findReadableMenusByRoleId(roleId);
+
+  if (permissions.length > 0) {
+    return groupMenusByModule(permissions);
   }
 
-  const permissions = await authRepository.findReadableMenusByRoleId(roleId);
+  if (ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug))) {
+    return getAllMenus(['admin']);
+  }
+
   return groupMenusByModule(permissions);
 };
 
