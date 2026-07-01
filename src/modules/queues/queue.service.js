@@ -30,6 +30,13 @@ const ASSIGNMENT_STATUS_CODES = {
   }
 };
 
+const JOB_CARD_SERVICE_STATUS_CODES = {
+  assigned: ['ASSIGNED'],
+  inProgress: ['IN_PROGRESS'],
+  completed: ['COMPLETED']
+};
+
+const READY_FOR_DELIVERY_STATUS_CODES = ['READY_FOR_DELIVERY'];
 const FINAL_JOB_CARD_STATUS_CODES = ['DELIVERED', 'REJECTED'];
 const REJECTED_APPROVAL_STATUS_CODES = ['REJECTED'];
 
@@ -43,6 +50,16 @@ const createHttpError = (statusCode, message, data = {}) => {
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const resolveRequiredStatusId = async (tx, moduleCode, statusCodes, label) => {
+  const statusId = await resolveStatusIdFromCodes(tx, moduleCode, statusCodes);
+
+  if (!statusId) {
+    throw createHttpError(500, `${label} status is not configured`);
+  }
+
+  return statusId;
 };
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
@@ -62,6 +79,11 @@ const getServiceDepartment = (service) => {
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
 
+const isCompletedStatusCode = (statusCode) => {
+  const code = String(statusCode || '').trim().toUpperCase();
+  return code === 'COMPLETED' || code.endsWith('_COMPLETED');
+};
+
 const getDepartmentServices = (jobCard, department) => {
   return (jobCard.services || []).filter((service) => getServiceDepartment(service) === department);
 };
@@ -74,7 +96,7 @@ const isServiceCompleted = (service, department) => {
   const serviceStatusCode = getStatusCode(service.serviceStatus);
   const completedCodes = ASSIGNMENT_STATUS_CODES[department].completed;
 
-  if (completedCodes.includes(serviceStatusCode)) {
+  if (completedCodes.includes(serviceStatusCode) || isCompletedStatusCode(serviceStatusCode)) {
     return true;
   }
 
@@ -83,6 +105,22 @@ const isServiceCompleted = (service, department) => {
   return assignments.length > 0 && assignments.every((assignment) => {
     return assignment.completedAt || completedCodes.includes(getStatusCode(assignment.status));
   });
+};
+
+const isJobCardServiceCompleted = (service) => {
+  if (isCompletedStatusCode(getStatusCode(service.serviceStatus))) {
+    return true;
+  }
+
+  const assignments = service.workAssignments || [];
+  return assignments.length > 0 && assignments.every((assignment) => {
+    return assignment.completedAt || isCompletedStatusCode(getStatusCode(assignment.status));
+  });
+};
+
+const areAllJobCardServicesCompleted = (jobCard) => {
+  const services = jobCard.services || [];
+  return services.length > 0 && services.every(isJobCardServiceCompleted);
 };
 
 const areDepartmentServicesCompleted = (jobCard, department) => {
@@ -402,10 +440,17 @@ const assignWork = async (jobCardId, payload, user) => {
       throw createHttpError(400, 'No unassigned services found for this queue category');
     }
 
-    const statusId = await resolveStatusIdFromCodes(
+    const statusId = await resolveRequiredStatusId(
       tx,
       STATUS_MODULE_CODES.WORK_ASSIGNMENT,
-      ASSIGNMENT_STATUS_CODES[department].assigned
+      ASSIGNMENT_STATUS_CODES[department].assigned,
+      `${department} assignment`
+    );
+    const serviceStatusId = await resolveRequiredStatusId(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+      JOB_CARD_SERVICE_STATUS_CODES.assigned,
+      'Job card service assigned'
     );
 
     await tx.workAssignment.createMany({
@@ -421,10 +466,23 @@ const assignWork = async (jobCardId, payload, user) => {
       }))
     });
 
-    const jobCardStatusId = await resolveStatusIdFromCodes(
+    await tx.jobCardService.updateMany({
+      where: {
+        id: {
+          in: serviceIds
+        }
+      },
+      data: {
+        serviceStatusId,
+        modifiedById: user && user.userId ? user.userId : null
+      }
+    });
+
+    const jobCardStatusId = await resolveRequiredStatusId(
       tx,
       STATUS_MODULE_CODES.JOB_CARD_STATUS,
-      ASSIGNMENT_STATUS_CODES[department].assigned
+      ASSIGNMENT_STATUS_CODES[department].assigned,
+      `${department} job card assigned`
     );
 
     await tx.jobCard.update({
@@ -435,14 +493,14 @@ const assignWork = async (jobCardId, payload, user) => {
       }
     });
 
-    await tx.jobCardStatusLog.create({
-      data: {
-        jobCardId: jobCard.id,
-        statusId: jobCardStatusId,
-        changedById: user && user.userId ? user.userId : null,
-        remarks: `${department} work assigned`
-      }
-    });
+    // await tx.jobCardStatusLog.create({
+    //   data: {
+    //     jobCardId: jobCard.id,
+    //     statusId: jobCardStatusId,
+    //     changedById: user && user.userId ? user.userId : null,
+    //     remarks: `${department} work assigned`
+    //   }
+    // });
 
     const assignments = await tx.workAssignment.findMany({
       where: {
@@ -516,15 +574,25 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
     const statusCodes = requestedStatus === 'COMPLETED'
       ? ASSIGNMENT_STATUS_CODES[department].completed
       : ASSIGNMENT_STATUS_CODES[department].inProgress;
-    const statusId = await resolveStatusIdFromCodes(
+    const statusId = await resolveRequiredStatusId(
       tx,
       STATUS_MODULE_CODES.WORK_ASSIGNMENT,
-      statusCodes
+      statusCodes,
+      `${department} assignment ${requestedStatus.toLowerCase()}`
     );
-    const jobCardStatusId = await resolveStatusIdFromCodes(
+    const serviceStatusId = await resolveRequiredStatusId(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+      requestedStatus === 'COMPLETED'
+        ? JOB_CARD_SERVICE_STATUS_CODES.completed
+        : JOB_CARD_SERVICE_STATUS_CODES.inProgress,
+      `Job card service ${requestedStatus.toLowerCase()}`
+    );
+    const jobCardStatusId = await resolveRequiredStatusId(
       tx,
       STATUS_MODULE_CODES.JOB_CARD_STATUS,
-      statusCodes
+      statusCodes,
+      `${department} job card ${requestedStatus.toLowerCase()}`
     );
     const now = new Date();
     const updateData = {
@@ -562,7 +630,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         id: assignment.jobCardServiceId
       },
       data: {
-        serviceStatusId: statusId,
+        serviceStatusId,
         modifiedById: user && user.userId ? user.userId : null
       }
     });
@@ -575,8 +643,26 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         select: queueJobCardSelect
       });
       const isDepartmentComplete = latestJobCard && areDepartmentServicesCompleted(latestJobCard, department);
+      const isJobCardComplete = latestJobCard && areAllJobCardServicesCompleted(latestJobCard);
 
-      if (isDepartmentComplete) {
+      if (isJobCardComplete) {
+        const readyForDeliveryStatusId = await resolveRequiredStatusId(
+          tx,
+          STATUS_MODULE_CODES.JOB_CARD_STATUS,
+          READY_FOR_DELIVERY_STATUS_CODES,
+          'Ready for delivery job card'
+        );
+
+        await tx.jobCard.update({
+          where: {
+            id: assignment.jobCardId
+          },
+          data: {
+            currentStatusId: readyForDeliveryStatusId,
+            modifiedById: user && user.userId ? user.userId : null
+          }
+        });
+      } else if (isDepartmentComplete) {
         await tx.jobCard.update({
           where: {
             id: assignment.jobCardId
@@ -587,14 +673,14 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
           }
         });
 
-        await tx.jobCardStatusLog.create({
-          data: {
-            jobCardId: assignment.jobCardId,
-            statusId: jobCardStatusId,
-            changedById: user && user.userId ? user.userId : null,
-            remarks: `${department} work completed`
-          }
-        });
+        // await tx.jobCardStatusLog.create({
+        //   data: {
+        //     jobCardId: assignment.jobCardId,
+        //     statusId: jobCardStatusId,
+        //     changedById: user && user.userId ? user.userId : null,
+        //     remarks: `${department} work completed`
+        //   }
+        // });
       }
     } else {
       await tx.jobCard.update({
@@ -607,14 +693,14 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         }
       });
 
-      await tx.jobCardStatusLog.create({
-        data: {
-          jobCardId: assignment.jobCardId,
-          statusId: jobCardStatusId,
-          changedById: user && user.userId ? user.userId : null,
-          remarks: `${department} work in progress`
-        }
-      });
+      // await tx.jobCardStatusLog.create({
+      //   data: {
+      //     jobCardId: assignment.jobCardId,
+      //     statusId: jobCardStatusId,
+      //     changedById: user && user.userId ? user.userId : null,
+      //     remarks: `${department} work in progress`
+      //   }
+      // });
     }
 
     return {

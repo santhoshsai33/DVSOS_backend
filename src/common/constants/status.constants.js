@@ -1,6 +1,6 @@
 const STATUS_MODULE_CODES = {
   GATE_ENTRY: 'gate-entry',
-  JOB_CARD_STATUS: 'job-card-status',
+  JOB_CARD_STATUS: 'job-card',
   APPROVAL_STATUS: 'approval-status',
   WORK_ASSIGNMENT: 'work-assignment',
   JOB_CARD_SERVICE: 'job-card-service'

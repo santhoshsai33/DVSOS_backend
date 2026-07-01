@@ -15,7 +15,7 @@ const statusModules = [
     ]
   },
   {
-    moduleCode: 'job-card-status',
+    moduleCode: 'job-card',
     moduleName: 'Job Card Status',
     description: 'Operational job card stage statuses',
     statuses: [

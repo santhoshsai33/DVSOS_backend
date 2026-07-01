@@ -315,22 +315,22 @@ const createAdminMasterService = (config) => {
     return prisma.$transaction(async (tx) => {
       const record = await tx[config.model].create({ data, select: config.select });
 
-      await createAuditLog(tx, {
-        moduleCode: 'admin-masters',
-        moduleName: 'Admin Masters',
-        tableName: config.tableName,
-        recordId: record.id,
-        actionType: 'CREATE',
-        performedByUserId: actorUserId,
-        recordName: config.recordName(record),
-        comments: `${config.label} created`,
-        details: Object.entries(data).map(([fieldName, newValue]) => ({
-          fieldName,
-          oldValue: null,
-          newValue,
-          dataType: typeof newValue
-        }))
-      });
+      // await createAuditLog(tx, {
+      //   moduleCode: 'admin-masters',
+      //   moduleName: 'Admin Masters',
+      //   tableName: config.tableName,
+      //   recordId: record.id,
+      //   actionType: 'CREATE',
+      //   performedByUserId: actorUserId,
+      //   recordName: config.recordName(record),
+      //   comments: `${config.label} created`,
+      //   details: Object.entries(data).map(([fieldName, newValue]) => ({
+      //     fieldName,
+      //     oldValue: null,
+      //     newValue,
+      //     dataType: typeof newValue
+      //   }))
+      // });
 
       return record;
     });
@@ -460,17 +460,17 @@ const createAdminMasterService = (config) => {
         select: config.select
       });
 
-      await createAuditLog(tx, {
-        moduleCode: 'admin-masters',
-        moduleName: 'Admin Masters',
-        tableName: config.tableName,
-        recordId: record.id,
-        actionType: record.isActive ? 'ACTIVATE' : 'DEACTIVATE',
-        performedByUserId: actorUserId,
-        recordName: config.recordName(record),
-        comments: `${config.label} ${record.isActive ? 'activated' : 'deactivated'}`,
-        details: buildChangeDetails(currentRecord, record, Object.keys(data))
-      });
+      // await createAuditLog(tx, {
+      //   moduleCode: 'admin-masters',
+      //   moduleName: 'Admin Masters',
+      //   tableName: config.tableName,
+      //   recordId: record.id,
+      //   actionType: record.isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      //   performedByUserId: actorUserId,
+      //   recordName: config.recordName(record),
+      //   comments: `${config.label} ${record.isActive ? 'activated' : 'deactivated'}`,
+      //   details: buildChangeDetails(currentRecord, record, Object.keys(data))
+      // });
 
       return record;
     });

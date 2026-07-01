@@ -3,6 +3,14 @@ const { apiResponse } = require('../../common/utils/apiResponse');
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
 
+const getServiceItemId = (item) => {
+  if (!isPlainObject(item)) {
+    return Number(item);
+  }
+
+  return Number(item.serviceItemId ?? item.service_item_id ?? item.id ?? item.serviceId ?? item.value);
+};
+
 const sendValidationError = (res, message) => {
   return apiResponse(res, {
     statusCode: 400,
@@ -72,8 +80,8 @@ const validateCreateJobCardPayload = (req, res, next) => {
   }
 
   for (const item of serviceItems) {
-    const serviceItemId = Number(typeof item === 'object' ? item.serviceItemId : item);
-    const quantity = Number(typeof item === 'object' && item.quantity !== undefined ? item.quantity : 1);
+    const serviceItemId = getServiceItemId(item);
+    const quantity = Number(isPlainObject(item) && item.quantity !== undefined ? item.quantity : 1);
 
     if (!Number.isInteger(serviceItemId) || serviceItemId <= 0) {
       return sendValidationError(res, 'Each service item must have a valid serviceItemId');

@@ -14,6 +14,8 @@ const queueViewAccess = roleMiddleware([
   'admin',
   'manager',
   'managing_director',
+  'mechanical',
+  'mechanic',
   'floor_supervisor',
   'body_shop_supervisor',
   'water_wash_team',
@@ -23,6 +25,8 @@ const queueViewAccess = roleMiddleware([
 const queueAssignAccess = roleMiddleware([
   'admin',
   'manager',
+  'mechanical',
+  'mechanic',
   'floor_supervisor',
   'body_shop_supervisor',
   'water_wash_team',
