@@ -12,6 +12,7 @@ const {
 } = require('../../common/utils/status.util');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
+const JOB_CARD_SERVICE_PENDING_STATUS_CODES = ['PENDING'];
 
 const createHttpError = (statusCode, message, data = {}) => {
   const error = new Error(message);
@@ -42,6 +43,8 @@ const toOptionalNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
+
+const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
 
 const isDateOnlyString = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
 
@@ -1194,19 +1197,72 @@ const jobCardDetail = async (id, user) => {
   };
 };
 
+const getServiceItemId = (item) => {
+  if (!isPlainObject(item)) {
+    return Number(item);
+  }
+
+  return Number(item.serviceItemId ?? item.service_item_id ?? item.id ?? item.serviceId ?? item.value);
+};
+
+const getServiceItemName = (item) => {
+  if (!isPlainObject(item)) {
+    return undefined;
+  }
+
+  return toTrimmedString(item.serviceName || item.name || item.label);
+};
+
+const getServiceItemSlug = (item) => {
+  if (!isPlainObject(item)) {
+    return undefined;
+  }
+
+  return toTrimmedString(item.slug || item.serviceSlug || item.service_item_slug);
+};
+
 const normalizeServiceItems = (serviceItems) => {
+  const namesById = new Map();
+
+  serviceItems.forEach((item) => {
+    const serviceItemId = getServiceItemId(item);
+    const serviceName = getServiceItemName(item);
+
+    if (Number.isInteger(serviceItemId) && serviceItemId > 0 && serviceName) {
+      const nameSet = namesById.get(serviceItemId) || new Set();
+      nameSet.add(serviceName.toLowerCase());
+      namesById.set(serviceItemId, nameSet);
+    }
+  });
+
+  const conflictingIds = new Set(
+    Array.from(namesById.entries())
+      .filter(([, nameSet]) => nameSet.size > 1)
+      .map(([serviceItemId]) => serviceItemId)
+  );
   const itemMap = new Map();
 
   serviceItems.forEach((item) => {
-    const serviceItemId = Number(typeof item === 'object' ? item.serviceItemId : item);
-    const quantity = Number(typeof item === 'object' && item.quantity !== undefined ? item.quantity : 1);
-    itemMap.set(serviceItemId, (itemMap.get(serviceItemId) || 0) + quantity);
+    const parsedServiceItemId = getServiceItemId(item);
+    const serviceItemId = Number.isInteger(parsedServiceItemId) && parsedServiceItemId > 0 ? parsedServiceItemId : null;
+    const serviceName = getServiceItemName(item);
+    const serviceSlug = getServiceItemSlug(item);
+    const quantity = Math.max(1, Number(isPlainObject(item) && item.quantity !== undefined ? item.quantity : 1) || 1);
+    const shouldUseNaturalKey = serviceItemId && conflictingIds.has(serviceItemId) && (serviceSlug || serviceName);
+    const key = shouldUseNaturalKey
+      ? `${serviceSlug ? 'slug' : 'name'}:${String(serviceSlug || serviceName).toLowerCase()}`
+      : `id:${serviceItemId}`;
+    const existing = itemMap.get(key);
+
+    itemMap.set(key, {
+      serviceItemId: shouldUseNaturalKey ? null : serviceItemId,
+      serviceName,
+      serviceSlug,
+      quantity: (existing ? existing.quantity : 0) + quantity
+    });
   });
 
-  return Array.from(itemMap.entries()).map(([serviceItemId, quantity]) => ({
-    serviceItemId,
-    quantity
-  }));
+  return Array.from(itemMap.values());
 };
 
 const toJobCardResponse = (jobCard) => ({
@@ -1309,32 +1365,68 @@ const createFromGateEntry = async (payload, user, files = []) => {
     });
   }
 
-  const serviceItemIds = normalizedServiceItems.map((item) => item.serviceItemId);
+  const serviceItemIds = normalizedServiceItems
+    .map((item) => item.serviceItemId)
+    .filter(Boolean);
+  const serviceItemNames = normalizedServiceItems
+    .filter((item) => !item.serviceItemId && item.serviceName)
+    .map((item) => item.serviceName);
+  const serviceItemSlugs = normalizedServiceItems
+    .filter((item) => !item.serviceItemId && item.serviceSlug)
+    .map((item) => item.serviceSlug);
+  const serviceItemFilters = [
+    ...(serviceItemIds.length > 0 ? [{ id: { in: serviceItemIds } }] : []),
+    ...(serviceItemNames.length > 0 ? [{ name: { in: serviceItemNames } }] : []),
+    ...(serviceItemSlugs.length > 0 ? [{ slug: { in: serviceItemSlugs } }] : [])
+  ];
+
+  if (serviceItemFilters.length === 0) {
+    throw createHttpError(400, 'At least one valid service item is required');
+  }
+
   const serviceItems = await prisma.serviceItem.findMany({
     where: {
-      id: {
-        in: serviceItemIds
-      },
       isActive: true,
       category: {
         isActive: true
-      }
+      },
+      OR: serviceItemFilters
     },
     select: {
       id: true,
       name: true,
+      slug: true,
       defaultPrice: true
     }
   });
 
-  if (serviceItems.length !== serviceItemIds.length) {
+  const serviceItemMap = new Map(serviceItems.map((item) => [item.id, item]));
+  const serviceItemNameMap = new Map(serviceItems.map((item) => [String(item.name).toLowerCase(), item]));
+  const serviceItemSlugMap = new Map(serviceItems.map((item) => [String(item.slug).toLowerCase(), item]));
+  const resolvedServiceItems = normalizedServiceItems.map((item) => {
+    const serviceItem = item.serviceItemId
+      ? serviceItemMap.get(item.serviceItemId)
+      : serviceItemSlugMap.get(String(item.serviceSlug || '').toLowerCase())
+        || serviceItemNameMap.get(String(item.serviceName || '').toLowerCase());
+
+    if (!serviceItem) {
+      return null;
+    }
+
+    return {
+      ...item,
+      serviceItemId: serviceItem.id,
+      serviceName: serviceItem.name,
+      price: Number(serviceItem.defaultPrice)
+    };
+  });
+
+  if (resolvedServiceItems.some((item) => !item)) {
     throw createHttpError(400, 'One or more service items are invalid or inactive');
   }
 
-  const serviceItemMap = new Map(serviceItems.map((item) => [item.id, item]));
-  const serviceSubtotal = normalizedServiceItems.reduce((sum, item) => {
-    const serviceItem = serviceItemMap.get(item.serviceItemId);
-    return sum + (Number(serviceItem.defaultPrice) * item.quantity);
+  const serviceSubtotal = resolvedServiceItems.reduce((sum, item) => {
+    return sum + (item.price * item.quantity);
   }, 0);
   const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal);
   const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
@@ -1392,6 +1484,11 @@ const createFromGateEntry = async (payload, user, files = []) => {
       STATUS_MODULE_CODES.JOB_CARD_STATUS,
       JOB_CARD_CREATED_STATUS_CODES
     );
+    const pendingServiceStatusId = await resolveStatusIdFromCodes(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+      JOB_CARD_SERVICE_PENDING_STATUS_CODES
+    );
     const jobCardNo = await generateJobCardNo(tx);
     const jobCardSlug = await createUniqueSlug(tx, 'jobCard', jobCardNo);
     const additionalNotes = buildAdditionalNotes(payload);
@@ -1424,15 +1521,14 @@ const createFromGateEntry = async (payload, user, files = []) => {
     });
 
     await tx.jobCardService.createMany({
-      data: normalizedServiceItems.map((item) => {
-        const serviceItem = serviceItemMap.get(item.serviceItemId);
-
+      data: resolvedServiceItems.map((item) => {
         return {
           jobCardId: jobCard.id,
-          serviceItemId: serviceItem.id,
-          serviceName: serviceItem.name,
-          price: Number(serviceItem.defaultPrice),
+          serviceItemId: item.serviceItemId,
+          serviceName: item.serviceName,
+          price: item.price,
           quantity: item.quantity,
+          serviceStatusId: pendingServiceStatusId,
           isAdditional: false,
           createdById: user.userId || null
         };
@@ -1451,29 +1547,29 @@ const createFromGateEntry = async (payload, user, files = []) => {
       });
     }
 
-    await tx.jobCardStatusLog.create({
-      data: {
-        jobCardId: jobCard.id,
-        statusId: currentStatusId,
-        changedById: user.userId || null,
-        remarks: 'Job card created from gate entry'
-      }
-    });
+    // await tx.jobCardStatusLog.create({
+    //   data: {
+    //     jobCardId: jobCard.id,
+    //     statusId: currentStatusId,
+    //     changedById: user.userId || null,
+    //     remarks: 'Job card created from gate entry'
+    //   }
+    // });
 
-    await createAudit(tx, {
-      tableName: 'job_cards',
-      recordId: jobCard.id,
-      actionType: 'CREATE',
-      actorUserId: user.userId,
-      recordName: jobCard.jobCardNo,
-      comments: 'Job card created from mobile job card app',
-      locationId: gateEntry.locationId,
-      moduleId: auditModuleId,
-      details: [
-        { fieldName: 'gateEntryNo', oldValue: null, newValue: gateEntry.gateEntryNo, dataType: 'string' },
-        { fieldName: 'totalEstimate', oldValue: null, newValue: billingSummary.finalAmount, dataType: 'number' }
-      ]
-    });
+    // await createAudit(tx, {
+    //   tableName: 'job_cards',
+    //   recordId: jobCard.id,
+    //   actionType: 'CREATE',
+    //   actorUserId: user.userId,
+    //   recordName: jobCard.jobCardNo,
+    //   comments: 'Job card created from mobile job card app',
+    //   locationId: gateEntry.locationId,
+    //   moduleId: auditModuleId,
+    //   details: [
+    //     { fieldName: 'gateEntryNo', oldValue: null, newValue: gateEntry.gateEntryNo, dataType: 'string' },
+    //     { fieldName: 'totalEstimate', oldValue: null, newValue: billingSummary.finalAmount, dataType: 'number' }
+    //   ]
+    // });
 
     const createdJobCard = await tx.jobCard.findUnique({
       where: {

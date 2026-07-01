@@ -16,6 +16,7 @@ const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
   'crm_team',
   'floor_supervisor',
   'body_shop_supervisor',
+  'water_wash_supervisor',
   'water_wash_team',
   'manager'
 ]);

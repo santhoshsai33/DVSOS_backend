@@ -8,15 +8,30 @@ const normalizeAllowedRoles = (allowedRoles) => {
   return allowedRoles;
 };
 
-const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
+const ROLE_ALIASES = {
+  super_admin: 'admin',
+  body_shop: 'body_shop_supervisor',
+  bodyshop: 'body_shop_supervisor',
+  bodyshop_supervisor: 'body_shop_supervisor',
+  floor: 'floor_supervisor',
+  mechanical_supervisor: 'floor_supervisor',
+  water_wash: 'water_wash_team',
+  water_wash_supervisor: 'water_wash_team',
+  wash: 'water_wash_team'
+};
+
+const normalizeRoleSlug = (roleSlug) => {
+  const normalized = String(roleSlug || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+  return ROLE_ALIASES[normalized] || normalized;
+};
 
 const roleMiddleware = (allowedRoles = [], options = {}) => {
   const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles])
-    .map(r => r.toLowerCase().replace(/-/g, '_'));
+    .map(normalizeRoleSlug);
   const allowAdmin = options.allowAdmin === true;
 
   return (req, res, next) => {
-    const userRole = req.user && req.user.roleSlug && req.user.roleSlug.toLowerCase().replace(/-/g, '_');
+    const userRole = normalizeRoleSlug(req.user && req.user.roleSlug);
     const canAccess = roles.includes(userRole) || (allowAdmin && userRole === 'admin');
 
     if (!userRole || !canAccess) {

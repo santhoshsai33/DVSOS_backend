@@ -16,6 +16,7 @@ const MD_ALLOWED_ROLE_SLUGS = new Set([
   'crm_team',
   'floor_supervisor',
   'body_shop_supervisor',
+  'water_wash_supervisor',
   'water_wash_team',
   'manager'
 ]);
@@ -26,9 +27,15 @@ const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
   'crm_team',
   'floor_supervisor',
   'body_shop_supervisor',
+  'water_wash_supervisor',
   'water_wash_team',
   'manager'
 ]);
+const ASSIGNABLE_ROLE_SLUGS_BY_CATEGORY = {
+  mechanical: ['mechanical', 'mechanic'],
+  'body-shop': ['body_shop_supervisor', 'body-shop-supervisor', 'body_shop', 'body-shop', 'bodyshop'],
+  'water-wash': ['water_wash_team', 'water-wash-team', 'water_wash_supervisor', 'water-wash-supervisor', 'water_wash', 'water-wash']
+};
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -63,6 +70,20 @@ const parseBooleanFilter = (value) => {
 };
 
 const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
+
+const normalizeAssignmentCategory = (category) => {
+  const normalized = String(category || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+
+  if (['body-shop', 'bodyshop', 'paint', 'denting'].includes(normalized)) {
+    return 'body-shop';
+  }
+
+  if (['water-wash', 'waterwash', 'wash'].includes(normalized)) {
+    return 'water-wash';
+  }
+
+  return 'mechanical';
+};
 
 const isAdminRole = (roleSlug) => ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug));
 
@@ -452,6 +473,52 @@ const listUsers = async (query, actor) => {
   };
 };
 
+const listMechanicDropdown = async (query, actor) => {
+  const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
+  const locationId = actor && actor.locationId ? Number(actor.locationId) : requestedLocationId;
+  const category = normalizeAssignmentCategory(query.category);
+  const roleSlugs = ASSIGNABLE_ROLE_SLUGS_BY_CATEGORY[category] || ASSIGNABLE_ROLE_SLUGS_BY_CATEGORY.mechanical;
+
+  const users = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      ...(locationId ? { locationId } : {}),
+      role: {
+        isActive: true,
+        slug: {
+          in: roleSlugs
+        }
+      }
+    },
+    select: {
+      id: true,
+      fullName: true,
+      employeeCode: true,
+      mobileNo: true,
+      locationId: true,
+      role: {
+        select: {
+          id: true,
+          name: true,
+          slug: true
+        }
+      }
+    },
+    orderBy: {
+      fullName: 'asc'
+    }
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    fullName: user.fullName,
+    employeeCode: user.employeeCode,
+    mobile: user.mobileNo,
+    locationId: user.locationId,
+    role: user.role
+  }));
+};
+
 const getUserDetail = async (id, actor) => {
   const user = await resolveUserByIdentifier(id);
   assertMdCanAccessUser(actor, user);
@@ -525,6 +592,7 @@ module.exports = {
   createUser,
   updateUser,
   listUsers,
+  listMechanicDropdown,
   getUserDetail,
   updateUserStatus,
   resetUserPassword

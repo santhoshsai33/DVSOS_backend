@@ -42,6 +42,19 @@ const listUsers = async (req, res, next) => {
   }
 };
 
+const listMechanicDropdown = async (req, res, next) => {
+  try {
+    const users = await userService.listMechanicDropdown(req.query, req.user);
+
+    return apiResponse(res, {
+      message: 'Mechanics dropdown fetched successfully',
+      data: { users }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const getUserDetail = async (req, res, next) => {
   try {
     const user = await userService.getUserDetail(req.params.id, req.user);
@@ -85,6 +98,7 @@ module.exports = {
   createUser,
   updateUser,
   listUsers,
+  listMechanicDropdown,
   getUserDetail,
   updateUserStatus,
   resetUserPassword
