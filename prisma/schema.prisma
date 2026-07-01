@@ -458,6 +458,7 @@ model GateEntry {
   modifiedBy User? @relation("GateEntryModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   jobCards JobCard[]
+  notifications Notification[]
 
   @@index([locationId])
   @@index([statusId])
@@ -700,6 +701,7 @@ model Notification {
   userId           Int       @map("user_id")
   jobCardId        Int?      @map("job_card_id")
   statusId         Int?      @map("status_id")
+  gateEntryId      Int?      @map("gate_entry_id")
   title            String    @db.NVarChar(255)
   message          String?
   notificationType String    @map("notification_type") @db.NVarChar(50)
@@ -715,6 +717,7 @@ model Notification {
   user       User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   jobCard    JobCard?      @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   status     StatusMaster? @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  gateEntry  GateEntry?    @relation(fields: [gateEntryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdBy  User?         @relation("NotificationCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   modifiedBy User?         @relation("NotificationModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
