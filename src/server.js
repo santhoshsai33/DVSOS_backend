@@ -6,6 +6,7 @@ const prisma = require('./config/db');
 const { initializeSocket } = require('./config/socket');
 const { initializeFirebase } = require('./config/firebase');
 const { initializeTwilio } = require('./config/twilio');
+const { startGateEntryTimeoutJob } = require('./jobs/gate-entry-timeout.job');
 
 const server = http.createServer(app);
 
@@ -17,6 +18,9 @@ const startServer = async () => {
   try {
     await prisma.$connect();
     console.info('Database connection established through Prisma.');
+
+    // Start background jobs
+    startGateEntryTimeoutJob();
 
     server.listen(env.port, () => {
       console.info(`${env.appName} running on port ${env.port}`);
