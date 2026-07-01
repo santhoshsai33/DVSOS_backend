@@ -1,3 +1,4 @@
+const prisma = require('../../config/db');
 const { apiResponse } = require('../utils/apiResponse');
 
 const normalizeAllowedRoles = (allowedRoles) => {
@@ -20,19 +21,67 @@ const ROLE_ALIASES = {
   wash: 'water_wash_team'
 };
 
+const ROLE_MODULES = {
+  admin: 'admin',
+  gate_security: 'gate-security',
+  gatekeeper: 'gate-security',
+  crm_team: 'crm-team',
+  floor_supervisor: 'floor-supervisor',
+  mechanical: 'floor-supervisor',
+  mechanic: 'floor-supervisor',
+  body_shop_supervisor: 'body-shop-supervisor',
+  water_wash_team: 'water-wash-team',
+  manager: 'manager',
+  managing_director: 'managing-director',
+  md: 'managing-director'
+};
+
 const normalizeRoleSlug = (roleSlug) => {
   const normalized = String(roleSlug || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
   return ROLE_ALIASES[normalized] || normalized;
 };
 
+const getAllowedModules = (roles) => {
+  return Array.from(new Set(
+    roles
+      .map((role) => ROLE_MODULES[role])
+      .filter(Boolean)
+  ));
+};
+
+const hasModulePermission = async (roleId, allowedModules) => {
+  if (!roleId || allowedModules.length === 0) {
+    return false;
+  }
+
+  const permission = await prisma.roleMenuPermission.findFirst({
+    where: {
+      roleId,
+      canRead: true,
+      menu: {
+        module: {
+          in: allowedModules
+        },
+        isActive: true
+      }
+    },
+    select: { id: true }
+  });
+
+  return Boolean(permission);
+};
+
 const roleMiddleware = (allowedRoles = [], options = {}) => {
   const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles])
     .map(normalizeRoleSlug);
+  const allowedModules = getAllowedModules(roles);
   const allowAdmin = options.allowAdmin === true;
 
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const userRole = normalizeRoleSlug(req.user && req.user.roleSlug);
-    const canAccess = roles.includes(userRole) || (allowAdmin && userRole === 'admin');
+    const canAccess = roles.includes(userRole)
+      || (allowAdmin && userRole === 'admin')
+      || await hasModulePermission(req.user && req.user.roleId, allowedModules);
 
     if (!userRole || !canAccess) {
       return apiResponse(res, {

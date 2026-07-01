@@ -81,10 +81,33 @@ const findReadableMenusByRoleId = (roleId) => {
   });
 };
 
+const findActiveMenus = () => {
+  return prisma.menu.findMany({
+    where: {
+      isActive: true
+    },
+    select: {
+      id: true,
+      module: true,
+      parentId: true,
+      name: true,
+      path: true,
+      icon: true,
+      sequence: true
+    },
+    orderBy: [
+      { module: 'asc' },
+      { sequence: 'asc' },
+      { name: 'asc' }
+    ]
+  });
+};
+
 module.exports = {
   findUserByEmailId,
   findUserById,
   updateLastLoginAt,
   updatePassword,
-  findReadableMenusByRoleId
+  findReadableMenusByRoleId,
+  findActiveMenus
 };

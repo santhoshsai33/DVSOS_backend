@@ -126,13 +126,36 @@ const groupMenusByModule = (permissions) => {
   }));
 };
 
-const getAllowedMenus = async (roleId) => {
+const getAllMenus = async () => {
+  const menus = await authRepository.findActiveMenus();
+  return groupMenusByModule(menus.map((menu) => ({
+    menu: {
+      module: menu.module,
+      id: menu.id,
+      parentId: menu.parentId,
+      name: menu.name,
+      path: menu.path,
+      icon: menu.icon,
+      sequence: menu.sequence
+    },
+    canRead: true,
+    canCreate: true,
+    canUpdate: true,
+    canDelete: true
+  })));
+};
+
+const getAllowedMenus = async (roleId, roleSlug) => {
+  if (ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug))) {
+    return getAllMenus();
+  }
+
   const permissions = await authRepository.findReadableMenusByRoleId(roleId);
   return groupMenusByModule(permissions);
 };
 
 const buildAuthResponse = async (user, includeToken = false) => {
-  const menus = await getAllowedMenus(user.roleId);
+  const menus = await getAllowedMenus(user.roleId, user.role.slug);
   const authData = {
     user: toPublicUser(user),
     redirectPath: getRedirectPath(user.role.slug),

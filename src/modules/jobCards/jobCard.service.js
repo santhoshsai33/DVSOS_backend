@@ -164,7 +164,21 @@ const normalizeDepartment = (value) => {
   });
 };
 
-const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
+const ROLE_ALIASES = {
+  body_shop: 'body_shop_supervisor',
+  bodyshop: 'body_shop_supervisor',
+  bodyshop_supervisor: 'body_shop_supervisor',
+  floor: 'floor_supervisor',
+  mechanical_supervisor: 'floor_supervisor',
+  water_wash: 'water_wash_team',
+  water_wash_supervisor: 'water_wash_team',
+  wash: 'water_wash_team'
+};
+
+const normalizeRoleSlug = (roleSlug) => {
+  const normalized = String(roleSlug || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+  return ROLE_ALIASES[normalized] || normalized;
+};
 
 const PRIVILEGED_SERVICE_STATUS_ROLES = new Set(['admin', 'super_admin', 'manager', 'managing_director']);
 
