@@ -498,6 +498,18 @@ const listJobCards = async (query, user) => {
     };
   }
 
+  if (query.fromDate || query.toDate) {
+    where.createdAt = {};
+    if (query.fromDate) {
+      where.createdAt.gte = new Date(query.fromDate);
+    }
+    if (query.toDate) {
+      const to = new Date(query.toDate);
+      to.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = to;
+    }
+  }
+
   if (department) {
     where.services = {
       some: {
