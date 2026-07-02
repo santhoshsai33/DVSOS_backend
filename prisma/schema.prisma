@@ -558,6 +558,7 @@ model JobCardApproval {
   id                Int       @id @default(autoincrement())
   jobCardId         Int       @map("job_card_id")
   statusId          Int?      @map("status_id")
+  approvalCode      String?   @map("approval_code") @db.NVarChar(30)
   approvalType      String    @map("approval_type") @db.NVarChar(30)
   totalAmount       Decimal   @default(0) @map("total_amount") @db.Decimal(10, 2)
   whatsappMessageId String?   @map("whatsapp_message_id") @db.NVarChar(255)
@@ -576,6 +577,7 @@ model JobCardApproval {
   modifiedBy User?            @relation("JobCardApprovalModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   services   JobCardService[]
 
+  @@index([approvalCode])
   @@map("job_card_approvals")
 }
 
@@ -583,6 +585,7 @@ model JobCardService {
   id               Int  @id @default(autoincrement())
   jobCardId        Int  @map("job_card_id")
   approvalId       Int? @map("approval_id")
+  parentJobCardServiceId Int? @map("parent_job_card_service_id")
   serviceItemId    Int  @map("service_item_id")
   approvalStatusId Int? @map("approval_status_id")
   serviceStatusId  Int? @map("service_status_id")
@@ -599,6 +602,8 @@ model JobCardService {
 
   jobCard         JobCard          @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approval        JobCardApproval? @relation(fields: [approvalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentService   JobCardService?  @relation("AdditionalWorkParentService", fields: [parentJobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  additionalServices JobCardService[] @relation("AdditionalWorkParentService")
   serviceItem     ServiceItem      @relation(fields: [serviceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approvalStatus  StatusMaster?    @relation("JobCardServiceApprovalStatus", fields: [approvalStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   serviceStatus   StatusMaster?    @relation("JobCardServiceStatus", fields: [serviceStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -606,6 +611,7 @@ model JobCardService {
   modifiedBy      User?            @relation("JobCardServiceModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   workAssignments WorkAssignment[]
 
+  @@index([parentJobCardServiceId])
   @@map("job_card_services")
 }
 

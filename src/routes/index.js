@@ -28,6 +28,7 @@ const customerRoutes = require('../modules/customers/customer.routes');
 const vehicleRoutes = require('../modules/vehicles/vehicle.routes');
 const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
 const queueRoutes = require('../modules/queues/queue.routes');
+const approvalRoutes = require('../modules/approvals/approval.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
@@ -61,6 +62,7 @@ router.use('/customers', customerRoutes);
 router.use('/vehicles', vehicleRoutes);
 router.use('/job-cards', jobCardRoutes);
 router.use('/queues', queueRoutes);
+router.use('/approvals', approvalRoutes);
 router.use('/audit-logs', auditLogRoutes);
 
 module.exports = router;

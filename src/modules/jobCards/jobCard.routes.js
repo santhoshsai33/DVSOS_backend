@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const jobCardController = require('./jobCard.controller');
+const additionalWorkRoutes = require('../additionalWork/additionalWork.routes');
 const { authenticate } = require('../../common/middleware/auth.middleware');
 const { roleMiddleware } = require('../../common/middleware/role.middleware');
 
@@ -12,5 +13,6 @@ router.get('/statuses/list', canViewJobCards, jobCardController.getJobCardStatus
 router.get('/service-statuses/list', canViewJobCards, jobCardController.getJobCardServiceStatuses);
 router.get('/detail/:id', canViewJobCards, jobCardController.getJobCard);
 router.put('/update/:id', canViewJobCards, jobCardController.updateJobCard);
+router.use('/:jobCardId/additional-work', additionalWorkRoutes);
 
 module.exports = router;

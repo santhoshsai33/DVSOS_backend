@@ -6,6 +6,10 @@ if (!process.env.DATABASE_URL && process.env.MSSERVER_URI) {
   process.env.DATABASE_URL = process.env.MSSERVER_URI;
 }
 
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || process.env.AccountSID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || process.env.AuthToken;
+const twilioWhatsappFrom = process.env.TWILIO_WHATSAPP_FROM || process.env.Twiliophonenumber;
+
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
 
 const missingRequiredEnv = requiredEnv.filter((key) => !process.env[key]);
@@ -26,10 +30,6 @@ const optionalGroups = [
   {
     name: 'Firebase',
     keys: ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
-  },
-  {
-    name: 'Twilio',
-    keys: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM']
   }
 ];
 
@@ -40,6 +40,16 @@ optionalGroups.forEach((group) => {
     console.warn(`${group.name} optional config missing: ${missing.join(', ')}`);
   }
 });
+
+const missingTwilio = [
+  !twilioAccountSid && 'TWILIO_ACCOUNT_SID',
+  !twilioAuthToken && 'TWILIO_AUTH_TOKEN',
+  !twilioWhatsappFrom && 'TWILIO_WHATSAPP_FROM'
+].filter(Boolean);
+
+if (missingTwilio.length > 0) {
+  console.warn(`Twilio optional config missing: ${missingTwilio.join(', ')}`);
+}
 
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -66,9 +76,9 @@ module.exports = {
     privateKey: process.env.FIREBASE_PRIVATE_KEY
   },
   twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID,
-    authToken: process.env.TWILIO_AUTH_TOKEN,
-    whatsappFrom: process.env.TWILIO_WHATSAPP_FROM
+    accountSid: twilioAccountSid,
+    authToken: twilioAuthToken,
+    whatsappFrom: twilioWhatsappFrom
   },
   smtp: {
     host: process.env.SMTP_HOST,
