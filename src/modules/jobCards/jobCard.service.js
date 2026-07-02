@@ -80,7 +80,30 @@ const buildJobCardIdentifierWhere = (identifier) => {
 const normalizeServicePayload = (services = []) => {
   if (!Array.isArray(services)) return [];
 
+  const duplicateIdsWithoutNaturalKey = new Set();
+  const seenIdsWithoutNaturalKey = new Set();
   const itemMap = new Map();
+
+  services.forEach((item) => {
+    const rawServiceItemId = typeof item === 'object' ? (item.serviceItemId ?? item.id) : item;
+    const parsedServiceItemId = Number(rawServiceItemId);
+    const serviceName = typeof item === 'object' ? toTrimmedString(item.name || item.serviceName) : undefined;
+
+    if (Number.isInteger(parsedServiceItemId) && parsedServiceItemId > 0 && !serviceName) {
+      if (seenIdsWithoutNaturalKey.has(parsedServiceItemId)) {
+        duplicateIdsWithoutNaturalKey.add(parsedServiceItemId);
+      }
+
+      seenIdsWithoutNaturalKey.add(parsedServiceItemId);
+    }
+  });
+
+  if (duplicateIdsWithoutNaturalKey.size > 0) {
+    throw createHttpError(
+      400,
+      'Duplicate service item ids are ambiguous. Send each selected service with its own serviceItemId, or include serviceName for each item.'
+    );
+  }
 
   services.forEach((item) => {
     const rawServiceItemId = typeof item === 'object' ? (item.serviceItemId ?? item.id) : item;

@@ -68,8 +68,24 @@ const parseDateQuery = (value, fieldName, endOfDay = false) => {
 };
 
 const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
+
+const hasModule = (user, module) => {
+  return Boolean(user && Array.isArray(user.modules) && user.modules.includes(module));
+};
+
+const hasAnyModule = (user, modules) => {
+  return modules.some((module) => hasModule(user, module));
+};
+
 const isLocationScopedViewer = (user) => {
-  return ['crm_team', 'manager', 'managing_director'].includes(normalizeRoleSlug(user && user.roleSlug));
+  return hasAnyModule(user, ['crm-team', 'manager', 'managing-director'])
+    || ['crm_team', 'crm', 'crm_user', 'crm_executive', 'crm_staff', 'manager', 'managing_director']
+      .includes(normalizeRoleSlug(user && user.roleSlug));
+};
+
+const isCrmViewer = (user) => {
+  return hasModule(user, 'crm-team')
+    || ['crm_team', 'crm', 'crm_user', 'crm_executive', 'crm_staff'].includes(normalizeRoleSlug(user && user.roleSlug));
 };
 
 const resolveLocationFilter = (query, user) => {
@@ -832,9 +848,7 @@ const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
 };
 
 const resolveCreatedByFilter = (query, user) => {
-  const roleSlug = normalizeRoleSlug(user && user.roleSlug);
-
-  if (roleSlug === 'crm_team') {
+  if (isCrmViewer(user)) {
     return Number(user.userId);
   }
 
@@ -1223,15 +1237,26 @@ const getServiceItemSlug = (item) => {
 
 const normalizeServiceItems = (serviceItems) => {
   const namesById = new Map();
+  const duplicateIdsWithoutNaturalKey = new Set();
+  const seenIdsWithoutNaturalKey = new Set();
 
   serviceItems.forEach((item) => {
     const serviceItemId = getServiceItemId(item);
     const serviceName = getServiceItemName(item);
+    const serviceSlug = getServiceItemSlug(item);
 
     if (Number.isInteger(serviceItemId) && serviceItemId > 0 && serviceName) {
       const nameSet = namesById.get(serviceItemId) || new Set();
       nameSet.add(serviceName.toLowerCase());
       namesById.set(serviceItemId, nameSet);
+    }
+
+    if (Number.isInteger(serviceItemId) && serviceItemId > 0 && !serviceName && !serviceSlug) {
+      if (seenIdsWithoutNaturalKey.has(serviceItemId)) {
+        duplicateIdsWithoutNaturalKey.add(serviceItemId);
+      }
+
+      seenIdsWithoutNaturalKey.add(serviceItemId);
     }
   });
 
@@ -1240,6 +1265,13 @@ const normalizeServiceItems = (serviceItems) => {
       .filter(([, nameSet]) => nameSet.size > 1)
       .map(([serviceItemId]) => serviceItemId)
   );
+
+  if (duplicateIdsWithoutNaturalKey.size > 0) {
+    throw createHttpError(
+      400,
+      'Duplicate service item ids are ambiguous. Send each selected service with its own serviceItemId, or include serviceName/serviceSlug for each item.'
+    );
+  }
   const itemMap = new Map();
 
   serviceItems.forEach((item) => {

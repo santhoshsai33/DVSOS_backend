@@ -90,11 +90,30 @@ const authenticate = async (req, res, next) => {
       });
     }
 
+    const roleModules = await prisma.roleMenuPermission.findMany({
+      where: {
+        roleId: user.role.id,
+        canRead: true,
+        menu: {
+          isActive: true
+        }
+      },
+      select: {
+        menu: {
+          select: {
+            module: true
+          }
+        }
+      },
+      distinct: ['menuId']
+    });
+
     req.user = {
       userId: decoded.userId,
       roleId: user.role.id,
       roleSlug: user.role.slug,
-      locationId: user.locationId || null
+      locationId: user.locationId || null,
+      modules: Array.from(new Set(roleModules.map((permission) => permission.menu.module)))
     };
 
     return next();
