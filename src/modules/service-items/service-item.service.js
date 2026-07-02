@@ -1,5 +1,7 @@
 const serviceItemRepository = require('./service-item.repository');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
+const prisma = require('../../config/db');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const VIEW_ACTIVE_ONLY_ROLES = new Set([
   'crm_team',
@@ -151,23 +153,58 @@ const buildServiceItemData = async ({ categoryId, name, slug, description, baseP
   };
 };
 
-const createServiceItem = async (payload) => {
+const createServiceItem = async (payload, actorUserId) => {
   const data = await buildServiceItemData(payload);
 
   await ensureActiveCategoryExists(data.categoryId);
 
-  const serviceItem = await serviceItemRepository.createServiceItem(data);
-  return toServiceItemResource(serviceItem);
+  return prisma.$transaction(async (tx) => {
+    const serviceItem = await serviceItemRepository.createServiceItem(data, tx);
+    
+    await createAuditLog(tx, {
+      moduleCode: 'service-items',
+      moduleName: 'Service Items',
+      tableName: 'service_items',
+      recordId: serviceItem.id,
+      actionType: 'CREATE',
+      performedByUserId: actorUserId,
+      recordName: serviceItem.name,
+      comments: 'Service item created',
+      details: Object.entries(data).map(([fieldName, newValue]) => ({
+        fieldName,
+        oldValue: null,
+        newValue,
+        dataType: typeof newValue
+      }))
+    });
+
+    return toServiceItemResource(serviceItem);
+  });
 };
 
-const updateServiceItem = async (identifier, payload) => {
+const updateServiceItem = async (identifier, payload, actorUserId) => {
   const existingServiceItem = await ensureServiceItemExistsByIdentifier(identifier);
   const data = await buildServiceItemData(payload, existingServiceItem.id);
 
   await ensureActiveCategoryExists(data.categoryId);
 
-  const serviceItem = await serviceItemRepository.updateServiceItem(existingServiceItem.id, data);
-  return toServiceItemResource(serviceItem);
+  return prisma.$transaction(async (tx) => {
+    const serviceItem = await serviceItemRepository.updateServiceItem(existingServiceItem.id, data, tx);
+    
+    await createAuditLog(tx, {
+      moduleCode: 'service-items',
+      moduleName: 'Service Items',
+      tableName: 'service_items',
+      recordId: serviceItem.id,
+      actionType: 'UPDATE',
+      performedByUserId: actorUserId,
+      recordName: serviceItem.name,
+      comments: 'Service item updated',
+      details: buildChangeDetails(existingServiceItem, serviceItem, Object.keys(data))
+    });
+
+    return toServiceItemResource(serviceItem);
+  });
 };
 
 const listServiceItems = async (query, user) => {
@@ -207,7 +244,7 @@ const getServiceItemDetail = async (identifier, user) => {
   return toServiceItemResource(serviceItem);
 };
 
-const updateServiceItemStatus = async (id, { isActive }) => {
+const updateServiceItemStatus = async (id, { isActive }, actorUserId) => {
   const serviceItemId = Number(id);
   const serviceItem = await ensureServiceItemExists(serviceItemId);
 
@@ -215,8 +252,23 @@ const updateServiceItemStatus = async (id, { isActive }) => {
     await ensureActiveCategoryExists(serviceItem.categoryId);
   }
 
-  const updatedServiceItem = await serviceItemRepository.updateServiceItem(serviceItemId, { isActive });
-  return toServiceItemResource(updatedServiceItem);
+  return prisma.$transaction(async (tx) => {
+    const updatedServiceItem = await serviceItemRepository.updateServiceItem(serviceItemId, { isActive }, tx);
+    
+    await createAuditLog(tx, {
+      moduleCode: 'service-items',
+      moduleName: 'Service Items',
+      tableName: 'service_items',
+      recordId: updatedServiceItem.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: actorUserId,
+      recordName: updatedServiceItem.name,
+      comments: isActive ? 'Service item activated' : 'Service item deactivated',
+      details: buildChangeDetails(serviceItem, updatedServiceItem, ['isActive'])
+    });
+
+    return toServiceItemResource(updatedServiceItem);
+  });
 };
 
 module.exports = {

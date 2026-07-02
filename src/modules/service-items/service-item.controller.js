@@ -3,7 +3,7 @@ const serviceItemService = require('./service-item.service');
 
 const createServiceItem = async (req, res, next) => {
   try {
-    const serviceItem = await serviceItemService.createServiceItem(req.body);
+    const serviceItem = await serviceItemService.createServiceItem(req.body, req.user.userId);
 
     return apiResponse(res, {
       statusCode: 201,
@@ -17,7 +17,7 @@ const createServiceItem = async (req, res, next) => {
 
 const updateServiceItem = async (req, res, next) => {
   try {
-    const serviceItem = await serviceItemService.updateServiceItem(req.params.id, req.body);
+    const serviceItem = await serviceItemService.updateServiceItem(req.params.id, req.body, req.user.userId);
 
     return apiResponse(res, {
       message: 'Service item updated successfully',
@@ -57,7 +57,7 @@ const getServiceItemDetail = async (req, res, next) => {
 
 const updateServiceItemStatus = async (req, res, next) => {
   try {
-    const serviceItem = await serviceItemService.updateServiceItemStatus(req.params.id, req.body);
+    const serviceItem = await serviceItemService.updateServiceItemStatus(req.params.id, req.body, req.user.userId);
 
     return apiResponse(res, {
       message: serviceItem.isActive

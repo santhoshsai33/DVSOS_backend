@@ -135,7 +135,6 @@ model Module {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
 
   statuses  StatusMaster[]
-  auditLogs AuditLog[]
 
   createdBy  User? @relation("ModuleCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   modifiedBy User? @relation("ModuleModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -776,7 +775,6 @@ model ServiceCenterSetting {
 
 model AuditLog {
   id                BigInt   @id @default(autoincrement())
-  moduleId          Int      @map("module_id")
   locationId        Int?     @map("location_id")
   tableName         String   @map("table_name") @db.NVarChar(250)
   recordId          BigInt   @map("record_id")
@@ -789,7 +787,6 @@ model AuditLog {
 
   createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
 
-  module      Module           @relation(fields: [moduleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   location    Location?        @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   performedBy User             @relation("AuditLogPerformedBy", fields: [performedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   details     AuditLogDetail[]

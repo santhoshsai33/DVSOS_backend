@@ -49,15 +49,15 @@ const buildServiceItemWhere = ({ search, categoryId, isActive, onlyActiveCategor
   return where;
 };
 
-const createServiceItem = (data) => {
-  return prisma.serviceItem.create({
+const createServiceItem = (data, tx = prisma) => {
+  return tx.serviceItem.create({
     data,
     select: serviceItemSelect
   });
 };
 
-const updateServiceItem = (id, data) => {
-  return prisma.serviceItem.update({
+const updateServiceItem = (id, data, tx = prisma) => {
+  return tx.serviceItem.update({
     where: { id },
     data,
     select: serviceItemSelect

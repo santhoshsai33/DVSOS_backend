@@ -74,15 +74,15 @@ const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
   return where;
 };
 
-const createUser = (data) => {
-  return prisma.user.create({
+const createUser = (data, tx = prisma) => {
+  return tx.user.create({
     data,
     select: userSelect
   });
 };
 
-const updateUser = (id, data) => {
-  return prisma.user.update({
+const updateUser = (id, data, tx = prisma) => {
+  return tx.user.update({
     where: { id },
     data,
     select: userSelect

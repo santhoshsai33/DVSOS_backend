@@ -7,6 +7,7 @@ const {
   resolveStatusIdFromCodes
 } = require('../../common/utils/status.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
+const { createAuditLog } = require('../../common/utils/audit.util');
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
 
@@ -965,8 +966,7 @@ const updateJobCard = async (id, payload, user) => {
         }
       });
     }
-
-    return tx.jobCard.findUnique({
+    const updatedJobCard = await tx.jobCard.findUnique({
       where: { id: jobCardId },
       include: {
         customer: {
@@ -1025,6 +1025,20 @@ const updateJobCard = async (id, payload, user) => {
         }
       }
     });
+
+    await createAuditLog(tx, {
+      moduleCode: 'job-cards',
+      moduleName: 'Job Cards',
+      tableName: 'job_cards',
+      recordId: updatedJobCard.id,
+      actionType: 'UPDATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: updatedJobCard.jobCardNo,
+      comments: 'Job card updated',
+      details: []
+    });
+
+    return updatedJobCard;
   });
 };
 

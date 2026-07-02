@@ -3,6 +3,7 @@ const {
   STATUS_MODULE_CODES,
   resolveStatusIdFromCodes
 } = require('../../common/utils/status.util');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
@@ -523,6 +524,18 @@ const assignWork = async (jobCardId, payload, user) => {
       }
     });
 
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'work_assignments',
+      recordId: jobCard.id,
+      actionType: 'CREATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: jobCard.jobCardNo,
+      comments: `Work assigned to user ${assignedUserId}`,
+      details: []
+    });
+
     return {
       jobCardId: jobCard.id,
       category: department,
@@ -702,6 +715,18 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
       //   }
       // });
     }
+
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'work_assignments',
+      recordId: assignment.id,
+      actionType: 'UPDATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: `Assignment ${assignment.id}`,
+      comments: `Assignment status updated to ${requestedStatus}`,
+      details: buildChangeDetails(assignment, updatedAssignment, ['statusId', 'startedAt', 'completedAt'])
+    });
 
     return {
       assignment: toAssignmentResponse(updatedAssignment)

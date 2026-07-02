@@ -5,6 +5,7 @@ const userRepository = require('./user.repository');
 const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { generateRandomPassword, sendWelcomeEmail } = require('../../utils/welcomeEmailHelper');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const DEFAULT_USER_PASSWORD = 'Admin@123';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
@@ -366,7 +367,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
 
   const passwordHash = await hashPassword(initialPassword);
 
-  const user = await userRepository.createUser({
+  const data = {
     fullName: normalizedFullName,
     slug: normalizedSlug,
     emailId: normalizedEmail,
@@ -381,6 +382,29 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
     gender: gender ? gender.trim() : null,
     address: address ? address.trim() : null,
     createdById: actor.userId || null
+  };
+
+  const user = await prisma.$transaction(async (tx) => {
+    const newUser = await userRepository.createUser(data, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'user-management',
+      moduleName: 'User Management',
+      tableName: 'users',
+      recordId: newUser.id,
+      actionType: 'CREATE',
+      performedByUserId: actor.userId,
+      recordName: newUser.fullName,
+      comments: 'User created',
+      details: Object.entries(data).filter(([k]) => k !== 'passwordHash').map(([fieldName, newValue]) => ({
+        fieldName,
+        oldValue: null,
+        newValue,
+        dataType: typeof newValue
+      }))
+    });
+
+    return newUser;
   });
 
   // if (isRandomPasswordGenerated && normalizedEmail) {
@@ -422,7 +446,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
   await ensureUniqueLicenceNumber(licenceNumber ? licenceNumber.trim() : null, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
-  const user = await userRepository.updateUser(userId, {
+  const data = {
     fullName: normalizedFullName,
     slug: normalizedSlug,
     emailId: normalizedEmail,
@@ -435,6 +459,24 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
     emergencyContact: emergencyContact ? emergencyContact.trim() : null,
     gender: gender ? gender.trim() : null,
     address: address ? address.trim() : null
+  };
+
+  const user = await prisma.$transaction(async (tx) => {
+    const updatedUser = await userRepository.updateUser(userId, data, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'user-management',
+      moduleName: 'User Management',
+      tableName: 'users',
+      recordId: updatedUser.id,
+      actionType: 'UPDATE',
+      performedByUserId: actor.userId,
+      recordName: updatedUser.fullName,
+      comments: 'User updated',
+      details: buildChangeDetails(currentUser, updatedUser, Object.keys(data))
+    });
+
+    return updatedUser;
   });
 
   return toPublicUser(user);
@@ -569,6 +611,18 @@ const updateUserStatus = async (id, { isActive }, actor) => {
           }
         }
       }
+    });
+
+    await createAuditLog(tx, {
+      moduleCode: 'user-management',
+      moduleName: 'User Management',
+      tableName: 'users',
+      recordId: updatedUser.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: actor.userId,
+      recordName: updatedUser.fullName,
+      comments: isActive ? 'User activated' : 'User deactivated',
+      details: buildChangeDetails(currentUser, updatedUser, ['isActive', 'modifiedById'])
     });
 
     return updatedUser;

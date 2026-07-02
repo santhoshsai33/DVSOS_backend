@@ -144,20 +144,20 @@ const createRole = async ({ name, description, isActive }, actorUserId) => {
       select: roleSelect
     });
 
-    // await createAuditLog(tx, {
-    //   tableName: 'roles',
-    //   recordId: role.id,
-    //   actionType: 'CREATE',
-    //   performedByUserId: actorUserId,
-    //   recordName: role.name,
-    //   comments: 'Role created',
-    //   details: [
-    //     { fieldName: 'name', oldValue: null, newValue: role.name, dataType: 'string' },
-    //     { fieldName: 'slug', oldValue: null, newValue: role.slug, dataType: 'string' },
-    //     { fieldName: 'description', oldValue: null, newValue: role.description, dataType: 'string' },
-    //     { fieldName: 'isActive', oldValue: null, newValue: role.isActive, dataType: 'boolean' }
-    //   ]
-    // });
+    await createAuditLog(tx, {
+      tableName: 'roles',
+      recordId: role.id,
+      actionType: 'CREATE',
+      performedByUserId: actorUserId,
+      recordName: role.name,
+      comments: 'Role created',
+      details: [
+        { fieldName: 'name', oldValue: null, newValue: role.name, dataType: 'string' },
+        { fieldName: 'slug', oldValue: null, newValue: role.slug, dataType: 'string' },
+        { fieldName: 'description', oldValue: null, newValue: role.description, dataType: 'string' },
+        { fieldName: 'isActive', oldValue: null, newValue: role.isActive, dataType: 'boolean' }
+      ]
+    });
 
     return role;
   });
@@ -198,15 +198,15 @@ const updateRole = async (id, { name, description, isActive }, actorUserId) => {
       'modifiedById'
     ]);
 
-    // await createAuditLog(tx, {
-    //   tableName: 'roles',
-    //   recordId: role.id,
-    //   actionType: 'UPDATE',
-    //   performedByUserId: actorUserId,
-    //   recordName: role.name,
-    //   comments: 'Role updated',
-    //   details
-    // });
+    await createAuditLog(tx, {
+      tableName: 'roles',
+      recordId: role.id,
+      actionType: 'UPDATE',
+      performedByUserId: actorUserId,
+      recordName: role.name,
+      comments: 'Role updated',
+      details
+    });
 
     return role;
   });
@@ -262,15 +262,15 @@ const updateRoleStatus = async (id, { isActive }, actorUserId) => {
       select: roleSelect
     });
 
-    // await createAuditLog(tx, {
-    //   tableName: 'roles',
-    //   recordId: role.id,
-    //   actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
-    //   performedByUserId: actorUserId,
-    //   recordName: role.name,
-    //   comments: isActive ? 'Role activated' : 'Role deactivated',
-    //   details: buildChangeDetails(currentRole, role, ['isActive', 'modifiedById'])
-    // });
+    await createAuditLog(tx, {
+      tableName: 'roles',
+      recordId: role.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: actorUserId,
+      recordName: role.name,
+      comments: isActive ? 'Role activated' : 'Role deactivated',
+      details: buildChangeDetails(currentRole, role, ['isActive', 'modifiedById'])
+    });
 
     return role;
   });
