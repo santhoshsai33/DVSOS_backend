@@ -31,6 +31,7 @@ const queueRoutes = require('../modules/queues/queue.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
+const brandRoutes = require('../modules/brands/brand.routes');
 
 router.use('/auth', authRoutes);
 router.use('/admin/states', adminStateRoutes);
@@ -62,5 +63,6 @@ router.use('/vehicles', vehicleRoutes);
 router.use('/job-cards', jobCardRoutes);
 router.use('/queues', queueRoutes);
 router.use('/audit-logs', auditLogRoutes);
+router.use('/admin/brands', brandRoutes);
 
 module.exports = router;

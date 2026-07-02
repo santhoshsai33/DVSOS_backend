@@ -14,6 +14,82 @@ const getAdminDashboard = async (req, res, next) => {
   }
 };
 
+const getMdDashboard = async (req, res, next) => {
+  try {
+    const timeframe = req.query.timeframe || 'today';
+    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const dashboard = await dashboardService.getMdDashboard(timeframe, locationId);
+
+    return apiResponse(res, {
+      message: 'MD dashboard fetched successfully',
+      data: dashboard
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getFloorSupervisorDashboard = async (req, res, next) => {
+  try {
+    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const dashboard = await dashboardService.getFloorSupervisorDashboard(locationId);
+
+    return apiResponse(res, {
+      message: 'Floor supervisor dashboard fetched successfully',
+      data: dashboard
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getManagerDashboard = async (req, res, next) => {
+  try {
+    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const dashboard = await dashboardService.getManagerDashboard(locationId);
+
+    return apiResponse(res, {
+      message: 'Manager dashboard fetched successfully',
+      data: dashboard
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getBodyShopDashboard = async (req, res, next) => {
+  try {
+    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const dashboard = await dashboardService.getBodyShopDashboard(locationId);
+
+    return apiResponse(res, {
+      message: 'Body shop dashboard fetched successfully',
+      data: dashboard
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getWaterWashDashboard = async (req, res, next) => {
+  try {
+    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const dashboard = await dashboardService.getWaterWashDashboard(locationId);
+
+    return apiResponse(res, {
+      message: 'Water wash dashboard fetched successfully',
+      data: dashboard
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
-  getAdminDashboard
+  getAdminDashboard,
+  getMdDashboard,
+  getFloorSupervisorDashboard,
+  getManagerDashboard,
+  getBodyShopDashboard,
+  getWaterWashDashboard
 };
