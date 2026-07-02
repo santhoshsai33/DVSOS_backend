@@ -46,8 +46,9 @@ const userWithRoleForChecksSelect = {
   }
 };
 
-const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
+const buildUserWhere = ({ search, roleId, locationId, isActive, excludedModules, excludedUserId } = {}) => {
   const where = {};
+  const roleFilters = [];
 
   if (typeof isActive === 'boolean') {
     where.isActive = isActive;
@@ -59,6 +60,34 @@ const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
 
   if (locationId) {
     where.locationId = locationId;
+  }
+
+  if (excludedUserId) {
+    where.id = {
+      not: excludedUserId
+    };
+  }
+
+  if (excludedModules && excludedModules.length > 0) {
+    roleFilters.push({
+      NOT: {
+        rolePermissions: {
+          some: {
+            menu: {
+              module: {
+                in: excludedModules
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  if (roleFilters.length > 0) {
+    where.role = {
+      AND: roleFilters
+    };
   }
 
   if (search) {
@@ -182,8 +211,15 @@ const countActiveAdmins = () => {
   });
 };
 
-const listUsers = async ({ page, limit, search, roleId, locationId, isActive }) => {
-  const where = buildUserWhere({ search, roleId, locationId, isActive });
+const listUsers = async ({ page, limit, search, roleId, locationId, isActive, excludedModules, excludedUserId }) => {
+  const where = buildUserWhere({
+    search,
+    roleId,
+    locationId,
+    isActive,
+    excludedModules,
+    excludedUserId
+  });
   const skip = (page - 1) * limit;
 
   const [users, total] = await prisma.$transaction([

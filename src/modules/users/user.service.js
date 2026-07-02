@@ -9,6 +9,9 @@ const { generateRandomPassword, sendWelcomeEmail } = require('../../utils/welcom
 const DEFAULT_USER_PASSWORD = 'Admin@123';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
 const MANAGING_DIRECTOR_ROLE = 'managing_director';
+const ADMIN_MODULE = 'admin';
+const MANAGER_MODULE = 'manager';
+const MANAGING_DIRECTOR_MODULE = 'managing-director';
 const MD_BLOCKED_ROLE_SLUGS = new Set(['admin', 'super_admin', 'managing_director']);
 const MD_ALLOWED_ROLE_SLUGS = new Set([
   'gate_security',
@@ -88,6 +91,47 @@ const normalizeAssignmentCategory = (category) => {
 const isAdminRole = (roleSlug) => ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug));
 
 const isManagingDirector = (user) => normalizeRoleSlug(user && user.roleSlug) === MANAGING_DIRECTOR_ROLE;
+
+const getRoleModules = async (roleId) => {
+  if (!roleId) {
+    return new Set();
+  }
+
+  const permissions = await prisma.roleMenuPermission.findMany({
+    where: {
+      roleId,
+      canRead: true,
+      menu: {
+        isActive: true
+      }
+    },
+    select: {
+      menu: {
+        select: {
+          module: true
+        }
+      }
+    }
+  });
+
+  return new Set(permissions.map((permission) => permission.menu.module));
+};
+
+const getRestrictedModulesForActor = async (actor) => {
+  const actorModules = await getRoleModules(actor && actor.roleId);
+
+  if (actorModules.has(ADMIN_MODULE)) {
+    return [];
+  }
+
+  const restrictedModules = [ADMIN_MODULE];
+
+  if (actorModules.has(MANAGER_MODULE) || actorModules.has(MANAGING_DIRECTOR_MODULE)) {
+    restrictedModules.push(MANAGING_DIRECTOR_MODULE);
+  }
+
+  return restrictedModules;
+};
 
 const parseOptionalPositiveInt = (value) => {
   if (value === undefined || value === null || value === '') {
@@ -448,6 +492,8 @@ const listUsers = async (query, actor) => {
   const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
   const locationId = isManagingDirector(actor) ? Number(actor.locationId) : requestedLocationId;
   const isActive = parseBooleanFilter(query.isActive);
+  const excludedModules = await getRestrictedModulesForActor(actor);
+  const excludedUserId = actor && actor.userId ? Number(actor.userId) : undefined;
 
   if (isManagingDirector(actor) && !actor.locationId) {
     throw createHttpError(400, 'Managing Director is not assigned to any location');
@@ -459,7 +505,9 @@ const listUsers = async (query, actor) => {
     search,
     roleId,
     locationId,
-    isActive
+    isActive,
+    excludedModules,
+    excludedUserId
   });
 
   return {

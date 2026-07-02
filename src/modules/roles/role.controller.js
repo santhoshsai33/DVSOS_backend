@@ -30,7 +30,7 @@ const updateRole = async (req, res, next) => {
 
 const listRoles = async (req, res, next) => {
   try {
-    const { roles, meta } = await roleService.listRoles(req.query);
+    const { roles, meta } = await roleService.listRoles(req.query, req.user);
 
     return apiResponse(res, {
       message: 'Roles fetched successfully',

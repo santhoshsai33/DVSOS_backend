@@ -2,6 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const { seedStateDistricts } = require('./seedStatesDistricts');
 const { seedSuperAdmin } = require('./super-admin.seed');
 const { seedMenus } = require('./seedMenus');
+const { seedAdminRoleMenuPermissions } = require('./seedAdminRoleMenuPermissions');
 const { seedServiceCategories } = require('./seedServiceCategories');
 const { seedServiceCentersLocations } = require('./seedServiceCentersLocations');
 const { seedStatusMasters } = require('./seedStatusMasters');
@@ -15,6 +16,7 @@ const runSeed = async () => {
   await seedStatusMasters(prisma);
   await seedServiceCategories(prisma);
   await seedMenus(prisma);
+  await seedAdminRoleMenuPermissions(prisma);
 };
 
 runSeed()
