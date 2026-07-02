@@ -14,6 +14,10 @@ const ROLE_ALIASES = {
   body_shop: 'body_shop_supervisor',
   bodyshop: 'body_shop_supervisor',
   bodyshop_supervisor: 'body_shop_supervisor',
+  crm: 'crm_team',
+  crm_user: 'crm_team',
+  crm_executive: 'crm_team',
+  crm_staff: 'crm_team',
   floor: 'floor_supervisor',
   mechanical_supervisor: 'floor_supervisor',
   water_wash: 'water_wash_team',
@@ -71,6 +75,14 @@ const hasModulePermission = async (roleId, allowedModules) => {
   return Boolean(permission);
 };
 
+const hasUserModule = (user, allowedModules) => {
+  if (!user || !Array.isArray(user.modules) || allowedModules.length === 0) {
+    return false;
+  }
+
+  return user.modules.some((module) => allowedModules.includes(module));
+};
+
 const roleMiddleware = (allowedRoles = [], options = {}) => {
   const roles = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles])
     .map(normalizeRoleSlug);
@@ -79,9 +91,10 @@ const roleMiddleware = (allowedRoles = [], options = {}) => {
 
   return async (req, res, next) => {
     const userRole = normalizeRoleSlug(req.user && req.user.roleSlug);
-    const canAccess = roles.includes(userRole)
-      || (allowAdmin && userRole === 'admin')
-      || await hasModulePermission(req.user && req.user.roleId, allowedModules);
+    const canAccess = hasUserModule(req.user, allowedModules)
+      || await hasModulePermission(req.user && req.user.roleId, allowedModules)
+      || roles.includes(userRole)
+      || (allowAdmin && userRole === 'admin');
 
     if (!userRole || !canAccess) {
       return apiResponse(res, {

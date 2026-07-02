@@ -14,6 +14,10 @@ const roleSelect = {
   updatedAt: true
 };
 
+const ADMIN_MODULE = 'admin';
+const MANAGER_MODULE = 'manager';
+const MANAGING_DIRECTOR_MODULE = 'managing-director';
+
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -46,8 +50,50 @@ const parseBooleanFilter = (value) => {
   return undefined;
 };
 
-const buildRoleWhere = ({ search, isActive } = {}) => {
+const getRoleModules = async (roleId) => {
+  if (!roleId) {
+    return new Set();
+  }
+
+  const permissions = await prisma.roleMenuPermission.findMany({
+    where: {
+      roleId,
+      canRead: true,
+      menu: {
+        isActive: true
+      }
+    },
+    select: {
+      menu: {
+        select: {
+          module: true
+        }
+      }
+    }
+  });
+
+  return new Set(permissions.map((permission) => permission.menu.module));
+};
+
+const getRestrictedModulesForActor = async (actor) => {
+  const actorModules = await getRoleModules(actor && actor.roleId);
+
+  if (actorModules.has(ADMIN_MODULE)) {
+    return [];
+  }
+
+  const restrictedModules = [ADMIN_MODULE];
+
+  if (actorModules.has(MANAGER_MODULE) || actorModules.has(MANAGING_DIRECTOR_MODULE)) {
+    restrictedModules.push(MANAGING_DIRECTOR_MODULE);
+  }
+
+  return restrictedModules;
+};
+
+const buildRoleWhere = ({ search, isActive, excludedModules } = {}) => {
   const where = {};
+  const andFilters = [];
 
   if (typeof isActive === 'boolean') {
     where.isActive = isActive;
@@ -59,6 +105,26 @@ const buildRoleWhere = ({ search, isActive } = {}) => {
       { slug: { contains: search } },
       { description: { contains: search } }
     ];
+  }
+
+  if (excludedModules && excludedModules.length > 0) {
+    andFilters.push({
+      NOT: {
+        rolePermissions: {
+          some: {
+            menu: {
+              module: {
+                in: excludedModules
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = andFilters;
   }
 
   return where;
@@ -212,12 +278,13 @@ const updateRole = async (id, { name, description, isActive }, actorUserId) => {
   });
 };
 
-const listRoles = async (query) => {
+const listRoles = async (query, actor) => {
   const page = parsePositiveInt(query.page, 1);
   const limit = parsePositiveInt(query.limit, 10);
   const search = query.search ? query.search.trim() : undefined;
   const isActive = parseBooleanFilter(query.isActive);
-  const where = buildRoleWhere({ search, isActive });
+  const excludedModules = await getRestrictedModulesForActor(actor);
+  const where = buildRoleWhere({ search, isActive, excludedModules });
   const skip = (page - 1) * limit;
 
   const [roles, total] = await prisma.$transaction([

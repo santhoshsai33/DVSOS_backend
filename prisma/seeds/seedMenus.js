@@ -26,7 +26,6 @@ const MENU_SEED_DATA = [
       { name: 'Floor Dashboard', path: '/floor-dashboard', icon: 'LayoutDashboard' },
       { name: 'Assign Mechanic', path: '/assign-mechanic', icon: 'User' },
       { name: 'Additional Work', path: '/additional-work', icon: 'AlertCircle' },
-      { name: 'Work Status', path: '/work-status', icon: 'CheckSquare' },
       { name: 'Job Cards', path: '/job-cards', icon: 'ClipboardList' },
       { name: 'Notifications', path: '/notifications', icon: 'Bell' }
     ]
@@ -34,10 +33,10 @@ const MENU_SEED_DATA = [
   {
     module: 'body-shop-supervisor',
     menus: [
-      { name: 'Body Shop Queue', path: '/body-shop-queue', icon: 'Paintbrush' },
+      { name: 'Body Shop Dashboard', path: '/body-shop-dashboard', icon: 'LayoutDashboard' },
+      // { name: 'Body Shop Queue', path: '/body-shop-queue', icon: 'Paintbrush' },
       { name: 'Assign Mechanic', path: '/body-shop-assign-mechanic', icon: 'User' },
       { name: 'Additional Work', path: '/body-shop-additional-work', icon: 'AlertCircle' },
-      { name: 'Work Status', path: '/body-shop-work-status', icon: 'CheckSquare' },
       { name: 'Job Cards', path: '/job-cards', icon: 'ClipboardList' },
       { name: 'Notifications', path: '/notifications', icon: 'Bell' }
     ]
@@ -92,6 +91,7 @@ const MENU_SEED_DATA = [
         children: [
           { name: 'States', path: '/master-states', icon: 'MapPin' },
           { name: 'Districts', path: '/master-districts', icon: 'Building' },
+          { name: 'Brands', path: '/master-brands', icon: 'Car' },
           { name: 'Service Categories', path: '/master-categories', icon: 'ClipboardList' },
           { name: 'Service Items', path: '/master-items', icon: 'Wrench' },
           { name: 'Modules', path: '/modules', icon: 'Package' },
@@ -105,8 +105,21 @@ const MENU_SEED_DATA = [
     ]
   }
 ];
+// can remove later
+const REMOVED_MENU_PATHS = [
+  { module: 'floor-supervisor', path: '/work-status' },
+  { module: 'body-shop-supervisor', path: '/body-shop-work-status' },
+  { module: 'body-shop-supervisor', path: '/body-shop-queue' }
+];
 
 const seedMenus = async (prisma) => {
+  for (const removedMenu of REMOVED_MENU_PATHS) {
+    await prisma.menu.updateMany({
+      where: removedMenu,
+      data: { isActive: false }
+    });
+  }
+
   for (const moduleMenu of MENU_SEED_DATA) {
     for (const [index, menu] of moduleMenu.menus.entries()) {
       const parent = await prisma.menu.upsert({
