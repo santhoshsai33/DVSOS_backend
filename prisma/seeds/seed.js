@@ -5,6 +5,7 @@ const { seedMenus } = require('./seedMenus');
 const { seedServiceCategories } = require('./seedServiceCategories');
 const { seedServiceCentersLocations } = require('./seedServiceCentersLocations');
 const { seedStatusMasters } = require('./seedStatusMasters');
+const { seedStageTimeLimits } = require('./seedStageTimeLimits');
 
 const prisma = new PrismaClient();
 
@@ -13,6 +14,7 @@ const runSeed = async () => {
   await seedServiceCentersLocations(prisma);
   await seedSuperAdmin(prisma);
   await seedStatusMasters(prisma);
+  await seedStageTimeLimits(prisma);
   await seedServiceCategories(prisma);
   await seedMenus(prisma);
 };

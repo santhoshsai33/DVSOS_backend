@@ -30,8 +30,12 @@ const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
 const queueRoutes = require('../modules/queues/queue.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
+const notificationRoutes = require('../modules/notifications/notification.routes');
+const deviceTokenRoutes = require('../modules/notifications/deviceToken.routes');
 
 router.use('/auth', authRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/device-token', deviceTokenRoutes);
 router.use('/admin/states', adminStateRoutes);
 router.use('/admin/districts', adminDistrictRoutes);
 router.use('/admin/service-categories', adminServiceCategoryRoutes);

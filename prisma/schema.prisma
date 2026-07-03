@@ -325,8 +325,23 @@ model User {
   modifiedStageTimeLimits StageTimeLimit[]       @relation("StageTimeLimitModifiedBy")
   createdSettings         ServiceCenterSetting[] @relation("ServiceCenterSettingCreatedBy")
   modifiedSettings        ServiceCenterSetting[] @relation("ServiceCenterSettingModifiedBy")
+  deviceTokens            UserDeviceToken[]
 
   @@map("users")
+}
+
+model UserDeviceToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique @db.NVarChar(500)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("user_device_tokens")
 }
 
 model Customer {

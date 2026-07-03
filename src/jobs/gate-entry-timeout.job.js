@@ -106,6 +106,21 @@ async function processGateEntryBatch(batch, limitsMap) {
         // Create notification for each recipient
         for (const recipientId of recipientIds) {
           try {
+            // Check if notification already exists to avoid spamming
+            const existingNotification = await prisma.notification.findFirst({
+              where: {
+                userId: recipientId,
+                gateEntryId: entry.id,
+                statusId: entry.statusId,
+                notificationType: 'STAGE_TIMEOUT'
+              }
+            });
+
+            if (existingNotification) {
+              duplicatesCount++;
+              continue;
+            }
+
             await prisma.notification.create({
               data: {
                 locationId: entry.locationId,
@@ -119,12 +134,7 @@ async function processGateEntryBatch(batch, limitsMap) {
             });
             createdCount++;
           } catch (err) {
-            // Check for Prisma unique constraint failed error code (P2002)
-            if (err.code === 'P2002') {
-              duplicatesCount++;
-            } else {
-              console.error(`[Gate Entry Timeout Job] Error inserting notification for GateEntry ${entry.id}, Recipient ${recipientId}:`, err.message);
-            }
+            console.error(`[Gate Entry Timeout Job] Error inserting notification for GateEntry ${entry.id}, Recipient ${recipientId}:`, err.message);
           }
         }
       }

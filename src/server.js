@@ -7,6 +7,9 @@ const { initializeSocket } = require('./config/socket');
 const { initializeFirebase } = require('./config/firebase');
 const { initializeTwilio } = require('./config/twilio');
 const { startGateEntryTimeoutJob } = require('./jobs/gate-entry-timeout.job');
+const { startFcmSenderJob } = require('./jobs/fcm-sender.job');
+const { startApprovalFollowupJob } = require('./jobs/approval-followup.job');
+const { startDelayMonitorJob } = require('./jobs/delay-monitor.job');
 
 const server = http.createServer(app);
 
@@ -21,6 +24,13 @@ const startServer = async () => {
 
     // Start background jobs
     startGateEntryTimeoutJob();
+    startApprovalFollowupJob();
+    startDelayMonitorJob();
+    try {
+      startFcmSenderJob();
+    } catch (jobErr) {
+      console.error('Failed to start FCM Sender Job:', jobErr.message);
+    }
 
     server.listen(env.port, () => {
       console.info(`${env.appName} running on port ${env.port}`);
