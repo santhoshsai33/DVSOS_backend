@@ -19,7 +19,7 @@ const isReadOnlyMenu = (menu) => {
 const seedAdminRoleMenuPermissions = async (prisma) => {
   const adminRole = await prisma.role.findUnique({
     where: { slug: ADMIN_ROLE_SLUG },
-    select: { id: true, name: true, path: true }
+    select: { id: true, name: true }
   });
 
   if (!adminRole) {
@@ -31,7 +31,7 @@ const seedAdminRoleMenuPermissions = async (prisma) => {
       module: ADMIN_MENU_MODULE,
       isActive: true
     },
-    select: { id: true }
+    select: { id: true, name: true, path: true }
   });
 
   if (adminMenus.length === 0) {

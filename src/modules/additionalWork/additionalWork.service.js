@@ -34,12 +34,80 @@ const ROLE_DEPARTMENTS = {
 };
 const PRIVILEGED_ROLES = new Set(['admin', 'super_admin', 'manager', 'managing_director']);
 const APPROVAL_TYPE_ADDITIONAL_WORK = 'ADDITIONAL_WORK';
+const ADDITIONAL_WORK_SCHEMA_STATEMENTS = [
+  `
+IF COL_LENGTH('job_card_approvals', 'approval_code') IS NULL
+BEGIN
+  ALTER TABLE job_card_approvals ADD approval_code NVARCHAR(30) NULL;
+END
+  `,
+  `
+IF COL_LENGTH('job_card_services', 'parent_job_card_service_id') IS NULL
+BEGIN
+  ALTER TABLE job_card_services ADD parent_job_card_service_id INT NULL;
+END
+  `,
+  `
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.foreign_keys
+  WHERE name = 'FK_job_card_services_parent_job_card_service'
+)
+BEGIN
+  ALTER TABLE job_card_services
+    ADD CONSTRAINT FK_job_card_services_parent_job_card_service
+    FOREIGN KEY (parent_job_card_service_id)
+    REFERENCES job_card_services(id);
+END
+  `,
+  `
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_job_card_approvals_approval_code_unique'
+    AND object_id = OBJECT_ID('job_card_approvals')
+)
+BEGIN
+  CREATE UNIQUE INDEX IX_job_card_approvals_approval_code_unique
+    ON job_card_approvals(approval_code)
+    WHERE approval_code IS NOT NULL;
+END
+  `,
+  `
+IF NOT EXISTS (
+  SELECT 1
+  FROM sys.indexes
+  WHERE name = 'IX_job_card_services_parent_job_card_service_id'
+    AND object_id = OBJECT_ID('job_card_services')
+)
+BEGIN
+  CREATE INDEX IX_job_card_services_parent_job_card_service_id
+    ON job_card_services(parent_job_card_service_id);
+END
+  `
+];
+let additionalWorkSchemaPromise = null;
 
 const createHttpError = (statusCode, message, data = {}) => {
   const error = new Error(message);
   error.statusCode = statusCode;
   error.data = data;
   return error;
+};
+
+const ensureAdditionalWorkSchema = async () => {
+  if (!additionalWorkSchemaPromise) {
+    additionalWorkSchemaPromise = (async () => {
+      for (const statement of ADDITIONAL_WORK_SCHEMA_STATEMENTS) {
+        await prisma.$executeRawUnsafe(statement);
+      }
+    })().catch((error) => {
+      additionalWorkSchemaPromise = null;
+      throw error;
+    });
+  }
+
+  return additionalWorkSchemaPromise;
 };
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
@@ -302,6 +370,8 @@ const listAvailableServiceItems = (tx, department) => {
 };
 
 const getContext = async (jobCardId, query, user) => {
+  await ensureAdditionalWorkSchema();
+
   const id = parsePositiveInt(jobCardId, 'jobCardId');
   const department = getDepartmentForUser(user, query.department || query.category);
 
@@ -348,6 +418,8 @@ const generateApprovalCode = async (tx) => {
 };
 
 const createRequest = async (jobCardId, payload, user) => {
+  await ensureAdditionalWorkSchema();
+
   const id = parsePositiveInt(jobCardId, 'jobCardId');
   const explanation = String(payload.mechanicExplanation || payload.explanation || payload.notes || '').trim();
   if (explanation.length < 5) {
@@ -514,6 +586,8 @@ const parseApprovalReply = (body) => {
 };
 
 const handleTwilioWebhook = async (req) => {
+  await ensureAdditionalWorkSchema();
+
   if (!validateTwilioRequest(req)) {
     throw createHttpError(403, 'Invalid Twilio signature');
   }

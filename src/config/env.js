@@ -6,9 +6,21 @@ if (!process.env.DATABASE_URL && process.env.MSSERVER_URI) {
   process.env.DATABASE_URL = process.env.MSSERVER_URI;
 }
 
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || process.env.AccountSID;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || process.env.AuthToken;
-const twilioWhatsappFrom = process.env.TWILIO_WHATSAPP_FROM || process.env.Twiliophonenumber;
+const DEFAULT_TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
+const toTrimmedEnv = (value) => String(value || '').trim();
+const normalizeWhatsAppSender = (value) => {
+  const raw = toTrimmedEnv(value);
+  if (!raw) return '';
+  return raw.toLowerCase().startsWith('whatsapp:') ? raw : `whatsapp:${raw}`;
+};
+
+const twilioAccountSid = toTrimmedEnv(process.env.TWILIO_ACCOUNT_SID) || toTrimmedEnv(process.env.AccountSID);
+const twilioAuthToken = toTrimmedEnv(process.env.TWILIO_AUTH_TOKEN) || toTrimmedEnv(process.env.AuthToken);
+const configuredWhatsappFrom = toTrimmedEnv(process.env.TWILIO_WHATSAPP_FROM);
+const legacyWhatsappFrom = toTrimmedEnv(process.env.Twiliophonenumber).toLowerCase().startsWith('whatsapp:')
+  ? toTrimmedEnv(process.env.Twiliophonenumber)
+  : '';
+const twilioWhatsappFrom = normalizeWhatsAppSender(configuredWhatsappFrom || legacyWhatsappFrom || DEFAULT_TWILIO_WHATSAPP_FROM);
 
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
 
