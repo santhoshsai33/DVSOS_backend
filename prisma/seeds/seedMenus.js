@@ -76,7 +76,7 @@ const MENU_SEED_DATA = [
       { name: 'Vehicle Entry', path: '/gate-entry', icon: 'LogIn' },
       { name: 'Audit Logs', path: '/audit-logs', icon: 'FileText' },
       { name: 'Notifications', path: '/notifications', icon: 'Bell' },
-      { name: 'System Settings', path: '/system-settings', icon: 'Settings' },
+      // { name: 'System Settings', path: '/system-settings', icon: 'Settings' },
       { name: 'TV Display', path: '/kiosk/tv', icon: 'Monitor' }
     ]
   },

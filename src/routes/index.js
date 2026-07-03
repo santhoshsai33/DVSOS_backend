@@ -32,7 +32,7 @@ const approvalRoutes = require('../modules/approvals/approval.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
-const brandRoutes = require('../modules/brands/brand.routes');
+const { brandRoutes, crmBrandRoutes } = require('../modules/brands/brand.routes');
 
 router.use('/auth', authRoutes);
 router.use('/admin/states', adminStateRoutes);
@@ -66,5 +66,6 @@ router.use('/queues', queueRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/audit-logs', auditLogRoutes);
 router.use('/admin/brands', brandRoutes);
+router.use('/crm/brands', crmBrandRoutes);
 
 module.exports = router;

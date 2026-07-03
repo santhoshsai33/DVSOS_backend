@@ -18,11 +18,12 @@ model ServiceCenter {
   id                Int     @id @default(autoincrement())
   serviceCenterCode String  @unique @map("service_center_code") @db.NVarChar(50)
   serviceCenterName String  @map("service_center_name") @db.NVarChar(200)
-  gstNumber         String? @map("gst_number") @db.NVarChar(30)
+  gstNumber         String  @map("gst_number") @db.NVarChar(30)
   contactPhone      String? @map("contact_phone") @db.NVarChar(20)
   contactEmail      String? @map("contact_email") @db.NVarChar(150)
   logoUrl           String? @map("logo_url") @db.NVarChar(1000)
   websiteUrl        String? @map("website_url") @db.NVarChar(255)
+  tax               String  @map("tax") @db.NVarChar(50)
 
   isActive     Boolean  @default(true) @map("is_active")
   createdById  Int?     @map("created_by")

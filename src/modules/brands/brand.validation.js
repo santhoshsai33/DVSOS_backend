@@ -51,6 +51,28 @@ const validateBrandPayload = (req, res, next) => {
     });
   }
 
+  const nameRegex = /^[a-zA-Z0-9\s]+$/;
+  if (!nameRegex.test(name)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Brand name cannot contain special characters or symbols',
+      data: {},
+      meta: {}
+    });
+  }
+
+  const hasLetterRegex = /[a-zA-Z]/;
+  if (!hasLetterRegex.test(name)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Brand name must contain at least one letter',
+      data: {},
+      meta: {}
+    });
+  }
+
   if (name.length > 100) {
     return apiResponse(res, {
       statusCode: 400,
