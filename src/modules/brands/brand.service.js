@@ -170,6 +170,15 @@ const listBrands = async (query, user) => {
   };
 };
 
+const getBrandDropdown = async () => {
+  const brands = await prisma.vehicleBrand.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' }
+  });
+  return brands;
+};
+
 const updateBrandStatus = async (id, payload, actorUserId) => {
   const brandId = Number(id);
   const existingBrand = await prisma.vehicleBrand.findUnique({
@@ -218,5 +227,6 @@ module.exports = {
   createBrand,
   updateBrand,
   listBrands,
+  getBrandDropdown,
   updateBrandStatus
 };

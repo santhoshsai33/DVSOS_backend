@@ -66,6 +66,7 @@ router.use('/queues', queueRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/audit-logs', auditLogRoutes);
 router.use('/admin/brands', brandRoutes);
+router.use('/brands', brandRoutes);
 router.use('/crm/brands', crmBrandRoutes);
 
 module.exports = router;
