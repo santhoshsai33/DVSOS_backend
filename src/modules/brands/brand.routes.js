@@ -27,4 +27,12 @@ router.put('/update/:id', adminOnly, validateIdentifierParam, validateBrandPaylo
 router.get('/list', canViewBrands, brandController.listBrands);
 router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, brandController.updateBrandStatus);
 
-module.exports = router;
+const crmOnly = roleMiddleware(['crm_team', 'crm-team']);
+const crmRouter = require('express').Router();
+crmRouter.use(authenticate);
+crmRouter.get('/list', crmOnly, brandController.listBrands);
+
+module.exports = {
+  brandRoutes: router,
+  crmBrandRoutes: crmRouter
+};
