@@ -13,6 +13,20 @@ const PERMISSION_TRANSACTION_OPTIONS = {
   timeout: 30000
 };
 
+const isReadOnlyMenu = (menu) => {
+  const path = String(menu?.path || '').toLowerCase();
+  const name = String(menu?.name || '').toLowerCase();
+
+  return path.includes('dashboard')
+    || name.includes('dashboard')
+    || path.includes('kiosk/tv')
+    || name.includes('tv display')
+    || path.includes('notifications')
+    || name.includes('notification')
+    || path.includes('audit-logs')
+    || name.includes('audit log');
+};
+
 const resolveRoleByIdentifier = async (identifier) => {
   const parsedRoleId = Number(identifier);
   const where = Number.isInteger(parsedRoleId) && parsedRoleId > 0
@@ -38,7 +52,7 @@ const resolveRoleByIdentifier = async (identifier) => {
 const ensureMenusExist = async (menuIds) => {
   const menus = await prisma.menu.findMany({
     where: { id: { in: menuIds } },
-    select: { id: true }
+    select: { id: true, name: true, path: true }
   });
 
   if (menus.length !== menuIds.length) {
@@ -46,6 +60,8 @@ const ensureMenusExist = async (menuIds) => {
     const missingMenuIds = menuIds.filter((menuId) => !foundMenuIds.has(menuId));
     throw createHttpError(400, `Invalid menuId values: ${missingMenuIds.join(', ')}`);
   }
+
+  return new Map(menus.map((menu) => [menu.id, menu]));
 };
 
 const getExistingPermissionMap = async (roleId, menuIds) => {
@@ -95,6 +111,7 @@ const formatPermissionResponse = (role, menus, permissionMap) => {
     }
 
     const permission = permissionMap.get(menu.id);
+    const readOnlyMenu = isReadOnlyMenu(menu);
 
     modules.get(menu.module).push({
       menuId: menu.id,
@@ -104,9 +121,9 @@ const formatPermissionResponse = (role, menus, permissionMap) => {
       icon: menu.icon,
       sequence: menu.sequence,
       canRead: permission ? permission.canRead : false,
-      canCreate: permission ? permission.canCreate : false,
-      canUpdate: permission ? permission.canUpdate : false,
-      canDelete: permission ? permission.canDelete : false
+      canCreate: !readOnlyMenu && permission ? permission.canCreate : false,
+      canUpdate: !readOnlyMenu && permission ? permission.canUpdate : false,
+      canDelete: !readOnlyMenu && permission ? permission.canDelete : false
     });
   });
 
@@ -126,7 +143,7 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
   const parsedRoleId = role.id;
   const menuIds = permissionPayload.map((permission) => Number(permission.menuId));
 
-  await ensureMenusExist(menuIds);
+  const menuMap = await ensureMenusExist(menuIds);
 
   const existingPermissionMap = await getExistingPermissionMap(parsedRoleId, menuIds);
 
@@ -139,13 +156,15 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
 
     for (const permission of permissionPayload) {
       const menuId = Number(permission.menuId);
+      const menu = menuMap.get(menuId);
+      const readOnlyMenu = isReadOnlyMenu(menu);
       const data = {
         roleId: parsedRoleId,
         menuId,
         canRead: permission.canRead,
-        canCreate: permission.canCreate,
-        canUpdate: permission.canUpdate,
-        canDelete: permission.canDelete
+        canCreate: readOnlyMenu ? false : permission.canCreate,
+        canUpdate: readOnlyMenu ? false : permission.canUpdate,
+        canDelete: readOnlyMenu ? false : permission.canDelete
       };
 
       const savedPermission = await tx.roleMenuPermission.upsert({
@@ -166,16 +185,16 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
 
       const existingPermission = existingPermissionMap.get(menuId);
 
-      // await createAuditLog(tx, {
-      //   tableName: 'role_menu_permissions',
-      //   recordId: savedPermission.id,
-      //   actionType: existingPermission ? 'UPDATE' : 'CREATE',
-      //   performedByUserId: actorUserId,
-      //   recordName: `${role.slug}:${menuId}`,
-      //   comments: existingPermission ? 'Role menu permission updated' : 'Role menu permission created',
-      //   details: buildPermissionAuditDetails(existingPermission, savedPermission),
-      //   moduleId: auditModule.id
-      // });
+      await createAuditLog(tx, {
+        tableName: 'role_menu_permissions',
+        recordId: savedPermission.id,
+        actionType: existingPermission ? 'UPDATE' : 'CREATE',
+        performedByUserId: actorUserId,
+        recordName: `${role.slug}:${menuId}`,
+        comments: existingPermission ? 'Role menu permission updated' : 'Role menu permission created',
+        details: buildPermissionAuditDetails(existingPermission, savedPermission),
+        moduleId: auditModule.id
+      });
 
       savedPermissions.push(savedPermission);
     }
@@ -247,20 +266,20 @@ const deleteRoleMenuPermission = async (roleId, menuId, actorUserId) => {
       }
     });
 
-    // await createAuditLog(tx, {
-    //   tableName: 'role_menu_permissions',
-    //   recordId: deletedPermission.id,
-    //   actionType: 'DELETE',
-    //   performedByUserId: actorUserId,
-    //   recordName: `${role.slug}:${parsedMenuId}`,
-    //   comments: 'Role menu permission deleted',
-    //   details: permissionFields.map((fieldName) => ({
-    //     fieldName,
-    //     oldValue: deletedPermission[fieldName],
-    //     newValue: null,
-    //     dataType: 'boolean'
-    //   }))
-    // });
+    await createAuditLog(tx, {
+      tableName: 'role_menu_permissions',
+      recordId: deletedPermission.id,
+      actionType: 'DELETE',
+      performedByUserId: actorUserId,
+      recordName: `${role.slug}:${parsedMenuId}`,
+      comments: 'Role menu permission deleted',
+      details: permissionFields.map((fieldName) => ({
+        fieldName,
+        oldValue: deletedPermission[fieldName],
+        newValue: null,
+        dataType: 'boolean'
+      }))
+    });
 
     return deletedPermission;
   });

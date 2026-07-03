@@ -22,6 +22,20 @@ const listVehicles = async (query, user) => {
   if (query.status === 'active') where.isActive = true;
   if (query.status === 'inactive') where.isActive = false;
 
+  if (query.fromDate) {
+    const from = new Date(query.fromDate);
+    if (!isNaN(from)) {
+      where.createdAt = { ...where.createdAt, gte: from };
+    }
+  }
+  if (query.toDate) {
+    const to = new Date(query.toDate);
+    if (!isNaN(to)) {
+      to.setHours(23, 59, 59, 999);
+      where.createdAt = { ...where.createdAt, lte: to };
+    }
+  }
+
   const [vehicles, total] = await Promise.all([
     prisma.vehicle.findMany({
       where,
@@ -54,10 +68,11 @@ const listVehicles = async (query, user) => {
   };
 };
 
-const getVehicleById = async (id, user) => {
-  const vehicleId = parseInt(id, 10);
+const getVehicleById = async (idOrSlug, user) => {
+  const isId = !isNaN(Number(idOrSlug));
+  const where = isId ? { id: parseInt(idOrSlug, 10) } : { slug: idOrSlug };
   const vehicle = await prisma.vehicle.findUnique({
-    where: { id: vehicleId },
+    where,
     include: {
       customer: {
         select: { id: true, fullName: true, mobileNo: true, emailId: true, address: true }
@@ -84,7 +99,7 @@ const getVehicleById = async (id, user) => {
   const mediaFiles = await prisma.mediaFile.findMany({
     where: {
       moduleName: 'Vehicle',
-      moduleRecordId: vehicleId
+      moduleRecordId: vehicle.id
     },
     orderBy: { createdAt: 'desc' }
   });
@@ -95,7 +110,102 @@ const getVehicleById = async (id, user) => {
   };
 };
 
+const updateVehicle = async (idOrSlug, data, user) => {
+  const isId = !isNaN(Number(idOrSlug));
+  const where = isId ? { id: parseInt(idOrSlug, 10) } : { slug: idOrSlug };
+
+  // First, verify the vehicle exists and user is authorized
+  const existingVehicle = await prisma.vehicle.findUnique({
+    where
+  });
+
+  if (!existingVehicle) {
+    throw new Error('Vehicle not found');
+  }
+
+  if (user && user.locationId && existingVehicle.locationId !== user.locationId) {
+    throw new Error('Unauthorized to update this Vehicle');
+  }
+
+  // Update vehicle and its customer
+  const updatedVehicle = await prisma.vehicle.update({
+    where: { id: existingVehicle.id },
+    data: {
+      registrationNo: data.vehicleNumber,
+      model: data.makeModel,
+      variant: data.type,
+      fuelType: data.fuelType,
+      modifiedById: user ? user.id : undefined,
+      customer: {
+        update: {
+          fullName: data.ownerName,
+          mobileNo: data.mobile,
+          modifiedById: user ? user.id : undefined
+        }
+      }
+    },
+    include: {
+      customer: true,
+      brand: true,
+      location: true
+    }
+  });
+
+  return updatedVehicle;
+};
+
+const getVehicleHistory = async (idOrSlug, query, user) => {
+  const isId = !isNaN(Number(idOrSlug));
+  const where = isId ? { id: parseInt(idOrSlug, 10) } : { slug: idOrSlug };
+
+  const existingVehicle = await prisma.vehicle.findUnique({
+    where,
+    select: { id: true, registrationNo: true }
+  });
+
+  if (!existingVehicle) {
+    throw new Error('Vehicle not found');
+  }
+
+  const jobCards = await prisma.jobCard.findMany({
+    where: { vehicleId: existingVehicle.id },
+    include: {
+      customer: { select: { fullName: true } },
+      currentStatus: { select: { statusCode: true } },
+      services: {
+        include: {
+          serviceItem: { select: { name: true } }
+        }
+      },
+      workAssignments: {
+        include: {
+          assignedUser: { select: { fullName: true } }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  const history = jobCards.map((job) => ({
+    id: job.jobCardNo || job.id,
+    slug: job.slug,
+    date: job.createdAt.toISOString().split('T')[0],
+    vehicleNumber: existingVehicle.registrationNo,
+    customerName: job.customer?.fullName || 'N/A',
+    services: job.services.map(s => s.serviceItem?.name).filter(Boolean),
+    cost: Number(job.totalEstimate) || 0,
+    status: job.currentStatus?.statusCode || 'PENDING',
+    technician: job.workAssignments[0]?.assignedUser?.fullName || 'Unassigned',
+    complaint: job.customerComplaint || 'No specific complaints',
+    notes: job.additionalNotes || ''
+  }));
+
+  return history;
+};
+
 module.exports = {
   listVehicles,
-  getVehicleById
+  getVehicleById,
+  updateVehicle,
+  getVehicleHistory
 };

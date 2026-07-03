@@ -4,11 +4,12 @@ const { generateSlug } = require('../../src/common/utils/slug.util');
 const SERVICE_CENTER = {
   serviceCenterCode: 'DVSOS-HQ',
   serviceCenterName: 'DVSOS Main Service Center',
-  gstNumber: null,
+  gstNumber: '33ABCDE1234F1Z5',
   contactPhone: '9876543210',
   contactEmail: 'service@dvsos.local',
   logoUrl: null,
-  websiteUrl: null
+  websiteUrl: null,
+  tax: '10'
 };
 
 const LOCATION = {
@@ -57,6 +58,7 @@ const seedServiceCentersLocations = async (prisma) => {
         contactEmail: SERVICE_CENTER.contactEmail,
         logoUrl: SERVICE_CENTER.logoUrl,
         websiteUrl: SERVICE_CENTER.websiteUrl,
+        tax: SERVICE_CENTER.tax,
         isActive: true
       },
       create: {

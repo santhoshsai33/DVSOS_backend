@@ -6,6 +6,22 @@ if (!process.env.DATABASE_URL && process.env.MSSERVER_URI) {
   process.env.DATABASE_URL = process.env.MSSERVER_URI;
 }
 
+const DEFAULT_TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
+const toTrimmedEnv = (value) => String(value || '').trim();
+const normalizeWhatsAppSender = (value) => {
+  const raw = toTrimmedEnv(value);
+  if (!raw) return '';
+  return raw.toLowerCase().startsWith('whatsapp:') ? raw : `whatsapp:${raw}`;
+};
+
+const twilioAccountSid = toTrimmedEnv(process.env.TWILIO_ACCOUNT_SID) || toTrimmedEnv(process.env.AccountSID);
+const twilioAuthToken = toTrimmedEnv(process.env.TWILIO_AUTH_TOKEN) || toTrimmedEnv(process.env.AuthToken);
+const configuredWhatsappFrom = toTrimmedEnv(process.env.TWILIO_WHATSAPP_FROM);
+const legacyWhatsappFrom = toTrimmedEnv(process.env.Twiliophonenumber).toLowerCase().startsWith('whatsapp:')
+  ? toTrimmedEnv(process.env.Twiliophonenumber)
+  : '';
+const twilioWhatsappFrom = normalizeWhatsAppSender(configuredWhatsappFrom || legacyWhatsappFrom || DEFAULT_TWILIO_WHATSAPP_FROM);
+
 const requiredEnv = ['DATABASE_URL', 'JWT_SECRET'];
 
 const missingRequiredEnv = requiredEnv.filter((key) => !process.env[key]);
@@ -26,10 +42,6 @@ const optionalGroups = [
   {
     name: 'Firebase',
     keys: ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
-  },
-  {
-    name: 'Twilio',
-    keys: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM']
   }
 ];
 
@@ -40,6 +52,16 @@ optionalGroups.forEach((group) => {
     console.warn(`${group.name} optional config missing: ${missing.join(', ')}`);
   }
 });
+
+const missingTwilio = [
+  !twilioAccountSid && 'TWILIO_ACCOUNT_SID',
+  !twilioAuthToken && 'TWILIO_AUTH_TOKEN',
+  !twilioWhatsappFrom && 'TWILIO_WHATSAPP_FROM'
+].filter(Boolean);
+
+if (missingTwilio.length > 0) {
+  console.warn(`Twilio optional config missing: ${missingTwilio.join(', ')}`);
+}
 
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -66,9 +88,9 @@ module.exports = {
     privateKey: process.env.FIREBASE_PRIVATE_KEY
   },
   twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID,
-    authToken: process.env.TWILIO_AUTH_TOKEN,
-    whatsappFrom: process.env.TWILIO_WHATSAPP_FROM
+    accountSid: twilioAccountSid,
+    authToken: twilioAuthToken,
+    whatsappFrom: twilioWhatsappFrom
   },
   smtp: {
     host: process.env.SMTP_HOST,

@@ -1,19 +1,43 @@
 const { getTwilioClient } = require('../../config/twilio');
 const env = require('../../config/env');
 
+const normalizeWhatsAppSender = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw.toLowerCase().startsWith('whatsapp:') ? raw : `whatsapp:${raw}`;
+};
+
+const toTwilioProviderError = (error) => {
+  if (error && error.code === 63007) {
+    const providerError = new Error(
+      'Twilio WhatsApp sender is not valid. Set TWILIO_WHATSAPP_FROM to whatsapp:+14155238886 for sandbox or to your approved WhatsApp sender.'
+    );
+    providerError.statusCode = 500;
+    providerError.cause = error;
+    return providerError;
+  }
+
+  return error;
+};
+
 class TwilioProvider {
   async sendWhatsAppMessage({ to, body }) {
     const client = getTwilioClient();
+    const from = normalizeWhatsAppSender(env.twilio.whatsappFrom);
 
-    if (!client || !env.twilio.whatsappFrom) {
+    if (!client || !from) {
       throw new Error('Twilio WhatsApp provider is not configured.');
     }
 
-    return client.messages.create({
-      from: env.twilio.whatsappFrom,
-      to,
-      body
-    });
+    try {
+      return await client.messages.create({
+        from,
+        to,
+        body
+      });
+    } catch (error) {
+      throw toTwilioProviderError(error);
+    }
   }
 }
 

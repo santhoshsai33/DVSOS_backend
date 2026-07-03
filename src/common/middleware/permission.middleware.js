@@ -3,6 +3,10 @@ const { apiResponse } = require('../utils/apiResponse');
 
 const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
 
+const hasModule = (user, module) => {
+  return Boolean(user && Array.isArray(user.modules) && user.modules.includes(module));
+};
+
 const permissionMiddleware = (menuPathOrOptions, actionArg = 'canRead') => {
   const options = typeof menuPathOrOptions === 'object'
     ? menuPathOrOptions || {}
@@ -15,7 +19,7 @@ const permissionMiddleware = (menuPathOrOptions, actionArg = 'canRead') => {
         return next();
       }
 
-      if (['admin', 'super_admin'].includes(normalizeRoleSlug(req.user.roleSlug))) {
+      if (hasModule(req.user, 'admin') || ['admin', 'super_admin'].includes(normalizeRoleSlug(req.user.roleSlug))) {
         return next();
       }
 

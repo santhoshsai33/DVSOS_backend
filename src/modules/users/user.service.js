@@ -5,10 +5,14 @@ const userRepository = require('./user.repository');
 const { generateUniqueCode, CODE_CONFIG } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { generateRandomPassword, sendWelcomeEmail } = require('../../utils/welcomeEmailHelper');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const DEFAULT_USER_PASSWORD = 'Admin@123';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
 const MANAGING_DIRECTOR_ROLE = 'managing_director';
+const ADMIN_MODULE = 'admin';
+const MANAGER_MODULE = 'manager';
+const MANAGING_DIRECTOR_MODULE = 'managing-director';
 const MD_BLOCKED_ROLE_SLUGS = new Set(['admin', 'super_admin', 'managing_director']);
 const MD_ALLOWED_ROLE_SLUGS = new Set([
   'gate_security',
@@ -85,9 +89,62 @@ const normalizeAssignmentCategory = (category) => {
   return 'mechanical';
 };
 
+const getServiceCategoryAliases = (category) => {
+  if (category === 'body-shop') {
+    return ['body-shop', 'bodyshop', 'body_shop', 'paint', 'denting'];
+  }
+
+  if (category === 'water-wash') {
+    return ['water-wash', 'waterwash', 'water_wash', 'wash'];
+  }
+
+  return ['mechanical', 'mechanic', 'mechnanic', 'floor'];
+};
+
 const isAdminRole = (roleSlug) => ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug));
 
 const isManagingDirector = (user) => normalizeRoleSlug(user && user.roleSlug) === MANAGING_DIRECTOR_ROLE;
+
+const getRoleModules = async (roleId) => {
+  if (!roleId) {
+    return new Set();
+  }
+
+  const permissions = await prisma.roleMenuPermission.findMany({
+    where: {
+      roleId,
+      canRead: true,
+      menu: {
+        isActive: true
+      }
+    },
+    select: {
+      menu: {
+        select: {
+          module: true
+        }
+      }
+    }
+  });
+
+  return new Set(permissions.map((permission) => permission.menu.module));
+};
+
+const getRestrictedModulesForActor = async (actor) => {
+  const actorModules = await getRoleModules(actor && actor.roleId);
+
+  if (actorModules.has(ADMIN_MODULE)) {
+    return [];
+  }
+
+  const restrictedModules = [ADMIN_MODULE];
+
+  if (actorModules.has(MANAGER_MODULE) || actorModules.has(MANAGING_DIRECTOR_MODULE)) {
+    restrictedModules.push(MANAGING_DIRECTOR_MODULE);
+  }
+
+  return restrictedModules;
+};
 
 const parseOptionalPositiveInt = (value) => {
   if (value === undefined || value === null || value === '') {
@@ -366,7 +423,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
 
   const passwordHash = await hashPassword(initialPassword);
 
-  const user = await userRepository.createUser({
+  const data = {
     fullName: normalizedFullName,
     slug: normalizedSlug,
     emailId: normalizedEmail,
@@ -381,6 +438,29 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
     gender: gender ? gender.trim() : null,
     address: address ? address.trim() : null,
     createdById: actor.userId || null
+  };
+
+  const user = await prisma.$transaction(async (tx) => {
+    const newUser = await userRepository.createUser(data, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'user-management',
+      moduleName: 'User Management',
+      tableName: 'users',
+      recordId: newUser.id,
+      actionType: 'CREATE',
+      performedByUserId: actor.userId,
+      recordName: newUser.fullName,
+      comments: 'User created',
+      details: Object.entries(data).filter(([k]) => k !== 'passwordHash').map(([fieldName, newValue]) => ({
+        fieldName,
+        oldValue: null,
+        newValue,
+        dataType: typeof newValue
+      }))
+    });
+
+    return newUser;
   });
 
   // if (isRandomPasswordGenerated && normalizedEmail) {
@@ -422,7 +502,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
   await ensureUniqueLicenceNumber(licenceNumber ? licenceNumber.trim() : null, userId);
   await ensureUniqueEmployeeCode(normalizedEmployeeCode, userId);
 
-  const user = await userRepository.updateUser(userId, {
+  const data = {
     fullName: normalizedFullName,
     slug: normalizedSlug,
     emailId: normalizedEmail,
@@ -435,6 +515,24 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
     emergencyContact: emergencyContact ? emergencyContact.trim() : null,
     gender: gender ? gender.trim() : null,
     address: address ? address.trim() : null
+  };
+
+  const user = await prisma.$transaction(async (tx) => {
+    const updatedUser = await userRepository.updateUser(userId, data, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'user-management',
+      moduleName: 'User Management',
+      tableName: 'users',
+      recordId: updatedUser.id,
+      actionType: 'UPDATE',
+      performedByUserId: actor.userId,
+      recordName: updatedUser.fullName,
+      comments: 'User updated',
+      details: buildChangeDetails(currentUser, updatedUser, Object.keys(data))
+    });
+
+    return updatedUser;
   });
 
   return toPublicUser(user);
@@ -448,6 +546,10 @@ const listUsers = async (query, actor) => {
   const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
   const locationId = isManagingDirector(actor) ? Number(actor.locationId) : requestedLocationId;
   const isActive = parseBooleanFilter(query.isActive);
+  const fromDate = query.fromDate ? query.fromDate.trim() : undefined;
+  const toDate = query.toDate ? query.toDate.trim() : undefined;
+  const excludedModules = await getRestrictedModulesForActor(actor);
+  const excludedUserId = actor && actor.userId ? Number(actor.userId) : undefined;
 
   if (isManagingDirector(actor) && !actor.locationId) {
     throw createHttpError(400, 'Managing Director is not assigned to any location');
@@ -459,7 +561,11 @@ const listUsers = async (query, actor) => {
     search,
     roleId,
     locationId,
-    isActive
+    isActive,
+    excludedModules,
+    excludedUserId,
+    fromDate,
+    toDate
   });
 
   return {
@@ -509,14 +615,54 @@ const listMechanicDropdown = async (query, actor) => {
     }
   });
 
+  const userIds = users.map((user) => user.id);
+  const activeAssignments = userIds.length > 0
+    ? await prisma.workAssignment.findMany({
+      where: {
+        assignedUserId: {
+          in: userIds
+        },
+        completedAt: null,
+        ...(locationId ? { locationId } : {}),
+        jobCardService: {
+          serviceItem: {
+            category: {
+              OR: getServiceCategoryAliases(category).map((alias) => ({
+                slug: String(alias).trim().toLowerCase().replace(/[_\s]+/g, '-')
+              }))
+            }
+          }
+        }
+      },
+      select: {
+        assignedUserId: true,
+        jobCardId: true
+      }
+    })
+    : [];
+  const activeJobMap = activeAssignments.reduce((map, assignment) => {
+    if (!map.has(assignment.assignedUserId)) {
+      map.set(assignment.assignedUserId, new Set());
+    }
+    map.get(assignment.assignedUserId).add(assignment.jobCardId);
+    return map;
+  }, new Map());
+
   return users.map((user) => ({
     id: user.id,
     fullName: user.fullName,
     employeeCode: user.employeeCode,
     mobile: user.mobileNo,
     locationId: user.locationId,
-    role: user.role
-  }));
+    role: user.role,
+    activeJobCount: activeJobMap.get(user.id)?.size || 0,
+    availability: activeJobMap.get(user.id)?.size ? 'BUSY' : 'AVAILABLE',
+    availabilityLabel: activeJobMap.get(user.id)?.size
+      ? `Busy (${activeJobMap.get(user.id).size} job${activeJobMap.get(user.id).size > 1 ? 's' : ''})`
+      : 'Available'
+  })).sort((a, b) => {
+    return a.activeJobCount - b.activeJobCount || a.fullName.localeCompare(b.fullName);
+  });
 };
 
 const getUserDetail = async (id, actor) => {
@@ -569,6 +715,18 @@ const updateUserStatus = async (id, { isActive }, actor) => {
           }
         }
       }
+    });
+
+    await createAuditLog(tx, {
+      moduleCode: 'user-management',
+      moduleName: 'User Management',
+      tableName: 'users',
+      recordId: updatedUser.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: actor.userId,
+      recordName: updatedUser.fullName,
+      comments: isActive ? 'User activated' : 'User deactivated',
+      details: buildChangeDetails(currentUser, updatedUser, ['isActive', 'modifiedById'])
     });
 
     return updatedUser;

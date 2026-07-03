@@ -22,5 +22,7 @@ router.use(authenticate);
 
 router.get('/list', canViewVehicles, vehicleController.getVehicles);
 router.get('/detail/:id', canViewVehicles, vehicleController.getVehicle);
+router.get('/history/:id', canViewVehicles, vehicleController.getVehicleHistory);
+router.put('/update/:id', canViewVehicles, vehicleController.updateVehicle);
 
 module.exports = router;

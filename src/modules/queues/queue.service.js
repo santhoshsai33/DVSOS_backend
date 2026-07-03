@@ -3,6 +3,7 @@ const {
   STATUS_MODULE_CODES,
   resolveStatusIdFromCodes
 } = require('../../common/utils/status.util');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
@@ -39,6 +40,7 @@ const JOB_CARD_SERVICE_STATUS_CODES = {
 const READY_FOR_DELIVERY_STATUS_CODES = ['READY_FOR_DELIVERY'];
 const FINAL_JOB_CARD_STATUS_CODES = ['DELIVERED', 'REJECTED'];
 const REJECTED_APPROVAL_STATUS_CODES = ['REJECTED'];
+const APPROVED_APPROVAL_STATUS_CODES = ['APPROVED'];
 
 const createHttpError = (statusCode, message, data = {}) => {
   const error = new Error(message);
@@ -79,6 +81,18 @@ const getServiceDepartment = (service) => {
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
 
+const isApprovedForWork = (service) => {
+  if (!service || !service.isAdditional) {
+    return true;
+  }
+
+  return APPROVED_APPROVAL_STATUS_CODES.includes(getStatusCode(service.approvalStatus));
+};
+
+const isRejectedAdditionalService = (service) => {
+  return Boolean(service && service.isAdditional && REJECTED_APPROVAL_STATUS_CODES.includes(getStatusCode(service.approvalStatus)));
+};
+
 const isCompletedStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
   return code === 'COMPLETED' || code.endsWith('_COMPLETED');
@@ -93,6 +107,10 @@ const hasAssignment = (service) => {
 };
 
 const isServiceCompleted = (service, department) => {
+  if (isRejectedAdditionalService(service)) {
+    return true;
+  }
+
   const serviceStatusCode = getStatusCode(service.serviceStatus);
   const completedCodes = ASSIGNMENT_STATUS_CODES[department].completed;
 
@@ -108,6 +126,10 @@ const isServiceCompleted = (service, department) => {
 };
 
 const isJobCardServiceCompleted = (service) => {
+  if (isRejectedAdditionalService(service)) {
+    return true;
+  }
+
   if (isCompletedStatusCode(getStatusCode(service.serviceStatus))) {
     return true;
   }
@@ -124,17 +146,27 @@ const areAllJobCardServicesCompleted = (jobCard) => {
 };
 
 const areDepartmentServicesCompleted = (jobCard, department) => {
-  const services = getDepartmentServices(jobCard, department);
+  const services = getDepartmentServices(jobCard, department).filter((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
   return services.length === 0 || services.every((service) => isServiceCompleted(service, department));
 };
 
 const areDepartmentServicesAssigned = (jobCard, department) => {
-  const services = getDepartmentServices(jobCard, department);
+  const services = getDepartmentServices(jobCard, department).filter((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
   return services.length > 0 && services.every(hasAssignment);
 };
 
 const hasDepartmentServices = (jobCard, department) => {
   return getDepartmentServices(jobCard, department).length > 0;
+};
+
+const hasDepartmentServicesAvailableForWork = (jobCard, department) => {
+  return getDepartmentServices(jobCard, department).some((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
 };
 
 const isJobCardActiveForQueue = (jobCard) => {
@@ -146,7 +178,7 @@ const isJobCardActiveForQueue = (jobCard) => {
 };
 
 const canShowInDepartmentQueue = (jobCard, department) => {
-  if (!isJobCardActiveForQueue(jobCard) || !hasDepartmentServices(jobCard, department)) {
+  if (!isJobCardActiveForQueue(jobCard) || !hasDepartmentServicesAvailableForWork(jobCard, department)) {
     return false;
   }
 
@@ -241,6 +273,13 @@ const queueJobCardSelect = {
           statusName: true
         }
       },
+      approvalStatus: {
+        select: {
+          id: true,
+          statusCode: true,
+          statusName: true
+        }
+      },
       serviceItem: {
         select: {
           id: true,
@@ -279,7 +318,8 @@ const minutesBetween = (fromDate, toDate = new Date()) => {
 };
 
 const toQueueResponse = (jobCard, department) => {
-  const services = getDepartmentServices(jobCard, department);
+  const services = getDepartmentServices(jobCard, department)
+    .filter((service) => isApprovedForWork(service) && !isRejectedAdditionalService(service));
 
   return {
     jobCardId: jobCard.id,
@@ -295,7 +335,14 @@ const toQueueResponse = (jobCard, department) => {
       name: service.serviceName,
       price: Number(service.price),
       quantity: service.quantity,
-      isAdditional: service.isAdditional
+      isAdditional: service.isAdditional,
+      approvalStatus: service.approvalStatus
+        ? {
+          id: service.approvalStatus.id,
+          code: service.approvalStatus.statusCode,
+          name: service.approvalStatus.statusName
+        }
+        : null
     })),
     serviceNames: services.map((service) => service.serviceName),
     priority: services.some((service) => service.isAdditional) ? 'HIGH' : 'NORMAL',
@@ -361,7 +408,7 @@ const getAssignDepartment = (payload) => {
 
 const buildAssignmentServiceIds = (jobCard, department, requestedServiceIds) => {
   const departmentServices = getDepartmentServices(jobCard, department);
-  const unassignedServices = departmentServices.filter((service) => !hasAssignment(service));
+  const unassignedServices = departmentServices.filter((service) => isApprovedForWork(service) && !isRejectedAdditionalService(service) && !hasAssignment(service));
 
   if (requestedServiceIds && requestedServiceIds.length > 0) {
     const requestedIdSet = new Set(requestedServiceIds.map(Number));
@@ -523,6 +570,18 @@ const assignWork = async (jobCardId, payload, user) => {
       }
     });
 
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'work_assignments',
+      recordId: jobCard.id,
+      actionType: 'CREATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: jobCard.jobCardNo,
+      comments: `Work assigned to user ${assignedUserId}`,
+      details: []
+    });
+
     return {
       jobCardId: jobCard.id,
       category: department,
@@ -545,6 +604,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         status: true,
         jobCardService: {
           include: {
+            approvalStatus: true,
             serviceItem: {
               include: {
                 category: true
@@ -563,6 +623,10 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
 
     if (!assignment) {
       throw createHttpError(404, 'Work assignment not found');
+    }
+
+    if (!isApprovedForWork(assignment.jobCardService) || isRejectedAdditionalService(assignment.jobCardService)) {
+      throw createHttpError(400, 'Additional work must be customer approved before work can start');
     }
 
     const department = getServiceDepartment(assignment.jobCardService);
@@ -702,6 +766,18 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
       //   }
       // });
     }
+
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'work_assignments',
+      recordId: assignment.id,
+      actionType: 'UPDATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: `Assignment ${assignment.id}`,
+      comments: `Assignment status updated to ${requestedStatus}`,
+      details: buildChangeDetails(assignment, updatedAssignment, ['statusId', 'startedAt', 'completedAt'])
+    });
 
     return {
       assignment: toAssignmentResponse(updatedAssignment)

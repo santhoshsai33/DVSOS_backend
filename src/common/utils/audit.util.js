@@ -17,54 +17,54 @@ const serializeAuditValue = (value) => {
   return String(value);
 };
 
-const ensureAuditModule = async (tx, { moduleCode, moduleName }) => {
-  let existingModule = await tx.module.findUnique({
-    where: { moduleCode },
-    select: { id: true }
+const ensureAuditModule = async (
+  tx,
+  {
+    moduleCode,
+    moduleName,
+    description = null,
+    actorUserId = null
+  }
+) => {
+  const normalizedModuleCode = String(moduleCode || '').trim();
+  const normalizedModuleName = String(moduleName || normalizedModuleCode).trim();
+
+  if (!normalizedModuleCode) {
+    throw new Error('moduleCode is required for ensureAuditModule');
+  }
+
+  const existingModule = await tx.module.findUnique({
+    where: { moduleCode: normalizedModuleCode },
+    select: { id: true, moduleCode: true, moduleName: true, slug: true }
   });
 
   if (existingModule) {
     return existingModule;
   }
 
-  const baseSlug = generateSlug(moduleName || moduleCode);
-  const slug = await generateUniqueSlug(baseSlug, async (s) => {
-    const found = await tx.module.findFirst({ where: { slug: s }, select: { id: true } });
-    return !!found;
-  });
-
-  try {
-    return await tx.module.upsert({
-      where: { moduleCode },
-      update: {
-        moduleName,
-        isActive: true
-      },
-      create: {
-        moduleCode,
-        moduleName,
-        slug,
-        isActive: true
-      },
+  const baseSlug = generateSlug(normalizedModuleCode || normalizedModuleName);
+  const slug = await generateUniqueSlug(baseSlug, (candidateSlug) => {
+    return tx.module.findFirst({
+      where: { slug: candidateSlug },
       select: { id: true }
     });
-  } catch (err) {
-    if (err.code === 'P2002') {
-      const raceExisting = await tx.module.findUnique({
-        where: { moduleCode },
-        select: { id: true }
-      });
-      if (raceExisting) return raceExisting;
-    }
-    throw err;
-  }
+  });
+
+  return tx.module.create({
+    data: {
+      moduleCode: normalizedModuleCode,
+      moduleName: normalizedModuleName,
+      slug,
+      description,
+      createdById: actorUserId || null
+    },
+    select: { id: true, moduleCode: true, moduleName: true, slug: true }
+  });
 };
 
 const createAuditLog = async (
   tx,
   {
-    moduleCode = 'role-management',
-    moduleName = 'Role Management',
     tableName,
     recordId,
     actionType,
@@ -72,23 +72,27 @@ const createAuditLog = async (
     recordName,
     comments,
     details = [],
-    locationId = null,
-    moduleId = null
+    locationId = null
   }
 ) => {
-  const auditModule = moduleId ? { id: moduleId } : await ensureAuditModule(tx, { moduleCode, moduleName });
-
   const data = {
-    moduleId: auditModule.id,
-    locationId,
     tableName,
     recordId: BigInt(recordId),
     actionType,
-    performedByUserId,
     recordName: recordName || null,
     transactionId: crypto.randomUUID(),
     comments: comments || null
   };
+
+  if (performedByUserId) {
+    data.performedBy = { connect: { id: performedByUserId } };
+  } else {
+    throw new Error('performedByUserId is required for createAuditLog');
+  }
+
+  if (locationId) {
+    data.location = { connect: { id: locationId } };
+  }
 
   if (details.length > 0) {
     data.details = {

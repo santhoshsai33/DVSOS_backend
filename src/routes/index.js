@@ -28,10 +28,13 @@ const customerRoutes = require('../modules/customers/customer.routes');
 const vehicleRoutes = require('../modules/vehicles/vehicle.routes');
 const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
 const queueRoutes = require('../modules/queues/queue.routes');
+const approvalRoutes = require('../modules/approvals/approval.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 const notificationRoutes = require('../modules/notifications/notification.routes');
 const deviceTokenRoutes = require('../modules/notifications/deviceToken.routes');
+const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
+const { brandRoutes, crmBrandRoutes } = require('../modules/brands/brand.routes');
 
 router.use('/auth', authRoutes);
 router.use('/notifications', notificationRoutes);
@@ -64,5 +67,10 @@ router.use('/customers', customerRoutes);
 router.use('/vehicles', vehicleRoutes);
 router.use('/job-cards', jobCardRoutes);
 router.use('/queues', queueRoutes);
+router.use('/approvals', approvalRoutes);
+router.use('/audit-logs', auditLogRoutes);
+router.use('/admin/brands', brandRoutes);
+router.use('/brands', brandRoutes);
+router.use('/crm/brands', crmBrandRoutes);
 
 module.exports = router;

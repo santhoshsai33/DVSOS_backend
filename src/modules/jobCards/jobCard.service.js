@@ -7,6 +7,7 @@ const {
   resolveStatusIdFromCodes
 } = require('../../common/utils/status.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
+const { createAuditLog } = require('../../common/utils/audit.util');
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
 
@@ -80,7 +81,30 @@ const buildJobCardIdentifierWhere = (identifier) => {
 const normalizeServicePayload = (services = []) => {
   if (!Array.isArray(services)) return [];
 
+  const duplicateIdsWithoutNaturalKey = new Set();
+  const seenIdsWithoutNaturalKey = new Set();
   const itemMap = new Map();
+
+  services.forEach((item) => {
+    const rawServiceItemId = typeof item === 'object' ? (item.serviceItemId ?? item.id) : item;
+    const parsedServiceItemId = Number(rawServiceItemId);
+    const serviceName = typeof item === 'object' ? toTrimmedString(item.name || item.serviceName) : undefined;
+
+    if (Number.isInteger(parsedServiceItemId) && parsedServiceItemId > 0 && !serviceName) {
+      if (seenIdsWithoutNaturalKey.has(parsedServiceItemId)) {
+        duplicateIdsWithoutNaturalKey.add(parsedServiceItemId);
+      }
+
+      seenIdsWithoutNaturalKey.add(parsedServiceItemId);
+    }
+  });
+
+  if (duplicateIdsWithoutNaturalKey.size > 0) {
+    throw createHttpError(
+      400,
+      'Duplicate service item ids are ambiguous. Send each selected service with its own serviceItemId, or include serviceName for each item.'
+    );
+  }
 
   services.forEach((item) => {
     const rawServiceItemId = typeof item === 'object' ? (item.serviceItemId ?? item.id) : item;
@@ -164,7 +188,21 @@ const normalizeDepartment = (value) => {
   });
 };
 
-const normalizeRoleSlug = (roleSlug) => String(roleSlug || '').trim().toLowerCase().replace(/-/g, '_');
+const ROLE_ALIASES = {
+  body_shop: 'body_shop_supervisor',
+  bodyshop: 'body_shop_supervisor',
+  bodyshop_supervisor: 'body_shop_supervisor',
+  floor: 'floor_supervisor',
+  mechanical_supervisor: 'floor_supervisor',
+  water_wash: 'water_wash_team',
+  water_wash_supervisor: 'water_wash_team',
+  wash: 'water_wash_team'
+};
+
+const normalizeRoleSlug = (roleSlug) => {
+  const normalized = String(roleSlug || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
+  return ROLE_ALIASES[normalized] || normalized;
+};
 
 const PRIVILEGED_SERVICE_STATUS_ROLES = new Set(['admin', 'super_admin', 'manager', 'managing_director']);
 
@@ -211,6 +249,18 @@ const getQueryDepartment = (query, user) => {
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
 
+const isRejectedAdditionalService = (service) => {
+  return Boolean(service && service.isAdditional && getStatusCode(service.approvalStatus) === 'REJECTED');
+};
+
+const isApprovedForWork = (service) => {
+  if (!service || !service.isAdditional) {
+    return true;
+  }
+
+  return getStatusCode(service.approvalStatus) === 'APPROVED';
+};
+
 const isCompletedStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
   return code === 'COMPLETED' || code.endsWith('_COMPLETED');
@@ -226,6 +276,10 @@ const getDepartmentServices = (jobCard, department) => {
 };
 
 const isJobCardServiceCompleted = (service) => {
+  if (isRejectedAdditionalService(service)) {
+    return true;
+  }
+
   if (isCompletedStatusCode(getStatusCode(service.serviceStatus))) {
     return true;
   }
@@ -257,7 +311,9 @@ const arePreviousDepartmentsCompleted = (jobCard, department) => {
   const previousDepartments = DEPARTMENT_ORDER.slice(0, departmentIndex);
 
   return previousDepartments.every((previousDepartment) => {
-    const services = getDepartmentServices(jobCard, previousDepartment);
+    const services = getDepartmentServices(jobCard, previousDepartment).filter((service) => {
+      return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+    });
     return services.length === 0 || services.every(isJobCardServiceCompleted);
   });
 };
@@ -281,6 +337,10 @@ const validateServiceStatusUpdateAccess = (jobCard, service, user) => {
 
   if (!arePreviousDepartmentsCompleted(jobCard, serviceDepartment)) {
     throw createHttpError(400, 'Previous service stage must be completed before updating this service status');
+  }
+
+  if (!isApprovedForWork(service)) {
+    throw createHttpError(400, 'Additional work must be customer approved before it can be started');
   }
 
   if (isJobCardServiceCompleted(service)) {
@@ -424,12 +484,14 @@ const toAssignmentSummary = (assignment) => ({
 });
 
 const toJobCardListResponse = (jobCard, department) => {
-  const activeAssignments = (jobCard.workAssignments || []).map(toAssignmentSummary);
+  const allAssignments = (jobCard.workAssignments || []).map(toAssignmentSummary);
+  const activeAssignments = allAssignments.filter((assignment) => !assignment.completedAt);
+  const displayAssignments = allAssignments;
   const departmentAssignments = department
-    ? activeAssignments.filter((assignment) => {
+    ? displayAssignments.filter((assignment) => {
       return normalizeDepartment(assignment.service && assignment.service.category && (assignment.service.category.slug || assignment.service.category.name)) === department;
     })
-    : activeAssignments.filter((assignment) => {
+    : displayAssignments.filter((assignment) => {
       return isMechanicalCategory(assignment.service && assignment.service.category);
   });
   const assignedMechanics = Array.from(
@@ -445,6 +507,7 @@ const toJobCardListResponse = (jobCard, department) => {
     ...jobCard,
     workAssignments: activeAssignments,
     activeAssignments,
+    assignmentHistory: displayAssignments,
     assignedMechanic,
     assignedMechanics,
     technician: assignedMechanics.length > 0 ? assignedMechanics.map((mechanic) => mechanic.fullName).join(', ') : null,
@@ -484,6 +547,18 @@ const listJobCards = async (query, user) => {
     };
   }
 
+  if (query.fromDate || query.toDate) {
+    where.createdAt = {};
+    if (query.fromDate) {
+      where.createdAt.gte = new Date(query.fromDate);
+    }
+    if (query.toDate) {
+      const to = new Date(query.toDate);
+      to.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = to;
+    }
+  }
+
   if (department) {
     where.services = {
       some: {
@@ -516,9 +591,6 @@ const listJobCards = async (query, user) => {
           select: { id: true, locationName: true, locationCode: true }
         },
         workAssignments: {
-          where: {
-            completedAt: null
-          },
           include: {
             assignedUser: {
               select: {
@@ -612,6 +684,7 @@ const getJobCardById = async (id, user) => {
               category: true
             }
           },
+          approvalStatus: true,
           serviceStatus: true
         }
       },
@@ -716,6 +789,7 @@ const updateJobCard = async (id, payload, user) => {
               category: true
             }
           },
+          approvalStatus: true,
           serviceStatus: true
         }
       }
@@ -876,6 +950,7 @@ const updateJobCard = async (id, payload, user) => {
         services: {
           include: {
             serviceStatus: true,
+            approvalStatus: true,
             serviceItem: {
               include: {
                 category: true
@@ -939,8 +1014,7 @@ const updateJobCard = async (id, payload, user) => {
         }
       });
     }
-
-    return tx.jobCard.findUnique({
+    const updatedJobCard = await tx.jobCard.findUnique({
       where: { id: jobCardId },
       include: {
         customer: {
@@ -975,6 +1049,7 @@ const updateJobCard = async (id, payload, user) => {
                 category: true
               }
             },
+            approvalStatus: true,
             serviceStatus: true
           }
         },
@@ -999,6 +1074,20 @@ const updateJobCard = async (id, payload, user) => {
         }
       }
     });
+
+    await createAuditLog(tx, {
+      moduleCode: 'job-cards',
+      moduleName: 'Job Cards',
+      tableName: 'job_cards',
+      recordId: updatedJobCard.id,
+      actionType: 'UPDATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: updatedJobCard.jobCardNo,
+      comments: 'Job card updated',
+      details: []
+    });
+
+    return updatedJobCard;
   });
 };
 

@@ -2,6 +2,7 @@ const { apiResponse } = require('../../common/utils/apiResponse');
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const CUSTOMER_APPROVAL_VALUES = new Set(['YES', 'Y', 'NO', 'N']);
 
 const getServiceItemId = (item) => {
   if (!isPlainObject(item)) {
@@ -60,6 +61,7 @@ const validateIdParam = (req, res, next) => {
 
 const validateCreateJobCardPayload = (req, res, next) => {
   const { gateEntryId, expectedDeliveryAt, serviceItems, vehicleInfo, customerInfo, billing, photoCategories } = req.body || {};
+  const customerApproval = req.body.customer_approval ?? req.body.customerApproval;
   const resolvedGateEntryId = Number(gateEntryId);
 
   if (!Number.isInteger(resolvedGateEntryId) || resolvedGateEntryId <= 0) {
@@ -106,6 +108,13 @@ const validateCreateJobCardPayload = (req, res, next) => {
 
   if (photoCategories !== undefined && !Array.isArray(photoCategories)) {
     return sendValidationError(res, 'photoCategories must be an array');
+  }
+
+  if (customerApproval !== undefined && customerApproval !== null && customerApproval !== '') {
+    const normalizedApproval = String(customerApproval).trim().toUpperCase();
+    if (!CUSTOMER_APPROVAL_VALUES.has(normalizedApproval)) {
+      return sendValidationError(res, 'customer_approval must be yes or no');
+    }
   }
 
   return next();

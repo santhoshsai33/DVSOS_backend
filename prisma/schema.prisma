@@ -18,11 +18,12 @@ model ServiceCenter {
   id                Int     @id @default(autoincrement())
   serviceCenterCode String  @unique @map("service_center_code") @db.NVarChar(50)
   serviceCenterName String  @map("service_center_name") @db.NVarChar(200)
-  gstNumber         String? @map("gst_number") @db.NVarChar(30)
+  gstNumber         String  @map("gst_number") @db.NVarChar(30)
   contactPhone      String? @map("contact_phone") @db.NVarChar(20)
   contactEmail      String? @map("contact_email") @db.NVarChar(150)
   logoUrl           String? @map("logo_url") @db.NVarChar(1000)
   websiteUrl        String? @map("website_url") @db.NVarChar(255)
+  tax               String  @map("tax") @db.NVarChar(50)
 
   isActive     Boolean  @default(true) @map("is_active")
   createdById  Int?     @map("created_by")
@@ -135,7 +136,6 @@ model Module {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
 
   statuses  StatusMaster[]
-  auditLogs AuditLog[]
 
   createdBy  User? @relation("ModuleCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   modifiedBy User? @relation("ModuleModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -574,6 +574,7 @@ model JobCardApproval {
   id                Int       @id @default(autoincrement())
   jobCardId         Int       @map("job_card_id")
   statusId          Int?      @map("status_id")
+  approvalCode      String?   @map("approval_code") @db.NVarChar(30)
   approvalType      String    @map("approval_type") @db.NVarChar(30)
   totalAmount       Decimal   @default(0) @map("total_amount") @db.Decimal(10, 2)
   whatsappMessageId String?   @map("whatsapp_message_id") @db.NVarChar(255)
@@ -592,6 +593,7 @@ model JobCardApproval {
   modifiedBy User?            @relation("JobCardApprovalModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   services   JobCardService[]
 
+  @@index([approvalCode])
   @@map("job_card_approvals")
 }
 
@@ -599,6 +601,7 @@ model JobCardService {
   id               Int  @id @default(autoincrement())
   jobCardId        Int  @map("job_card_id")
   approvalId       Int? @map("approval_id")
+  parentJobCardServiceId Int? @map("parent_job_card_service_id")
   serviceItemId    Int  @map("service_item_id")
   approvalStatusId Int? @map("approval_status_id")
   serviceStatusId  Int? @map("service_status_id")
@@ -615,6 +618,8 @@ model JobCardService {
 
   jobCard         JobCard          @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approval        JobCardApproval? @relation(fields: [approvalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentService   JobCardService?  @relation("AdditionalWorkParentService", fields: [parentJobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_job_card_services_parent_job_card_service")
+  additionalServices JobCardService[] @relation("AdditionalWorkParentService")
   serviceItem     ServiceItem      @relation(fields: [serviceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approvalStatus  StatusMaster?    @relation("JobCardServiceApprovalStatus", fields: [approvalStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   serviceStatus   StatusMaster?    @relation("JobCardServiceStatus", fields: [serviceStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -622,6 +627,7 @@ model JobCardService {
   modifiedBy      User?            @relation("JobCardServiceModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   workAssignments WorkAssignment[]
 
+  @@index([parentJobCardServiceId])
   @@map("job_card_services")
 }
 
@@ -791,7 +797,6 @@ model ServiceCenterSetting {
 
 model AuditLog {
   id                BigInt   @id @default(autoincrement())
-  moduleId          Int      @map("module_id")
   locationId        Int?     @map("location_id")
   tableName         String   @map("table_name") @db.NVarChar(250)
   recordId          BigInt   @map("record_id")
@@ -804,7 +809,6 @@ model AuditLog {
 
   createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
 
-  module      Module           @relation(fields: [moduleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   location    Location?        @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   performedBy User             @relation("AuditLogPerformedBy", fields: [performedByUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   details     AuditLogDetail[]

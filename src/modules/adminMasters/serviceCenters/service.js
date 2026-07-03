@@ -10,6 +10,7 @@ const serviceCenterSelect = {
   contactEmail: true,
   logoUrl: true,
   websiteUrl: true,
+  tax: true,
   isActive: true,
   createdById: true,
   modifiedById: true,
@@ -25,11 +26,12 @@ const baseService = createAdminMasterService({
   fields: [
     { name: 'serviceCenterCode', type: 'string' },
     { name: 'serviceCenterName', type: 'string', required: true },
-    { name: 'gstNumber', type: 'string' },
+    { name: 'gstNumber', type: 'string', required: true },
     { name: 'contactPhone', type: 'string' },
     { name: 'contactEmail', type: 'string' },
     { name: 'logoUrl', type: 'string' },
     { name: 'websiteUrl', type: 'string' },
+    { name: 'tax', type: 'string', required: true },
     { name: 'isActive', type: 'boolean' }
   ],
   hasIsActive: true,

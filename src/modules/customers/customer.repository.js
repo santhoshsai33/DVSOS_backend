@@ -99,8 +99,8 @@ const findCustomerByMobile = (mobileNo, excludeId = null) => {
   });
 };
 
-const updateCustomer = (id, data) => {
-  return prisma.customer.update({
+const updateCustomer = (id, data, tx = prisma) => {
+  return tx.customer.update({
     where: { id },
     data,
     select: customerSelect

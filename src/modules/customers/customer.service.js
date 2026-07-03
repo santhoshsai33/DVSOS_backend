@@ -1,4 +1,6 @@
 const customerRepository = require('./customer.repository');
+const prisma = require('../../config/db');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -83,9 +85,23 @@ const updateCustomer = async (id, payload, modifiedBy) => {
     dataToUpdate.locationId = parseInt(payload.locationId, 10);
   }
 
-  const updatedCustomer = await customerRepository.updateCustomer(customer.id, dataToUpdate);
+  return prisma.$transaction(async (tx) => {
+    const updatedCustomer = await customerRepository.updateCustomer(customer.id, dataToUpdate, tx);
 
-  return updatedCustomer;
+    await createAuditLog(tx, {
+      moduleCode: 'customers',
+      moduleName: 'Customers',
+      tableName: 'customers',
+      recordId: updatedCustomer.id,
+      actionType: 'UPDATE',
+      performedByUserId: modifiedBy,
+      recordName: updatedCustomer.fullName,
+      comments: 'Customer details updated',
+      details: buildChangeDetails(customer, updatedCustomer, Object.keys(dataToUpdate))
+    });
+
+    return updatedCustomer;
+  });
 };
 
 const updateCustomerStatus = async (id, isActive, modifiedBy) => {
@@ -95,12 +111,26 @@ const updateCustomerStatus = async (id, isActive, modifiedBy) => {
     throw createHttpError(400, `Customer is already ${isActive ? 'active' : 'inactive'}`);
   }
 
-  const updatedCustomer = await customerRepository.updateCustomer(customer.id, {
-    isActive,
-    modifiedById: modifiedBy
-  });
+  return prisma.$transaction(async (tx) => {
+    const updatedCustomer = await customerRepository.updateCustomer(customer.id, {
+      isActive,
+      modifiedById: modifiedBy
+    }, tx);
 
-  return updatedCustomer;
+    await createAuditLog(tx, {
+      moduleCode: 'customers',
+      moduleName: 'Customers',
+      tableName: 'customers',
+      recordId: updatedCustomer.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: modifiedBy,
+      recordName: updatedCustomer.fullName,
+      comments: isActive ? 'Customer activated' : 'Customer deactivated',
+      details: buildChangeDetails(customer, updatedCustomer, ['isActive', 'modifiedById'])
+    });
+
+    return updatedCustomer;
+  });
 };
 
 module.exports = {

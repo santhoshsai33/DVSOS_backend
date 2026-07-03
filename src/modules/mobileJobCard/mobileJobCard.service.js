@@ -12,7 +12,13 @@ const {
 } = require('../../common/utils/status.util');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
+const JOB_CARD_APPROVED_STATUS_CODES = ['APPROVED'];
+const JOB_CARD_REJECTED_STATUS_CODES = ['REJECTED'];
 const JOB_CARD_SERVICE_PENDING_STATUS_CODES = ['PENDING'];
+const JOB_CARD_SERVICE_REJECTED_STATUS_CODES = ['REJECTED'];
+const APPROVAL_APPROVED_STATUS_CODES = ['APPROVED'];
+const APPROVAL_REJECTED_STATUS_CODES = ['REJECTED'];
+const INITIAL_APPROVAL_TYPE = 'INITIAL_ESTIMATE';
 
 const createHttpError = (statusCode, message, data = {}) => {
   const error = new Error(message);
@@ -68,8 +74,24 @@ const parseDateQuery = (value, fieldName, endOfDay = false) => {
 };
 
 const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
+
+const hasModule = (user, module) => {
+  return Boolean(user && Array.isArray(user.modules) && user.modules.includes(module));
+};
+
+const hasAnyModule = (user, modules) => {
+  return modules.some((module) => hasModule(user, module));
+};
+
 const isLocationScopedViewer = (user) => {
-  return ['crm_team', 'manager', 'managing_director'].includes(normalizeRoleSlug(user && user.roleSlug));
+  return hasAnyModule(user, ['crm-team', 'manager', 'managing-director'])
+    || ['crm_team', 'crm', 'crm_user', 'crm_executive', 'crm_staff', 'manager', 'managing_director']
+      .includes(normalizeRoleSlug(user && user.roleSlug));
+};
+
+const isCrmViewer = (user) => {
+  return hasModule(user, 'crm-team')
+    || ['crm_team', 'crm', 'crm_user', 'crm_executive', 'crm_staff'].includes(normalizeRoleSlug(user && user.roleSlug));
 };
 
 const resolveLocationFilter = (query, user) => {
@@ -128,8 +150,46 @@ const generateJobCardNo = async (tx) => {
   });
 };
 
-const resolveVehicleBrandId = async (tx, make, actorUserId) => {
-  const brandName = toTrimmedString(make);
+const getVehicleBrandIdFromPayload = (vehicleInfo = {}) => {
+  const rawBrandId = vehicleInfo.brandId
+    ?? vehicleInfo.brand_id
+    ?? vehicleInfo.vehicleBrandId
+    ?? vehicleInfo.vehicle_brand_id
+    ?? (vehicleInfo.make !== undefined && vehicleInfo.make !== null && /^\d+$/.test(String(vehicleInfo.make).trim()) ? vehicleInfo.make : undefined)
+    ?? (vehicleInfo.brandName !== undefined && vehicleInfo.brandName !== null && /^\d+$/.test(String(vehicleInfo.brandName).trim()) ? vehicleInfo.brandName : undefined);
+
+  if (rawBrandId === undefined || rawBrandId === null || rawBrandId === '') {
+    return undefined;
+  }
+
+  const brandId = Number(rawBrandId);
+  if (!Number.isInteger(brandId) || brandId <= 0) {
+    throw createHttpError(400, 'vehicleInfo.brandId must be a positive integer');
+  }
+
+  return brandId;
+};
+
+const resolveVehicleBrandId = async (tx, vehicleInfo = {}, actorUserId) => {
+  const requestedBrandId = getVehicleBrandIdFromPayload(vehicleInfo);
+
+  if (requestedBrandId !== undefined) {
+    const existingBrand = await tx.vehicleBrand.findFirst({
+      where: {
+        id: requestedBrandId,
+        isActive: true
+      },
+      select: { id: true }
+    });
+
+    if (!existingBrand) {
+      throw createHttpError(400, 'Selected vehicle brand is invalid or inactive');
+    }
+
+    return existingBrand.id;
+  }
+
+  const brandName = toTrimmedString(vehicleInfo.make || vehicleInfo.brandName);
 
   if (!brandName) {
     return undefined;
@@ -199,7 +259,7 @@ const buildVehicleUpdateData = async (tx, vehicleInfo = {}, actorUserId) => {
     data.engineNo = engineNo;
   }
 
-  const brandId = await resolveVehicleBrandId(tx, vehicleInfo.make || vehicleInfo.brandName, actorUserId);
+  const brandId = await resolveVehicleBrandId(tx, vehicleInfo, actorUserId);
   if (brandId !== undefined) {
     data.brandId = brandId;
   }
@@ -251,9 +311,10 @@ const buildCustomerUpdateData = (customerInfo = {}, actorUserId) => {
   return data;
 };
 
-const buildBillingSummary = (billing = {}, serviceSubtotal) => {
+const buildBillingSummary = (billing = {}, serviceSubtotal, defaultTaxRate = 0) => {
   const discountAmount = Math.max(0, toOptionalNumber(billing.discountAmount ?? billing.discount) || 0);
-  const taxRate = Math.max(0, toOptionalNumber(billing.taxRate) || 0);
+  const providedTaxRate = toOptionalNumber(billing.taxRate);
+  const taxRate = Math.max(0, providedTaxRate !== undefined ? providedTaxRate : defaultTaxRate);
   const taxAmount = Math.max(0, toOptionalNumber(billing.taxAmount) ?? ((serviceSubtotal * taxRate) / 100));
   const finalAmount = Math.max(0, toOptionalNumber(billing.finalAmount) ?? (serviceSubtotal + taxAmount - discountAmount));
   const discountReason = toTrimmedString(billing.discountReason);
@@ -269,6 +330,35 @@ const buildBillingSummary = (billing = {}, serviceSubtotal) => {
 };
 
 const buildAdditionalNotes = (payload) => toTrimmedString(payload.additionalNotes) || null;
+
+const normalizeCustomerApproval = (payload = {}) => {
+  const rawValue = payload.customer_approval ?? payload.customerApproval;
+
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return null;
+  }
+
+  const normalized = String(rawValue).trim().toUpperCase();
+  if (['YES', 'Y'].includes(normalized)) {
+    return 'APPROVED';
+  }
+
+  if (['NO', 'N'].includes(normalized)) {
+    return 'REJECTED';
+  }
+
+  throw createHttpError(400, 'customer_approval must be yes or no');
+};
+
+const resolveRequiredStatusId = async (tx, moduleCode, statusCodes, label) => {
+  const statusId = await resolveStatusIdFromCodes(tx, moduleCode, statusCodes);
+
+  if (!statusId) {
+    throw createHttpError(500, `${label} status is not configured`);
+  }
+
+  return statusId;
+};
 
 const inferPhotoCategory = (file, index, photoCategories = []) => {
   const fieldCategory = Array.isArray(photoCategories) ? photoCategories[index] : null;
@@ -426,7 +516,12 @@ const pendingQueueSelect = {
     select: {
       id: true,
       locationCode: true,
-      locationName: true
+      locationName: true,
+      serviceCenter: {
+        select: {
+          tax: true
+        }
+      }
     }
   },
   jobCards: {
@@ -468,7 +563,7 @@ const toQueueEntryResponse = (entry) => ({
       id: entry.vehicle.id,
       registrationNumber: entry.vehicle.registrationNo,
       model: entry.vehicle.model,
-      make: entry.vehicle.brand ? entry.vehicle.brand.name : null,
+      brand: toBrandResponse(entry.vehicle.brand),
       variant: entry.vehicle.variant,
       fuelType: entry.vehicle.fuelType,
       color: entry.vehicle.vehicleColor,
@@ -476,7 +571,14 @@ const toQueueEntryResponse = (entry) => ({
       engineNo: entry.vehicle.engineNo
     }
     : null,
-  location: entry.location || null,
+  location: entry.location
+    ? {
+      id: entry.location.id,
+      locationCode: entry.location.locationCode,
+      locationName: entry.location.locationName,
+      taxRate: Number(entry.location.serviceCenter?.tax) || 0
+    }
+    : null,
   canCreateJobCard: !entry.jobCards || entry.jobCards.length === 0
 });
 
@@ -591,6 +693,13 @@ const toStatusResponse = (status) => {
   };
 };
 
+const toBrandResponse = (brand) => brand
+  ? {
+    id: brand.id,
+    name: brand.name
+  }
+  : null;
+
 const toJobCardListResponse = (jobCard) => ({
   id: jobCard.id,
   jobCardNo: jobCard.jobCardNo,
@@ -641,7 +750,7 @@ const toJobCardListResponse = (jobCard) => ({
       id: jobCard.vehicle.id,
       registrationNumber: jobCard.vehicle.registrationNo,
       model: jobCard.vehicle.model,
-      make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+      brand: toBrandResponse(jobCard.vehicle.brand),
       variant: jobCard.vehicle.variant,
       fuelType: jobCard.vehicle.fuelType,
       color: jobCard.vehicle.vehicleColor,
@@ -772,8 +881,7 @@ const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
     vehicleSpecifications: jobCard.vehicle
       ? {
         id: jobCard.vehicle.id,
-        make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
-        brand: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+        brand: toBrandResponse(jobCard.vehicle.brand),
         model: jobCard.vehicle.model,
         variant: jobCard.vehicle.variant,
         fuelType: jobCard.vehicle.fuelType,
@@ -832,9 +940,7 @@ const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
 };
 
 const resolveCreatedByFilter = (query, user) => {
-  const roleSlug = normalizeRoleSlug(user && user.roleSlug);
-
-  if (roleSlug === 'crm_team') {
+  if (isCrmViewer(user)) {
     return Number(user.userId);
   }
 
@@ -1223,15 +1329,26 @@ const getServiceItemSlug = (item) => {
 
 const normalizeServiceItems = (serviceItems) => {
   const namesById = new Map();
+  const duplicateIdsWithoutNaturalKey = new Set();
+  const seenIdsWithoutNaturalKey = new Set();
 
   serviceItems.forEach((item) => {
     const serviceItemId = getServiceItemId(item);
     const serviceName = getServiceItemName(item);
+    const serviceSlug = getServiceItemSlug(item);
 
     if (Number.isInteger(serviceItemId) && serviceItemId > 0 && serviceName) {
       const nameSet = namesById.get(serviceItemId) || new Set();
       nameSet.add(serviceName.toLowerCase());
       namesById.set(serviceItemId, nameSet);
+    }
+
+    if (Number.isInteger(serviceItemId) && serviceItemId > 0 && !serviceName && !serviceSlug) {
+      if (seenIdsWithoutNaturalKey.has(serviceItemId)) {
+        duplicateIdsWithoutNaturalKey.add(serviceItemId);
+      }
+
+      seenIdsWithoutNaturalKey.add(serviceItemId);
     }
   });
 
@@ -1240,6 +1357,13 @@ const normalizeServiceItems = (serviceItems) => {
       .filter(([, nameSet]) => nameSet.size > 1)
       .map(([serviceItemId]) => serviceItemId)
   );
+
+  if (duplicateIdsWithoutNaturalKey.size > 0) {
+    throw createHttpError(
+      400,
+      'Duplicate service item ids are ambiguous. Send each selected service with its own serviceItemId, or include serviceName/serviceSlug for each item.'
+    );
+  }
   const itemMap = new Map();
 
   serviceItems.forEach((item) => {
@@ -1310,7 +1434,7 @@ const toJobCardResponse = (jobCard) => ({
       id: jobCard.vehicle.id,
       registrationNumber: jobCard.vehicle.registrationNo,
       model: jobCard.vehicle.model,
-      make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+      brand: toBrandResponse(jobCard.vehicle.brand),
       variant: jobCard.vehicle.variant,
       fuelType: jobCard.vehicle.fuelType,
       color: jobCard.vehicle.vehicleColor,
@@ -1345,6 +1469,15 @@ const createFromGateEntry = async (payload, user, files = []) => {
       locationId: true,
       customerId: true,
       vehicleId: true,
+      location: {
+        select: {
+          serviceCenter: {
+            select: {
+              tax: true
+            }
+          }
+        }
+      },
       jobCards: {
         select: {
           id: true,
@@ -1428,7 +1561,9 @@ const createFromGateEntry = async (payload, user, files = []) => {
   const serviceSubtotal = resolvedServiceItems.reduce((sum, item) => {
     return sum + (item.price * item.quantity);
   }, 0);
-  const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal);
+  const serviceCenterTax = Number(gateEntry.location?.serviceCenter?.tax) || 0;
+  const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal, serviceCenterTax);
+  const customerApprovalDecision = normalizeCustomerApproval(payload);
   const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
   const auditModuleId = await resolveJobCardAuditModuleId(user.userId);
 
@@ -1479,16 +1614,48 @@ const createFromGateEntry = async (payload, user, files = []) => {
       });
     }
 
-    const currentStatusId = await resolveStatusIdFromCodes(
+    let currentStatusId = await resolveStatusIdFromCodes(
       tx,
       STATUS_MODULE_CODES.JOB_CARD_STATUS,
       JOB_CARD_CREATED_STATUS_CODES
     );
-    const pendingServiceStatusId = await resolveStatusIdFromCodes(
+    let approvalStatusId = null;
+    let serviceApprovalStatusId = null;
+    let serviceStatusId = await resolveStatusIdFromCodes(
       tx,
       STATUS_MODULE_CODES.JOB_CARD_SERVICE,
       JOB_CARD_SERVICE_PENDING_STATUS_CODES
     );
+
+    if (customerApprovalDecision) {
+      const isApproved = customerApprovalDecision === 'APPROVED';
+      const approvalStatusCodes = isApproved ? APPROVAL_APPROVED_STATUS_CODES : APPROVAL_REJECTED_STATUS_CODES;
+      const jobCardStatusCodes = isApproved ? JOB_CARD_APPROVED_STATUS_CODES : JOB_CARD_REJECTED_STATUS_CODES;
+
+      approvalStatusId = await resolveRequiredStatusId(
+        tx,
+        STATUS_MODULE_CODES.APPROVAL_STATUS,
+        approvalStatusCodes,
+        `${customerApprovalDecision.toLowerCase()} approval`
+      );
+      serviceApprovalStatusId = approvalStatusId;
+      currentStatusId = await resolveRequiredStatusId(
+        tx,
+        STATUS_MODULE_CODES.JOB_CARD_STATUS,
+        jobCardStatusCodes,
+        `${customerApprovalDecision.toLowerCase()} job card`
+      );
+
+      if (!isApproved) {
+        serviceStatusId = await resolveRequiredStatusId(
+          tx,
+          STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+          JOB_CARD_SERVICE_REJECTED_STATUS_CODES,
+          'Rejected job card service'
+        );
+      }
+    }
+
     const jobCardNo = await generateJobCardNo(tx);
     const jobCardSlug = await createUniqueSlug(tx, 'jobCard', jobCardNo);
     const additionalNotes = buildAdditionalNotes(payload);
@@ -1503,6 +1670,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
         vehicleId: gateEntry.vehicleId,
         expectedDeliveryAt,
         currentStatusId,
+        approvalStatusId,
         totalEstimate: billingSummary.finalAmount,
         serviceSubtotal: billingSummary.serviceSubtotal,
         taxRate: billingSummary.taxRate,
@@ -1520,15 +1688,47 @@ const createFromGateEntry = async (payload, user, files = []) => {
       }
     });
 
+    const approval = customerApprovalDecision
+      ? await tx.jobCardApproval.create({
+        data: {
+          jobCardId: jobCard.id,
+          statusId: approvalStatusId,
+          approvalType: INITIAL_APPROVAL_TYPE,
+          totalAmount: billingSummary.finalAmount,
+          customerResponse: String(payload.customer_approval ?? payload.customerApproval).trim(),
+          sentAt: new Date(),
+          respondedAt: new Date(),
+          createdById: user.userId || null
+        },
+        select: {
+          id: true,
+          approvalType: true,
+          totalAmount: true,
+          customerResponse: true,
+          sentAt: true,
+          respondedAt: true,
+          status: {
+            select: {
+              id: true,
+              statusCode: true,
+              statusName: true
+            }
+          }
+        }
+      })
+      : null;
+
     await tx.jobCardService.createMany({
       data: resolvedServiceItems.map((item) => {
         return {
           jobCardId: jobCard.id,
+          approvalId: approval ? approval.id : null,
           serviceItemId: item.serviceItemId,
+          approvalStatusId: serviceApprovalStatusId,
           serviceName: item.serviceName,
           price: item.price,
           quantity: item.quantity,
-          serviceStatusId: pendingServiceStatusId,
+          serviceStatusId,
           isAdditional: false,
           createdById: user.userId || null
         };
@@ -1654,7 +1854,18 @@ const createFromGateEntry = async (payload, user, files = []) => {
           fileName: row.fileName
         }))
       },
-      nextAction: 'JOB_CARD_CREATED'
+      approval: approval
+        ? {
+          id: approval.id,
+          type: approval.approvalType,
+          status: toStatusResponse(approval.status),
+          totalAmount: Number(approval.totalAmount),
+          customerResponse: approval.customerResponse,
+          sentAt: approval.sentAt,
+          respondedAt: approval.respondedAt
+        }
+        : null,
+      nextAction: customerApprovalDecision ? `CUSTOMER_${customerApprovalDecision}` : 'JOB_CARD_CREATED'
     };
   }, { timeout: 20000 });
 };

@@ -3,7 +3,7 @@ const categoryService = require('./service-category.service');
 
 const createCategory = async (req, res, next) => {
   try {
-    const category = await categoryService.createCategory(req.body);
+    const category = await categoryService.createCategory(req.body, req.user.userId);
 
     return apiResponse(res, {
       statusCode: 201,
@@ -17,7 +17,7 @@ const createCategory = async (req, res, next) => {
 
 const updateCategory = async (req, res, next) => {
   try {
-    const category = await categoryService.updateCategory(req.params.id, req.body);
+    const category = await categoryService.updateCategory(req.params.id, req.body, req.user.userId);
 
     return apiResponse(res, {
       message: 'Service category updated successfully',
@@ -57,7 +57,7 @@ const getCategoryDetail = async (req, res, next) => {
 
 const updateCategoryStatus = async (req, res, next) => {
   try {
-    const category = await categoryService.updateCategoryStatus(req.params.id, req.body, req.query);
+    const category = await categoryService.updateCategoryStatus(req.params.id, req.body, req.query, req.user.userId);
 
     return apiResponse(res, {
       message: category.isActive

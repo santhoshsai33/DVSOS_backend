@@ -1,5 +1,7 @@
 const categoryRepository = require('./service-category.repository');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
+const prisma = require('../../config/db');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const VIEW_ACTIVE_ONLY_ROLES = new Set([
   'crm_team',
@@ -93,27 +95,68 @@ const resolveCategorySlug = async ({ name, slug, excludeId }) => {
   });
 };
 
-const createCategory = async ({ name, slug, description }) => {
+const createCategory = async ({ name, slug, description }, actorUserId) => {
   const normalizedName = name.trim();
   const normalizedSlug = await resolveCategorySlug({ name: normalizedName, slug });
 
-  return categoryRepository.createCategory({
-    name: normalizedName,
-    slug: normalizedSlug,
-    description: description ? description.trim() : null
+  return prisma.$transaction(async (tx) => {
+    const data = {
+      name: normalizedName,
+      slug: normalizedSlug,
+      description: description ? description.trim() : null
+    };
+
+    const category = await categoryRepository.createCategory(data, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'service-categories',
+      moduleName: 'Service Categories',
+      tableName: 'service_categories',
+      recordId: category.id,
+      actionType: 'CREATE',
+      performedByUserId: actorUserId,
+      recordName: category.name,
+      comments: 'Service category created',
+      details: Object.entries(data).map(([fieldName, newValue]) => ({
+        fieldName,
+        oldValue: null,
+        newValue,
+        dataType: typeof newValue
+      }))
+    });
+
+    return category;
   });
 };
 
-const updateCategory = async (identifier, { name, slug, description }) => {
+const updateCategory = async (identifier, { name, slug, description }, actorUserId) => {
   const category = await ensureCategoryExistsByIdentifier(identifier);
 
   const normalizedName = name.trim();
   const normalizedSlug = await resolveCategorySlug({ name: normalizedName, slug, excludeId: category.id });
 
-  return categoryRepository.updateCategory(category.id, {
-    name: normalizedName,
-    slug: normalizedSlug,
-    description: description ? description.trim() : null
+  return prisma.$transaction(async (tx) => {
+    const data = {
+      name: normalizedName,
+      slug: normalizedSlug,
+      description: description ? description.trim() : null
+    };
+
+    const updatedCategory = await categoryRepository.updateCategory(category.id, data, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'service-categories',
+      moduleName: 'Service Categories',
+      tableName: 'service_categories',
+      recordId: updatedCategory.id,
+      actionType: 'UPDATE',
+      performedByUserId: actorUserId,
+      recordName: updatedCategory.name,
+      comments: 'Service category updated',
+      details: buildChangeDetails(category, updatedCategory, Object.keys(data))
+    });
+
+    return updatedCategory;
   });
 };
 
@@ -145,9 +188,9 @@ const getCategoryDetail = async (identifier, user) => {
   return ensureCategoryExistsByIdentifier(identifier, shouldRestrictToActive(user));
 };
 
-const updateCategoryStatus = async (id, { isActive }, query = {}) => {
+const updateCategoryStatus = async (id, { isActive }, query = {}, actorUserId) => {
   const categoryId = Number(id);
-  await ensureCategoryExists(categoryId);
+  const currentCategory = await ensureCategoryExists(categoryId);
 
   if (!isActive) {
     const activeServiceItemCount = await categoryRepository.countActiveServiceItems(categoryId);
@@ -161,11 +204,43 @@ const updateCategoryStatus = async (id, { isActive }, query = {}) => {
     }
 
     if (activeServiceItemCount > 0 && force) {
-      return categoryRepository.deactivateCategoryAndItems(categoryId);
+      return prisma.$transaction(async (tx) => {
+        const category = await categoryRepository.deactivateCategoryAndItems(categoryId, tx);
+        
+        await createAuditLog(tx, {
+          moduleCode: 'service-categories',
+          moduleName: 'Service Categories',
+          tableName: 'service_categories',
+          recordId: category.id,
+          actionType: 'DEACTIVATE',
+          performedByUserId: actorUserId,
+          recordName: category.name,
+          comments: 'Service category deactivated with items',
+          details: buildChangeDetails(currentCategory, category, ['isActive'])
+        });
+
+        return category;
+      });
     }
   }
 
-  return categoryRepository.updateCategory(categoryId, { isActive });
+  return prisma.$transaction(async (tx) => {
+    const category = await categoryRepository.updateCategory(categoryId, { isActive }, tx);
+
+    await createAuditLog(tx, {
+      moduleCode: 'service-categories',
+      moduleName: 'Service Categories',
+      tableName: 'service_categories',
+      recordId: category.id,
+      actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+      performedByUserId: actorUserId,
+      recordName: category.name,
+      comments: isActive ? 'Service category activated' : 'Service category deactivated',
+      details: buildChangeDetails(currentCategory, category, ['isActive'])
+    });
+
+    return category;
+  });
 };
 
 module.exports = {

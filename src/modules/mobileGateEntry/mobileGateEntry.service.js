@@ -89,10 +89,27 @@ const normalizeRegistrationOrThrow = (registrationNumber) => {
 };
 
 const normalizeRoleSlug = (slug) => String(slug || '').trim().toLowerCase().replace(/-/g, '_');
-const isAdmin = (user) => user && ['admin', 'super_admin'].includes(normalizeRoleSlug(user.roleSlug));
-const isGateSecurity = (user) => user && ['gate_security', 'gatekeeper'].includes(normalizeRoleSlug(user.roleSlug));
+
+const hasModule = (user, module) => {
+  return Boolean(user && Array.isArray(user.modules) && user.modules.includes(module));
+};
+
+const hasAnyModule = (user, modules) => {
+  return modules.some((module) => hasModule(user, module));
+};
+
+const isAdmin = (user) => {
+  return hasModule(user, 'admin') || (user && ['admin', 'super_admin'].includes(normalizeRoleSlug(user.roleSlug)));
+};
+
+const isGateSecurity = (user) => {
+  return hasModule(user, 'gate-security') || (user && ['gate_security', 'gatekeeper'].includes(normalizeRoleSlug(user.roleSlug)));
+};
+
 const isLocationScopedViewer = (user) => {
-  return ['gate_security', 'gatekeeper', 'crm_team', 'manager', 'managing_director'].includes(normalizeRoleSlug(user && user.roleSlug));
+  return hasAnyModule(user, ['gate-security', 'crm-team', 'manager', 'managing-director'])
+    || ['gate_security', 'gatekeeper', 'crm_team', 'crm', 'crm_user', 'crm_executive', 'crm_staff', 'manager', 'managing_director']
+      .includes(normalizeRoleSlug(user && user.roleSlug));
 };
 
 const resolveLocationId = (payload, user, { allowAdminBody = false } = {}) => {

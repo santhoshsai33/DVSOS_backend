@@ -27,15 +27,15 @@ const buildCategoryWhere = ({ search, isActive } = {}) => {
   return where;
 };
 
-const createCategory = (data) => {
-  return prisma.serviceCategory.create({
+const createCategory = (data, tx = prisma) => {
+  return tx.serviceCategory.create({
     data,
     select: categorySelect
   });
 };
 
-const updateCategory = (id, data) => {
-  return prisma.serviceCategory.update({
+const updateCategory = (id, data, tx = prisma) => {
+  return tx.serviceCategory.update({
     where: { id },
     data,
     select: categorySelect

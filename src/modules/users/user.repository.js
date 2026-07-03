@@ -46,8 +46,9 @@ const userWithRoleForChecksSelect = {
   }
 };
 
-const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
+const buildUserWhere = ({ search, roleId, locationId, isActive, excludedModules, excludedUserId, fromDate, toDate } = {}) => {
   const where = {};
+  const roleFilters = [];
 
   if (typeof isActive === 'boolean') {
     where.isActive = isActive;
@@ -59,6 +60,46 @@ const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
 
   if (locationId) {
     where.locationId = locationId;
+  }
+
+  if (excludedUserId) {
+    where.id = {
+      not: excludedUserId
+    };
+  }
+
+  if (fromDate || toDate) {
+    where.createdAt = {};
+    if (fromDate) {
+      where.createdAt.gte = new Date(fromDate);
+    }
+    if (toDate) {
+      const endOfDay = new Date(toDate);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = endOfDay;
+    }
+  }
+
+  if (excludedModules && excludedModules.length > 0) {
+    roleFilters.push({
+      NOT: {
+        rolePermissions: {
+          some: {
+            menu: {
+              module: {
+                in: excludedModules
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  if (roleFilters.length > 0) {
+    where.role = {
+      AND: roleFilters
+    };
   }
 
   if (search) {
@@ -74,15 +115,15 @@ const buildUserWhere = ({ search, roleId, locationId, isActive } = {}) => {
   return where;
 };
 
-const createUser = (data) => {
-  return prisma.user.create({
+const createUser = (data, tx = prisma) => {
+  return tx.user.create({
     data,
     select: userSelect
   });
 };
 
-const updateUser = (id, data) => {
-  return prisma.user.update({
+const updateUser = (id, data, tx = prisma) => {
+  return tx.user.update({
     where: { id },
     data,
     select: userSelect
@@ -182,8 +223,17 @@ const countActiveAdmins = () => {
   });
 };
 
-const listUsers = async ({ page, limit, search, roleId, locationId, isActive }) => {
-  const where = buildUserWhere({ search, roleId, locationId, isActive });
+const listUsers = async ({ page, limit, search, roleId, locationId, isActive, excludedModules, excludedUserId, fromDate, toDate }) => {
+  const where = buildUserWhere({
+    search,
+    roleId,
+    locationId,
+    isActive,
+    excludedModules,
+    excludedUserId,
+    fromDate,
+    toDate
+  });
   const skip = (page - 1) * limit;
 
   const [users, total] = await prisma.$transaction([
