@@ -144,8 +144,44 @@ const generateJobCardNo = async (tx) => {
   });
 };
 
-const resolveVehicleBrandId = async (tx, make, actorUserId) => {
-  const brandName = toTrimmedString(make);
+const getVehicleBrandIdFromPayload = (vehicleInfo = {}) => {
+  const rawBrandId = vehicleInfo.brandId
+    ?? vehicleInfo.brand_id
+    ?? vehicleInfo.vehicleBrandId
+    ?? vehicleInfo.vehicle_brand_id;
+
+  if (rawBrandId === undefined || rawBrandId === null || rawBrandId === '') {
+    return undefined;
+  }
+
+  const brandId = Number(rawBrandId);
+  if (!Number.isInteger(brandId) || brandId <= 0) {
+    throw createHttpError(400, 'vehicleInfo.brandId must be a positive integer');
+  }
+
+  return brandId;
+};
+
+const resolveVehicleBrandId = async (tx, vehicleInfo = {}, actorUserId) => {
+  const requestedBrandId = getVehicleBrandIdFromPayload(vehicleInfo);
+
+  if (requestedBrandId !== undefined) {
+    const existingBrand = await tx.vehicleBrand.findFirst({
+      where: {
+        id: requestedBrandId,
+        isActive: true
+      },
+      select: { id: true }
+    });
+
+    if (!existingBrand) {
+      throw createHttpError(400, 'Selected vehicle brand is invalid or inactive');
+    }
+
+    return existingBrand.id;
+  }
+
+  const brandName = toTrimmedString(vehicleInfo.make || vehicleInfo.brandName);
 
   if (!brandName) {
     return undefined;
@@ -215,7 +251,7 @@ const buildVehicleUpdateData = async (tx, vehicleInfo = {}, actorUserId) => {
     data.engineNo = engineNo;
   }
 
-  const brandId = await resolveVehicleBrandId(tx, vehicleInfo.make || vehicleInfo.brandName, actorUserId);
+  const brandId = await resolveVehicleBrandId(tx, vehicleInfo, actorUserId);
   if (brandId !== undefined) {
     data.brandId = brandId;
   }
