@@ -42,6 +42,19 @@ const listBrands = async (req, res, next) => {
   }
 };
 
+const getBrandDropdown = async (req, res, next) => {
+  try {
+    const brands = await brandService.getBrandDropdown();
+
+    return apiResponse(res, {
+      message: 'Brand dropdown fetched successfully',
+      data: { brands }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const updateBrandStatus = async (req, res, next) => {
   try {
     const brand = await brandService.updateBrandStatus(req.params.id, req.body, req.user.userId);
@@ -61,5 +74,6 @@ module.exports = {
   createBrand,
   updateBrand,
   listBrands,
+  getBrandDropdown,
   updateBrandStatus
 };

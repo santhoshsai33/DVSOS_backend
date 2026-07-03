@@ -39,7 +39,53 @@ const getVehicle = async (req, res, next) => {
   }
 };
 
+const updateVehicle = async (req, res, next) => {
+  try {
+    const updatedVehicle = await vehicleService.updateVehicle(req.params.id, req.body, req.user);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Vehicle updated successfully',
+      data: updatedVehicle
+    });
+  } catch (error) {
+    if (error.message === 'Vehicle not found' || error.message === 'Unauthorized to update this Vehicle') {
+      return apiResponse(res, {
+        statusCode: error.message === 'Vehicle not found' ? 404 : 403,
+        success: false,
+        message: error.message
+      });
+    }
+    return next(error);
+  }
+};
+
+const getVehicleHistory = async (req, res, next) => {
+  try {
+    const history = await vehicleService.getVehicleHistory(req.params.id, req.query, req.user);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Vehicle history retrieved successfully',
+      data: history
+    });
+  } catch (error) {
+    if (error.message === 'Vehicle not found') {
+      return apiResponse(res, {
+        statusCode: 404,
+        success: false,
+        message: error.message
+      });
+    }
+    return next(error);
+  }
+};
+
 module.exports = {
   getVehicles,
-  getVehicle
+  getVehicle,
+  updateVehicle,
+  getVehicleHistory
 };
