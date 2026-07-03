@@ -603,7 +603,7 @@ model JobCardService {
 
   jobCard         JobCard          @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approval        JobCardApproval? @relation(fields: [approvalId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  parentService   JobCardService?  @relation("AdditionalWorkParentService", fields: [parentJobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentService   JobCardService?  @relation("AdditionalWorkParentService", fields: [parentJobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "FK_job_card_services_parent_job_card_service")
   additionalServices JobCardService[] @relation("AdditionalWorkParentService")
   serviceItem     ServiceItem      @relation(fields: [serviceItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approvalStatus  StatusMaster?    @relation("JobCardServiceApprovalStatus", fields: [approvalStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
