@@ -267,9 +267,10 @@ const buildCustomerUpdateData = (customerInfo = {}, actorUserId) => {
   return data;
 };
 
-const buildBillingSummary = (billing = {}, serviceSubtotal) => {
+const buildBillingSummary = (billing = {}, serviceSubtotal, defaultTaxRate = 0) => {
   const discountAmount = Math.max(0, toOptionalNumber(billing.discountAmount ?? billing.discount) || 0);
-  const taxRate = Math.max(0, toOptionalNumber(billing.taxRate) || 0);
+  const providedTaxRate = toOptionalNumber(billing.taxRate);
+  const taxRate = Math.max(0, providedTaxRate !== undefined ? providedTaxRate : defaultTaxRate);
   const taxAmount = Math.max(0, toOptionalNumber(billing.taxAmount) ?? ((serviceSubtotal * taxRate) / 100));
   const finalAmount = Math.max(0, toOptionalNumber(billing.finalAmount) ?? (serviceSubtotal + taxAmount - discountAmount));
   const discountReason = toTrimmedString(billing.discountReason);
@@ -1377,6 +1378,15 @@ const createFromGateEntry = async (payload, user, files = []) => {
       locationId: true,
       customerId: true,
       vehicleId: true,
+      location: {
+        select: {
+          serviceCenter: {
+            select: {
+              tax: true
+            }
+          }
+        }
+      },
       jobCards: {
         select: {
           id: true,
@@ -1460,7 +1470,8 @@ const createFromGateEntry = async (payload, user, files = []) => {
   const serviceSubtotal = resolvedServiceItems.reduce((sum, item) => {
     return sum + (item.price * item.quantity);
   }, 0);
-  const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal);
+  const serviceCenterTax = Number(gateEntry.location?.serviceCenter?.tax) || 0;
+  const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal, serviceCenterTax);
   const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
   const auditModuleId = await resolveJobCardAuditModuleId(user.userId);
 
