@@ -484,12 +484,14 @@ const toAssignmentSummary = (assignment) => ({
 });
 
 const toJobCardListResponse = (jobCard, department) => {
-  const activeAssignments = (jobCard.workAssignments || []).map(toAssignmentSummary);
+  const allAssignments = (jobCard.workAssignments || []).map(toAssignmentSummary);
+  const activeAssignments = allAssignments.filter((assignment) => !assignment.completedAt);
+  const displayAssignments = allAssignments;
   const departmentAssignments = department
-    ? activeAssignments.filter((assignment) => {
+    ? displayAssignments.filter((assignment) => {
       return normalizeDepartment(assignment.service && assignment.service.category && (assignment.service.category.slug || assignment.service.category.name)) === department;
     })
-    : activeAssignments.filter((assignment) => {
+    : displayAssignments.filter((assignment) => {
       return isMechanicalCategory(assignment.service && assignment.service.category);
   });
   const assignedMechanics = Array.from(
@@ -505,6 +507,7 @@ const toJobCardListResponse = (jobCard, department) => {
     ...jobCard,
     workAssignments: activeAssignments,
     activeAssignments,
+    assignmentHistory: displayAssignments,
     assignedMechanic,
     assignedMechanics,
     technician: assignedMechanics.length > 0 ? assignedMechanics.map((mechanic) => mechanic.fullName).join(', ') : null,
@@ -588,9 +591,6 @@ const listJobCards = async (query, user) => {
           select: { id: true, locationName: true, locationCode: true }
         },
         workAssignments: {
-          where: {
-            completedAt: null
-          },
           include: {
             assignedUser: {
               select: {
