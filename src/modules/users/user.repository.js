@@ -46,7 +46,7 @@ const userWithRoleForChecksSelect = {
   }
 };
 
-const buildUserWhere = ({ search, roleId, locationId, isActive, excludedModules, excludedUserId } = {}) => {
+const buildUserWhere = ({ search, roleId, locationId, isActive, excludedModules, excludedUserId, fromDate, toDate } = {}) => {
   const where = {};
   const roleFilters = [];
 
@@ -66,6 +66,18 @@ const buildUserWhere = ({ search, roleId, locationId, isActive, excludedModules,
     where.id = {
       not: excludedUserId
     };
+  }
+
+  if (fromDate || toDate) {
+    where.createdAt = {};
+    if (fromDate) {
+      where.createdAt.gte = new Date(fromDate);
+    }
+    if (toDate) {
+      const endOfDay = new Date(toDate);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      where.createdAt.lte = endOfDay;
+    }
   }
 
   if (excludedModules && excludedModules.length > 0) {
@@ -211,14 +223,16 @@ const countActiveAdmins = () => {
   });
 };
 
-const listUsers = async ({ page, limit, search, roleId, locationId, isActive, excludedModules, excludedUserId }) => {
+const listUsers = async ({ page, limit, search, roleId, locationId, isActive, excludedModules, excludedUserId, fromDate, toDate }) => {
   const where = buildUserWhere({
     search,
     roleId,
     locationId,
     isActive,
     excludedModules,
-    excludedUserId
+    excludedUserId,
+    fromDate,
+    toDate
   });
   const skip = (page - 1) * limit;
 

@@ -534,6 +534,8 @@ const listUsers = async (query, actor) => {
   const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
   const locationId = isManagingDirector(actor) ? Number(actor.locationId) : requestedLocationId;
   const isActive = parseBooleanFilter(query.isActive);
+  const fromDate = query.fromDate ? query.fromDate.trim() : undefined;
+  const toDate = query.toDate ? query.toDate.trim() : undefined;
   const excludedModules = await getRestrictedModulesForActor(actor);
   const excludedUserId = actor && actor.userId ? Number(actor.userId) : undefined;
 
@@ -549,7 +551,9 @@ const listUsers = async (query, actor) => {
     locationId,
     isActive,
     excludedModules,
-    excludedUserId
+    excludedUserId,
+    fromDate,
+    toDate
   });
 
   return {

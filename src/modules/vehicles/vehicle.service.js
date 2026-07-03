@@ -22,6 +22,20 @@ const listVehicles = async (query, user) => {
   if (query.status === 'active') where.isActive = true;
   if (query.status === 'inactive') where.isActive = false;
 
+  if (query.fromDate) {
+    const from = new Date(query.fromDate);
+    if (!isNaN(from)) {
+      where.createdAt = { ...where.createdAt, gte: from };
+    }
+  }
+  if (query.toDate) {
+    const to = new Date(query.toDate);
+    if (!isNaN(to)) {
+      to.setHours(23, 59, 59, 999);
+      where.createdAt = { ...where.createdAt, lte: to };
+    }
+  }
+
   const [vehicles, total] = await Promise.all([
     prisma.vehicle.findMany({
       where,

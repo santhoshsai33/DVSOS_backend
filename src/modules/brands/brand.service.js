@@ -62,7 +62,7 @@ const createBrand = async (payload, actorUserId) => {
     }
   });
 
-  await createAuditLog({
+  await createAuditLog(prisma, {
     tableName: 'vehicle_brands',
     recordId: brand.id,
     actionType: 'CREATE',
@@ -117,7 +117,7 @@ const updateBrand = async (identifier, payload, actorUserId) => {
     }
   });
 
-  await createAuditLog({
+  await createAuditLog(prisma, {
     tableName: 'vehicle_brands',
     recordId: updatedBrand.id,
     actionType: 'UPDATE',
@@ -202,7 +202,7 @@ const updateBrandStatus = async (id, payload, actorUserId) => {
     }
   });
 
-  await createAuditLog({
+  await createAuditLog(prisma, {
     tableName: 'vehicle_brands',
     recordId: updatedBrand.id,
     actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
