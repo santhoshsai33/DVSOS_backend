@@ -10,7 +10,9 @@ class TwilioProvider {
     }
 
     return client.messages.create({
-      from: env.twilio.whatsappFrom,
+      from: String(env.twilio.whatsappFrom).toLowerCase().startsWith('whatsapp:')
+        ? env.twilio.whatsappFrom
+        : `whatsapp:${env.twilio.whatsappFrom}`,
       to,
       body
     });

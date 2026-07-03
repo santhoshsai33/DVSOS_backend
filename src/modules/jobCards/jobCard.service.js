@@ -249,6 +249,18 @@ const getQueryDepartment = (query, user) => {
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
 
+const isRejectedAdditionalService = (service) => {
+  return Boolean(service && service.isAdditional && getStatusCode(service.approvalStatus) === 'REJECTED');
+};
+
+const isApprovedForWork = (service) => {
+  if (!service || !service.isAdditional) {
+    return true;
+  }
+
+  return getStatusCode(service.approvalStatus) === 'APPROVED';
+};
+
 const isCompletedStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
   return code === 'COMPLETED' || code.endsWith('_COMPLETED');
@@ -264,6 +276,10 @@ const getDepartmentServices = (jobCard, department) => {
 };
 
 const isJobCardServiceCompleted = (service) => {
+  if (isRejectedAdditionalService(service)) {
+    return true;
+  }
+
   if (isCompletedStatusCode(getStatusCode(service.serviceStatus))) {
     return true;
   }
@@ -295,7 +311,9 @@ const arePreviousDepartmentsCompleted = (jobCard, department) => {
   const previousDepartments = DEPARTMENT_ORDER.slice(0, departmentIndex);
 
   return previousDepartments.every((previousDepartment) => {
-    const services = getDepartmentServices(jobCard, previousDepartment);
+    const services = getDepartmentServices(jobCard, previousDepartment).filter((service) => {
+      return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+    });
     return services.length === 0 || services.every(isJobCardServiceCompleted);
   });
 };
@@ -319,6 +337,10 @@ const validateServiceStatusUpdateAccess = (jobCard, service, user) => {
 
   if (!arePreviousDepartmentsCompleted(jobCard, serviceDepartment)) {
     throw createHttpError(400, 'Previous service stage must be completed before updating this service status');
+  }
+
+  if (!isApprovedForWork(service)) {
+    throw createHttpError(400, 'Additional work must be customer approved before it can be started');
   }
 
   if (isJobCardServiceCompleted(service)) {
@@ -662,6 +684,7 @@ const getJobCardById = async (id, user) => {
               category: true
             }
           },
+          approvalStatus: true,
           serviceStatus: true
         }
       },
@@ -766,6 +789,7 @@ const updateJobCard = async (id, payload, user) => {
               category: true
             }
           },
+          approvalStatus: true,
           serviceStatus: true
         }
       }
@@ -926,6 +950,7 @@ const updateJobCard = async (id, payload, user) => {
         services: {
           include: {
             serviceStatus: true,
+            approvalStatus: true,
             serviceItem: {
               include: {
                 category: true
@@ -1024,6 +1049,7 @@ const updateJobCard = async (id, payload, user) => {
                 category: true
               }
             },
+            approvalStatus: true,
             serviceStatus: true
           }
         },

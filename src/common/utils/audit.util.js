@@ -17,7 +17,50 @@ const serializeAuditValue = (value) => {
   return String(value);
 };
 
+const ensureAuditModule = async (
+  tx,
+  {
+    moduleCode,
+    moduleName,
+    description = null,
+    actorUserId = null
+  }
+) => {
+  const normalizedModuleCode = String(moduleCode || '').trim();
+  const normalizedModuleName = String(moduleName || normalizedModuleCode).trim();
 
+  if (!normalizedModuleCode) {
+    throw new Error('moduleCode is required for ensureAuditModule');
+  }
+
+  const existingModule = await tx.module.findUnique({
+    where: { moduleCode: normalizedModuleCode },
+    select: { id: true, moduleCode: true, moduleName: true, slug: true }
+  });
+
+  if (existingModule) {
+    return existingModule;
+  }
+
+  const baseSlug = generateSlug(normalizedModuleCode || normalizedModuleName);
+  const slug = await generateUniqueSlug(baseSlug, (candidateSlug) => {
+    return tx.module.findFirst({
+      where: { slug: candidateSlug },
+      select: { id: true }
+    });
+  });
+
+  return tx.module.create({
+    data: {
+      moduleCode: normalizedModuleCode,
+      moduleName: normalizedModuleName,
+      slug,
+      description,
+      createdById: actorUserId || null
+    },
+    select: { id: true, moduleCode: true, moduleName: true, slug: true }
+  });
+};
 
 const createAuditLog = async (
   tx,
@@ -77,6 +120,7 @@ const buildChangeDetails = (oldRecord, newRecord, fields) => {
 };
 
 module.exports = {
+  ensureAuditModule,
   createAuditLog,
   buildChangeDetails
 };
