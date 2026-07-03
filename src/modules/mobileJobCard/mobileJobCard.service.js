@@ -148,7 +148,9 @@ const getVehicleBrandIdFromPayload = (vehicleInfo = {}) => {
   const rawBrandId = vehicleInfo.brandId
     ?? vehicleInfo.brand_id
     ?? vehicleInfo.vehicleBrandId
-    ?? vehicleInfo.vehicle_brand_id;
+    ?? vehicleInfo.vehicle_brand_id
+    ?? (vehicleInfo.make !== undefined && vehicleInfo.make !== null && /^\d+$/.test(String(vehicleInfo.make).trim()) ? vehicleInfo.make : undefined)
+    ?? (vehicleInfo.brandName !== undefined && vehicleInfo.brandName !== null && /^\d+$/.test(String(vehicleInfo.brandName).trim()) ? vehicleInfo.brandName : undefined);
 
   if (rawBrandId === undefined || rawBrandId === null || rawBrandId === '') {
     return undefined;
@@ -526,7 +528,7 @@ const toQueueEntryResponse = (entry) => ({
       id: entry.vehicle.id,
       registrationNumber: entry.vehicle.registrationNo,
       model: entry.vehicle.model,
-      make: entry.vehicle.brand ? entry.vehicle.brand.name : null,
+      brand: toBrandResponse(entry.vehicle.brand),
       variant: entry.vehicle.variant,
       fuelType: entry.vehicle.fuelType,
       color: entry.vehicle.vehicleColor,
@@ -656,6 +658,13 @@ const toStatusResponse = (status) => {
   };
 };
 
+const toBrandResponse = (brand) => brand
+  ? {
+    id: brand.id,
+    name: brand.name
+  }
+  : null;
+
 const toJobCardListResponse = (jobCard) => ({
   id: jobCard.id,
   jobCardNo: jobCard.jobCardNo,
@@ -706,7 +715,7 @@ const toJobCardListResponse = (jobCard) => ({
       id: jobCard.vehicle.id,
       registrationNumber: jobCard.vehicle.registrationNo,
       model: jobCard.vehicle.model,
-      make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+      brand: toBrandResponse(jobCard.vehicle.brand),
       variant: jobCard.vehicle.variant,
       fuelType: jobCard.vehicle.fuelType,
       color: jobCard.vehicle.vehicleColor,
@@ -837,8 +846,7 @@ const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
     vehicleSpecifications: jobCard.vehicle
       ? {
         id: jobCard.vehicle.id,
-        make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
-        brand: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+        brand: toBrandResponse(jobCard.vehicle.brand),
         model: jobCard.vehicle.model,
         variant: jobCard.vehicle.variant,
         fuelType: jobCard.vehicle.fuelType,
@@ -1391,7 +1399,7 @@ const toJobCardResponse = (jobCard) => ({
       id: jobCard.vehicle.id,
       registrationNumber: jobCard.vehicle.registrationNo,
       model: jobCard.vehicle.model,
-      make: jobCard.vehicle.brand ? jobCard.vehicle.brand.name : null,
+      brand: toBrandResponse(jobCard.vehicle.brand),
       variant: jobCard.vehicle.variant,
       fuelType: jobCard.vehicle.fuelType,
       color: jobCard.vehicle.vehicleColor,

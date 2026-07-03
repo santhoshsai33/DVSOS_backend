@@ -89,6 +89,18 @@ const normalizeAssignmentCategory = (category) => {
   return 'mechanical';
 };
 
+const getServiceCategoryAliases = (category) => {
+  if (category === 'body-shop') {
+    return ['body-shop', 'bodyshop', 'body_shop', 'paint', 'denting'];
+  }
+
+  if (category === 'water-wash') {
+    return ['water-wash', 'waterwash', 'water_wash', 'wash'];
+  }
+
+  return ['mechanical', 'mechanic', 'mechnanic', 'floor'];
+};
+
 const isAdminRole = (roleSlug) => ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug));
 
 const isManagingDirector = (user) => normalizeRoleSlug(user && user.roleSlug) === MANAGING_DIRECTOR_ROLE;
@@ -603,14 +615,54 @@ const listMechanicDropdown = async (query, actor) => {
     }
   });
 
+  const userIds = users.map((user) => user.id);
+  const activeAssignments = userIds.length > 0
+    ? await prisma.workAssignment.findMany({
+      where: {
+        assignedUserId: {
+          in: userIds
+        },
+        completedAt: null,
+        ...(locationId ? { locationId } : {}),
+        jobCardService: {
+          serviceItem: {
+            category: {
+              OR: getServiceCategoryAliases(category).map((alias) => ({
+                slug: String(alias).trim().toLowerCase().replace(/[_\s]+/g, '-')
+              }))
+            }
+          }
+        }
+      },
+      select: {
+        assignedUserId: true,
+        jobCardId: true
+      }
+    })
+    : [];
+  const activeJobMap = activeAssignments.reduce((map, assignment) => {
+    if (!map.has(assignment.assignedUserId)) {
+      map.set(assignment.assignedUserId, new Set());
+    }
+    map.get(assignment.assignedUserId).add(assignment.jobCardId);
+    return map;
+  }, new Map());
+
   return users.map((user) => ({
     id: user.id,
     fullName: user.fullName,
     employeeCode: user.employeeCode,
     mobile: user.mobileNo,
     locationId: user.locationId,
-    role: user.role
-  }));
+    role: user.role,
+    activeJobCount: activeJobMap.get(user.id)?.size || 0,
+    availability: activeJobMap.get(user.id)?.size ? 'BUSY' : 'AVAILABLE',
+    availabilityLabel: activeJobMap.get(user.id)?.size
+      ? `Busy (${activeJobMap.get(user.id).size} job${activeJobMap.get(user.id).size > 1 ? 's' : ''})`
+      : 'Available'
+  })).sort((a, b) => {
+    return a.activeJobCount - b.activeJobCount || a.fullName.localeCompare(b.fullName);
+  });
 };
 
 const getUserDetail = async (id, actor) => {
