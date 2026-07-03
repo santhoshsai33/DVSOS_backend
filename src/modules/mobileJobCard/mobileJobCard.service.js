@@ -443,7 +443,12 @@ const pendingQueueSelect = {
     select: {
       id: true,
       locationCode: true,
-      locationName: true
+      locationName: true,
+      serviceCenter: {
+        select: {
+          tax: true
+        }
+      }
     }
   },
   jobCards: {
@@ -493,7 +498,14 @@ const toQueueEntryResponse = (entry) => ({
       engineNo: entry.vehicle.engineNo
     }
     : null,
-  location: entry.location || null,
+  location: entry.location
+    ? {
+      id: entry.location.id,
+      locationCode: entry.location.locationCode,
+      locationName: entry.location.locationName,
+      taxRate: Number(entry.location.serviceCenter?.tax) || 0
+    }
+    : null,
   canCreateJobCard: !entry.jobCards || entry.jobCards.length === 0
 });
 
