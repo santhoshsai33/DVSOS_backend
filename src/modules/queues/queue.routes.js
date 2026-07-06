@@ -2,43 +2,20 @@ const router = require('express').Router();
 
 const controller = require('./queue.controller');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
-const {
-  validateAssignmentIdParam,
-  validateAssignPayload,
-  validateJobCardIdParam,
-  validateStatusPayload
-} = require('./queue.validation');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
+const { validateAssignmentIdParam, validateAssignPayload, validateJobCardIdParam, validateStatusPayload } = require('./queue.validation');
 
-const queueViewAccess = roleMiddleware([
-  'admin',
-  'manager',
-  'managing_director',
-  'mechanical',
-  'mechanic',
-  'floor_supervisor',
-  'body_shop_supervisor',
-  'water_wash_team',
-  'water_wash'
-]);
-
-const queueAssignAccess = roleMiddleware([
-  'admin',
-  'manager',
-  'mechanical',
-  'mechanic',
-  'floor_supervisor',
-  'body_shop_supervisor',
-  'water_wash_team',
-  'water_wash'
-]);
+const canReadMechanicalQueue = permissionMiddleware('/assign-mechanic', 'canRead');
+const canReadBodyShopQueue = permissionMiddleware('/body-shop-assign-mechanic', 'canRead');
+const canReadWaterWashQueue = permissionMiddleware('/water-wash-assign-member', 'canRead');
+const canUpdateJobCards = permissionMiddleware('/job-cards', 'canUpdate');
 
 router.use(authenticate);
 
-router.get('/mechanical/list', queueViewAccess, controller.listMechanicalQueue);
-router.get('/body-shop/list', queueViewAccess, controller.listBodyShopQueue);
-router.get('/water-wash/list', queueViewAccess, controller.listWaterWashQueue);
-router.post('/assign/:jobCardId', queueAssignAccess, validateJobCardIdParam, validateAssignPayload, controller.assignWork);
-router.patch('/status/:assignmentId', queueAssignAccess, validateAssignmentIdParam, validateStatusPayload, controller.updateAssignmentStatus);
+router.get('/mechanical/list', canReadMechanicalQueue, controller.listMechanicalQueue);
+router.get('/body-shop/list', canReadBodyShopQueue, controller.listBodyShopQueue);
+router.get('/water-wash/list', canReadWaterWashQueue, controller.listWaterWashQueue);
+router.post('/assign/:jobCardId', canUpdateJobCards, validateJobCardIdParam, validateAssignPayload, controller.assignWork);
+router.patch('/status/:assignmentId', canUpdateJobCards, validateAssignmentIdParam, validateStatusPayload, controller.updateAssignmentStatus);
 
 module.exports = router;

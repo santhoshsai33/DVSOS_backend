@@ -4,7 +4,6 @@ const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.ut
 const { generateUniqueCode, getCodeConfig } = require('../../common/utils/code.util');
 const { buildChangeDetails, createAuditLog } = require('../../common/utils/audit.util');
 const { authMiddleware } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
 const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
 const createHttpError = (statusCode, message) => {
@@ -611,14 +610,12 @@ const createValidation = (requiredFields = []) => {
 
 const createAdminMasterRoutes = ({ controller, validation, menuPath }) => {
   const router = require('express').Router();
-  const adminOnly = roleMiddleware(['admin', 'super_admin']);
   const canCreate = permissionMiddleware({ menuPath, action: 'canCreate' });
   const canRead = permissionMiddleware({ menuPath, action: 'canRead' });
   const canUpdate = permissionMiddleware({ menuPath, action: 'canUpdate' });
   const validateIdentifierParam = validation.validateIdentifierParam || validation.validateIdParam;
 
   router.use(authMiddleware);
-  router.use(adminOnly);
 
   router.post('/create', canCreate, validation.validatePayload, controller.create);
   router.put('/update/:id', canUpdate, validateIdentifierParam, validation.validatePayload, controller.update);

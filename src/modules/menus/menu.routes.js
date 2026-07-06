@@ -2,12 +2,12 @@ const router = require('express').Router();
 
 const menuController = require('./menu.controller');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const canViewMenus = roleMiddleware(['admin', 'manager', 'managing_director']);
+const canReadRoleMenus = permissionMiddleware('/roles', 'canRead');
 
 router.use(authenticate);
-router.use(canViewMenus);
+router.use(canReadRoleMenus);
 
 router.get('/list', menuController.listMenus);
 router.get('/modules/list', menuController.listMenuModules);

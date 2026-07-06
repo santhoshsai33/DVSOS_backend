@@ -2,24 +2,22 @@ const router = require('express').Router();
 
 const dashboardController = require('./dashboard.controller');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const adminOnly = roleMiddleware(['admin', 'super_admin']);
-const mdOnly = roleMiddleware(['md', 'super_admin', 'admin']);
-const floorSupervisorOnly = roleMiddleware(['floor_supervisor', 'super_admin', 'admin']);
-const managerOnly = roleMiddleware(['manager', 'super_admin', 'admin', 'md']);
-
-const bodyShopSupervisorOnly = roleMiddleware(['body_shop_supervisor', 'super_admin', 'admin', 'manager', 'md']);
-
-const waterWashSupervisorOnly = roleMiddleware(['water_wash_supervisor', 'super_admin', 'admin', 'manager', 'md']);
+const canReadAdminDashboard = permissionMiddleware('/admin-dashboard', 'canRead');
+const canReadMdDashboard = permissionMiddleware('/md-dashboard', 'canRead');
+const canReadFloorDashboard = permissionMiddleware('/floor-dashboard', 'canRead');
+const canReadManagerDashboard = permissionMiddleware('/manager-dashboard', 'canRead');
+const canReadBodyShopDashboard = permissionMiddleware('/body-shop-dashboard', 'canRead');
+const canReadWaterWashDashboard = permissionMiddleware('/water-wash-dashboard', 'canRead');
 
 router.use(authenticate);
 
-router.get('/admin', adminOnly, dashboardController.getAdminDashboard);
-router.get('/md', mdOnly, dashboardController.getMdDashboard);
-router.get('/supervisor', floorSupervisorOnly, dashboardController.getFloorSupervisorDashboard);
-router.get('/manager', managerOnly, dashboardController.getManagerDashboard);
-router.get('/body-shop', bodyShopSupervisorOnly, dashboardController.getBodyShopDashboard);
-router.get('/water-wash', waterWashSupervisorOnly, dashboardController.getWaterWashDashboard);
+router.get('/admin', canReadAdminDashboard, dashboardController.getAdminDashboard);
+router.get('/md', canReadMdDashboard, dashboardController.getMdDashboard);
+router.get('/supervisor', canReadFloorDashboard, dashboardController.getFloorSupervisorDashboard);
+router.get('/manager', canReadManagerDashboard, dashboardController.getManagerDashboard);
+router.get('/body-shop', canReadBodyShopDashboard, dashboardController.getBodyShopDashboard);
+router.get('/water-wash', canReadWaterWashDashboard, dashboardController.getWaterWashDashboard);
 
 module.exports = router;

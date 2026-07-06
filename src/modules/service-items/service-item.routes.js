@@ -8,31 +8,23 @@ const {
   validateStatusPayload
 } = require('./service-item.validation');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const canViewServiceMasters = roleMiddleware([
-  'admin',
-  'crm_team',
-  'crm-team',
-  'manager',
-  'managing_director',
-  'managing-director'
-]);
-const adminOnly = roleMiddleware(['admin']);
+const canReadItems = permissionMiddleware('/master-items', 'canRead');
+const canCreateItems = permissionMiddleware('/master-items', 'canCreate');
+const canUpdateItems = permissionMiddleware('/master-items', 'canUpdate');
 
 router.use(authenticate);
 
-router.post('/create', adminOnly, validateServiceItemPayload, serviceItemController.createServiceItem);
-router.put('/update/:id', adminOnly, validateIdentifierParam, validateServiceItemPayload, serviceItemController.updateServiceItem);
-router.get('/list', canViewServiceMasters, serviceItemController.listServiceItems);
-router.get('/detail/:id', canViewServiceMasters, validateIdentifierParam, serviceItemController.getServiceItemDetail);
-router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, serviceItemController.updateServiceItemStatus);
-
-const crmOnly = roleMiddleware(['crm_team', 'crm-team']);
+router.post('/create', canCreateItems, validateServiceItemPayload, serviceItemController.createServiceItem);
+router.put('/update/:id', canUpdateItems, validateIdentifierParam, validateServiceItemPayload, serviceItemController.updateServiceItem);
+router.get('/list', canReadItems, serviceItemController.listServiceItems);
+router.get('/detail/:id', canReadItems, validateIdentifierParam, serviceItemController.getServiceItemDetail);
+router.patch('/status/:id', canUpdateItems, validateIdParam, validateStatusPayload, serviceItemController.updateServiceItemStatus);
 
 const crmRouter = require('express').Router();
 crmRouter.use(authenticate);
-crmRouter.get('/list', crmOnly, serviceItemController.listServiceItems);
+crmRouter.get('/list', canReadItems, serviceItemController.listServiceItems);
 
 module.exports = {
   serviceItemRoutes: router,

@@ -8,31 +8,23 @@ const {
   validateStatusPayload
 } = require('./service-category.validation');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const canViewServiceMasters = roleMiddleware([
-  'admin',
-  'crm_team',
-  'crm-team',
-  'manager',
-  'managing_director',
-  'managing-director'
-]);
-const adminOnly = roleMiddleware(['admin']);
+const canReadCategories = permissionMiddleware('/master-categories', 'canRead');
+const canCreateCategories = permissionMiddleware('/master-categories', 'canCreate');
+const canUpdateCategories = permissionMiddleware('/master-categories', 'canUpdate');
 
 router.use(authenticate);
 
-router.post('/create', adminOnly, validateCategoryPayload, categoryController.createCategory);
-router.put('/update/:id', adminOnly, validateIdentifierParam, validateCategoryPayload, categoryController.updateCategory);
-router.get('/list', canViewServiceMasters, categoryController.listCategories);
-router.get('/detail/:id', canViewServiceMasters, validateIdentifierParam, categoryController.getCategoryDetail);
-router.patch('/status/:id', adminOnly, validateIdParam, validateStatusPayload, categoryController.updateCategoryStatus);
-
-const crmOnly = roleMiddleware(['crm_team', 'crm-team']);
+router.post('/create', canCreateCategories, validateCategoryPayload, categoryController.createCategory);
+router.put('/update/:id', canUpdateCategories, validateIdentifierParam, validateCategoryPayload, categoryController.updateCategory);
+router.get('/list', canReadCategories, categoryController.listCategories);
+router.get('/detail/:id', canReadCategories, validateIdentifierParam, categoryController.getCategoryDetail);
+router.patch('/status/:id', canUpdateCategories, validateIdParam, validateStatusPayload, categoryController.updateCategoryStatus);
 
 const crmRouter = require('express').Router();
 crmRouter.use(authenticate);
-crmRouter.get('/list', crmOnly, categoryController.listCategories);
+crmRouter.get('/list', canReadCategories, categoryController.listCategories);
 
 module.exports = {
   serviceCategoryRoutes: router,

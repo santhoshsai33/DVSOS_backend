@@ -3,14 +3,11 @@ const router = require('express').Router();
 const controller = require('./controller');
 const { validateOptionalPositiveInt, validateOptionalModuleCode } = require('./validation');
 const { authMiddleware } = require('../../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../../common/middleware/role.middleware');
 const { permissionMiddleware } = require('../../../common/middleware/permission.middleware');
 
-const adminOnly = roleMiddleware(['admin', 'super_admin']);
 const canRead = permissionMiddleware({ menuPath: '/admin-dashboard', action: 'canRead' });
 
 router.use(authMiddleware);
-router.use(adminOnly);
 router.use(canRead);
 
 router.get('/states', controller.states);

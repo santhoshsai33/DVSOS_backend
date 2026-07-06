@@ -12,7 +12,13 @@ const {
 } = require('../../common/utils/status.util');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
+const JOB_CARD_APPROVED_STATUS_CODES = ['APPROVED'];
+const JOB_CARD_REJECTED_STATUS_CODES = ['REJECTED'];
 const JOB_CARD_SERVICE_PENDING_STATUS_CODES = ['PENDING'];
+const JOB_CARD_SERVICE_REJECTED_STATUS_CODES = ['REJECTED'];
+const APPROVAL_APPROVED_STATUS_CODES = ['APPROVED'];
+const APPROVAL_REJECTED_STATUS_CODES = ['REJECTED'];
+const INITIAL_APPROVAL_TYPE = 'INITIAL_ESTIMATE';
 
 const createHttpError = (statusCode, message, data = {}) => {
   const error = new Error(message);
@@ -324,6 +330,35 @@ const buildBillingSummary = (billing = {}, serviceSubtotal, defaultTaxRate = 0) 
 };
 
 const buildAdditionalNotes = (payload) => toTrimmedString(payload.additionalNotes) || null;
+
+const normalizeCustomerApproval = (payload = {}) => {
+  const rawValue = payload.customer_approval ?? payload.customerApproval;
+
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return null;
+  }
+
+  const normalized = String(rawValue).trim().toUpperCase();
+  if (['YES', 'Y'].includes(normalized)) {
+    return 'APPROVED';
+  }
+
+  if (['NO', 'N'].includes(normalized)) {
+    return 'REJECTED';
+  }
+
+  throw createHttpError(400, 'customer_approval must be yes or no');
+};
+
+const resolveRequiredStatusId = async (tx, moduleCode, statusCodes, label) => {
+  const statusId = await resolveStatusIdFromCodes(tx, moduleCode, statusCodes);
+
+  if (!statusId) {
+    throw createHttpError(500, `${label} status is not configured`);
+  }
+
+  return statusId;
+};
 
 const inferPhotoCategory = (file, index, photoCategories = []) => {
   const fieldCategory = Array.isArray(photoCategories) ? photoCategories[index] : null;
@@ -1528,6 +1563,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
   }, 0);
   const serviceCenterTax = Number(gateEntry.location?.serviceCenter?.tax) || 0;
   const billingSummary = buildBillingSummary(payload.billing, serviceSubtotal, serviceCenterTax);
+  const customerApprovalDecision = normalizeCustomerApproval(payload);
   const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
   const auditModuleId = await resolveJobCardAuditModuleId(user.userId);
 
@@ -1578,16 +1614,48 @@ const createFromGateEntry = async (payload, user, files = []) => {
       });
     }
 
-    const currentStatusId = await resolveStatusIdFromCodes(
+    let currentStatusId = await resolveStatusIdFromCodes(
       tx,
       STATUS_MODULE_CODES.JOB_CARD_STATUS,
       JOB_CARD_CREATED_STATUS_CODES
     );
-    const pendingServiceStatusId = await resolveStatusIdFromCodes(
+    let approvalStatusId = null;
+    let serviceApprovalStatusId = null;
+    let serviceStatusId = await resolveStatusIdFromCodes(
       tx,
       STATUS_MODULE_CODES.JOB_CARD_SERVICE,
       JOB_CARD_SERVICE_PENDING_STATUS_CODES
     );
+
+    if (customerApprovalDecision) {
+      const isApproved = customerApprovalDecision === 'APPROVED';
+      const approvalStatusCodes = isApproved ? APPROVAL_APPROVED_STATUS_CODES : APPROVAL_REJECTED_STATUS_CODES;
+      const jobCardStatusCodes = isApproved ? JOB_CARD_APPROVED_STATUS_CODES : JOB_CARD_REJECTED_STATUS_CODES;
+
+      approvalStatusId = await resolveRequiredStatusId(
+        tx,
+        STATUS_MODULE_CODES.APPROVAL_STATUS,
+        approvalStatusCodes,
+        `${customerApprovalDecision.toLowerCase()} approval`
+      );
+      serviceApprovalStatusId = approvalStatusId;
+      currentStatusId = await resolveRequiredStatusId(
+        tx,
+        STATUS_MODULE_CODES.JOB_CARD_STATUS,
+        jobCardStatusCodes,
+        `${customerApprovalDecision.toLowerCase()} job card`
+      );
+
+      if (!isApproved) {
+        serviceStatusId = await resolveRequiredStatusId(
+          tx,
+          STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+          JOB_CARD_SERVICE_REJECTED_STATUS_CODES,
+          'Rejected job card service'
+        );
+      }
+    }
+
     const jobCardNo = await generateJobCardNo(tx);
     const jobCardSlug = await createUniqueSlug(tx, 'jobCard', jobCardNo);
     const additionalNotes = buildAdditionalNotes(payload);
@@ -1602,6 +1670,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
         vehicleId: gateEntry.vehicleId,
         expectedDeliveryAt,
         currentStatusId,
+        approvalStatusId,
         totalEstimate: billingSummary.finalAmount,
         serviceSubtotal: billingSummary.serviceSubtotal,
         taxRate: billingSummary.taxRate,
@@ -1619,15 +1688,47 @@ const createFromGateEntry = async (payload, user, files = []) => {
       }
     });
 
+    const approval = customerApprovalDecision
+      ? await tx.jobCardApproval.create({
+        data: {
+          jobCardId: jobCard.id,
+          statusId: approvalStatusId,
+          approvalType: INITIAL_APPROVAL_TYPE,
+          totalAmount: billingSummary.finalAmount,
+          customerResponse: String(payload.customer_approval ?? payload.customerApproval).trim(),
+          sentAt: new Date(),
+          respondedAt: new Date(),
+          createdById: user.userId || null
+        },
+        select: {
+          id: true,
+          approvalType: true,
+          totalAmount: true,
+          customerResponse: true,
+          sentAt: true,
+          respondedAt: true,
+          status: {
+            select: {
+              id: true,
+              statusCode: true,
+              statusName: true
+            }
+          }
+        }
+      })
+      : null;
+
     await tx.jobCardService.createMany({
       data: resolvedServiceItems.map((item) => {
         return {
           jobCardId: jobCard.id,
+          approvalId: approval ? approval.id : null,
           serviceItemId: item.serviceItemId,
+          approvalStatusId: serviceApprovalStatusId,
           serviceName: item.serviceName,
           price: item.price,
           quantity: item.quantity,
-          serviceStatusId: pendingServiceStatusId,
+          serviceStatusId,
           isAdditional: false,
           createdById: user.userId || null
         };
@@ -1753,7 +1854,18 @@ const createFromGateEntry = async (payload, user, files = []) => {
           fileName: row.fileName
         }))
       },
-      nextAction: 'JOB_CARD_CREATED'
+      approval: approval
+        ? {
+          id: approval.id,
+          type: approval.approvalType,
+          status: toStatusResponse(approval.status),
+          totalAmount: Number(approval.totalAmount),
+          customerResponse: approval.customerResponse,
+          sentAt: approval.sentAt,
+          respondedAt: approval.respondedAt
+        }
+        : null,
+      nextAction: customerApprovalDecision ? `CUSTOMER_${customerApprovalDecision}` : 'JOB_CARD_CREATED'
     };
   }, { timeout: 20000 });
 };

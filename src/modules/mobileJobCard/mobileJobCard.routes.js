@@ -4,15 +4,16 @@ const controller = require('./mobileJobCard.controller');
 const { uploadVehiclePhotos } = require('./mobileJobCard.upload');
 const { normalizeCreateJobCardPayload, validateCreateJobCardPayload, validateIdParam } = require('./mobileJobCard.validation');
 const { authMiddleware } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const jobCardAccess = roleMiddleware(['crm_team', 'admin', 'super_admin', 'manager', 'managing_director']);
+const canReadJobCards = permissionMiddleware('/job-cards', 'canRead');
+const canCreateJobCards = permissionMiddleware('/job-cards', 'canCreate');
 
 router.use(authMiddleware);
 
-router.get('/list', jobCardAccess, controller.jobCardList);
-router.get('/detail/:id', jobCardAccess, validateIdParam, controller.jobCardDetail);
-router.get('/queue', jobCardAccess, controller.pendingQueue);
-router.get('/queue/:id', jobCardAccess, validateIdParam, controller.queueDetail);
-router.post( '/create-from-gate-entry', jobCardAccess, uploadVehiclePhotos, normalizeCreateJobCardPayload, validateCreateJobCardPayload, controller.createFromGateEntry );
+router.get('/list', canReadJobCards, controller.jobCardList);
+router.get('/detail/:id', canReadJobCards, validateIdParam, controller.jobCardDetail);
+router.get('/queue', canReadJobCards, controller.pendingQueue);
+router.get('/queue/:id', canReadJobCards, validateIdParam, controller.queueDetail);
+router.post( '/create-from-gate-entry', canCreateJobCards, uploadVehiclePhotos, normalizeCreateJobCardPayload, validateCreateJobCardPayload, controller.createFromGateEntry );
 module.exports = router;

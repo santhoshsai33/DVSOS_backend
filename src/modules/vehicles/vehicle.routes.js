@@ -1,28 +1,16 @@
 const router = require('express').Router();
 const vehicleController = require('./vehicle.controller');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const canViewVehicles = roleMiddleware([
-  'admin', 
-  'manager', 
-  'managing_director', 
-  'service_advisor', 
-  'technician',
-  'crm_team',
-  'floor_supervisor',
-  'body_shop_supervisor',
-  'water_wash_team',
-  'water_wash',
-  'gate_security',
-  'gatekeeper'
-]);
+const canReadVehicles = permissionMiddleware('/vehicles', 'canRead');
+const canUpdateVehicles = permissionMiddleware('/vehicles', 'canUpdate');
 
 router.use(authenticate);
 
-router.get('/list', canViewVehicles, vehicleController.getVehicles);
-router.get('/detail/:id', canViewVehicles, vehicleController.getVehicle);
-router.get('/history/:id', canViewVehicles, vehicleController.getVehicleHistory);
-router.put('/update/:id', canViewVehicles, vehicleController.updateVehicle);
+router.get('/list', canReadVehicles, vehicleController.getVehicles);
+router.get('/detail/:id', canReadVehicles, vehicleController.getVehicle);
+router.get('/history/:id', canReadVehicles, vehicleController.getVehicleHistory);
+router.put('/update/:id', canUpdateVehicles, vehicleController.updateVehicle);
 
 module.exports = router;

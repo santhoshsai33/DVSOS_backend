@@ -5,11 +5,11 @@ const jwt = require('jsonwebtoken');
 const authRepository = require('./auth.repository');
 const userRepository = require('../users/user.repository');
 const { signToken, verifyToken } = require('../../utils/jwt');
-const { getRedirectPath } = require('../../utils/redirectPath');
 const { sendPasswordResetEmail } = require('../../utils/email');
 
 const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
+const ADMIN_BYPASS_ENABLED = String(process.env.RBAC_ADMIN_BYPASS || '').toLowerCase() === 'true';
 const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
   'gate_security',
   'gatekeeper',
@@ -152,18 +152,37 @@ const getAllowedMenus = async (roleId, roleSlug) => {
     return groupMenusByModule(permissions);
   }
 
-  if (ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug))) {
+  // Temporary migration fallback. Default is disabled; enable only with RBAC_ADMIN_BYPASS=true.
+  if (ADMIN_BYPASS_ENABLED && ADMIN_ROLE_SLUGS.has(normalizeRoleSlug(roleSlug))) {
     return getAllMenus(['admin']);
   }
 
   return groupMenusByModule(permissions);
 };
 
+const getFirstReadableMenuPath = (modules = []) => {
+  for (const moduleItem of modules) {
+    for (const menu of moduleItem.menus || []) {
+      if (menu.canRead && menu.path && menu.path !== '#' && menu.path !== '/admin/master-menu') {
+        return menu.path;
+      }
+
+      for (const child of menu.children || []) {
+        if (child.canRead && child.path && child.path !== '#') {
+          return child.path;
+        }
+      }
+    }
+  }
+
+  return '/profile';
+};
+
 const buildAuthResponse = async (user, includeToken = false) => {
   const menus = await getAllowedMenus(user.roleId, user.role.slug);
   const authData = {
     user: toPublicUser(user),
-    redirectPath: getRedirectPath(user.role.slug),
+    redirectPath: getFirstReadableMenuPath(menus),
     menus
   };
 
