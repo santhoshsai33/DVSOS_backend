@@ -2,13 +2,7 @@ const { generateUniqueSlug } = require('../../common/utils/slug.util');
 const prisma = require('../../config/db');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
-const VIEW_ACTIVE_ONLY_ROLES = new Set([
-  'crm_team',
-  'crm-team',
-  'manager',
-  'managing_director',
-  'managing-director'
-]);
+// Removed VIEW_ACTIVE_ONLY_ROLES per user request
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -31,9 +25,7 @@ const parseBooleanFilter = (value) => {
   return undefined;
 };
 
-const shouldRestrictToActive = (user) => {
-  return user && VIEW_ACTIVE_ONLY_ROLES.has(user.roleSlug);
-};
+
 
 const createBrand = async (payload, actorUserId) => {
   const name = payload.name.trim();
@@ -143,9 +135,7 @@ const listBrands = async (query, user) => {
     where.name = { contains: search };
   }
 
-  if (shouldRestrictToActive(user)) {
-    where.isActive = true;
-  } else if (isActive !== undefined) {
+  if (isActive !== undefined) {
     where.isActive = isActive;
   }
 

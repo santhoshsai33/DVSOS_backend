@@ -35,6 +35,7 @@ const notificationRoutes = require('../modules/notifications/notification.routes
 const deviceTokenRoutes = require('../modules/notifications/deviceToken.routes');
 const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
 const { brandRoutes, crmBrandRoutes } = require('../modules/brands/brand.routes');
+const { bayRoutes, crmBayRoutes } = require('../modules/bays/bay.routes');
 
 router.use('/auth', authRoutes);
 router.use('/notifications', notificationRoutes);
@@ -72,5 +73,7 @@ router.use('/audit-logs', auditLogRoutes);
 router.use('/admin/brands', brandRoutes);
 router.use('/brands', brandRoutes);
 router.use('/crm/brands', crmBrandRoutes);
+router.use('/bays', bayRoutes);
+router.use('/crm/bays', crmBayRoutes);
 
 module.exports = router;

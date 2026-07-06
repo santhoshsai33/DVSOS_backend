@@ -3,13 +3,7 @@ const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.ut
 const prisma = require('../../config/db');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
-const VIEW_ACTIVE_ONLY_ROLES = new Set([
-  'crm_team',
-  'crm-team',
-  'manager',
-  'managing_director',
-  'managing-director'
-]);
+// Removed VIEW_ACTIVE_ONLY_ROLES per user request
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -45,9 +39,7 @@ const parseBooleanFilter = (value) => {
 
 const parseForceFlag = (value) => value === true || value === 'true';
 
-const shouldRestrictToActive = (user) => {
-  return user && VIEW_ACTIVE_ONLY_ROLES.has(user.roleSlug);
-};
+
 
 const ensureCategoryExists = async (id, onlyActive = false) => {
   const category = await categoryRepository.findCategoryById(id, onlyActive);
@@ -160,11 +152,11 @@ const updateCategory = async (identifier, { name, slug, description }, actorUser
   });
 };
 
-const listCategories = async (query, user) => {
+const listCategories = async (query) => {
   const page = parsePositiveInt(query.page, 1);
   const limit = parsePositiveInt(query.limit, 10);
   const search = query.search ? query.search.trim() : undefined;
-  const isActive = shouldRestrictToActive(user) ? true : parseBooleanFilter(query.isActive);
+  const isActive = parseBooleanFilter(query.isActive);
 
   const { categories, total } = await categoryRepository.listCategories({
     page,
