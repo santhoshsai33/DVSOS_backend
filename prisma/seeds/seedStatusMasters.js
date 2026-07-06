@@ -20,7 +20,7 @@ const statusModules = [
     description: 'Operational job card stage statuses',
     statuses: [
       { statusCode: 'GATE_ENTRY_CREATED', statusName: 'Gate Entry Created', sortOrder: 1 },
-      { statusCode: 'JOB_CARD_PENDING', statusName: 'Job Card Pending', sortOrder: 2 },
+      { statusCode: 'JOB_CARD_PENDING', statusName: 'Waiting for Job Card', sortOrder: 2 },
       { statusCode: 'JOB_CARD_CREATED', statusName: 'Job Card Created', sortOrder: 3 },
       { statusCode: 'APPROVAL_PENDING', statusName: 'Approval Pending', sortOrder: 4 },
       { statusCode: 'APPROVED', statusName: 'Approved', sortOrder: 5 },

@@ -7,6 +7,13 @@ const rolesData = [
 
 const limitsData = [
   {
+    stageCode: 'JOB_CARD_QUEUE',
+    moduleCode: 'job-card',
+    statusCode: 'JOB_CARD_PENDING',
+    allowedMinutes: 20,
+    notifyRoleSlug: 'crm_team'
+  },
+  {
     stageCode: 'APPROVAL_PENDING',
     moduleCode: 'job-card',
     statusCode: 'APPROVAL_PENDING',
@@ -21,25 +28,32 @@ const limitsData = [
     notifyRoleSlug: 'crm_team'
   },
   {
-    stageCode: 'MECHANICAL_IN_PROGRESS',
+    stageCode: 'MECHANICAL_WORK',
     moduleCode: 'job-card',
     statusCode: 'MECHANICAL_IN_PROGRESS',
     allowedMinutes: 2,
     notifyRoleSlug: 'floor_supervisor'
   },
   {
-    stageCode: 'BODY_SHOP_IN_PROGRESS',
+    stageCode: 'BODY_SHOP',
     moduleCode: 'job-card',
     statusCode: 'BODY_SHOP_IN_PROGRESS',
     allowedMinutes: 2,
     notifyRoleSlug: 'floor_supervisor'
   },
   {
-    stageCode: 'WATER_WASH_IN_PROGRESS',
+    stageCode: 'WATER_WASH',
     moduleCode: 'job-card',
     statusCode: 'WATER_WASH_IN_PROGRESS',
     allowedMinutes: 2,
     notifyRoleSlug: 'floor_supervisor'
+  },
+  {
+    stageCode: 'READY_FOR_DELIVERY',
+    moduleCode: 'job-card',
+    statusCode: 'READY_FOR_DELIVERY',
+    allowedMinutes: 2,
+    notifyRoleSlug: 'crm_team'
   }
 ];
 

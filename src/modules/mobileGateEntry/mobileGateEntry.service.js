@@ -5,7 +5,12 @@ const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.ut
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { generateGateEntryNo } = require('../../utils/generateGateEntryNo');
 const { indianMobileRegex } = require('./mobileGateEntry.validation');
-const { STATUS_MODULE_CODES, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
+const {
+  STATUS_MODULE_CODES,
+  resolveStatusFromCodes,
+  resolveStatusIdFromCodes
+} = require('../../common/utils/status.util');
+const { startStage } = require('../processStageTracking/processStageTracking.service');
 
 const ENTRY_STATUS_CODES = ['ACTIVE', 'OPEN', 'ENTERED', 'ENTRY_CREATED'];
 const EXIT_STATUS_CODES = ['EXITED', 'CLOSED'];
@@ -534,6 +539,25 @@ const createGateEntry = async (payload, user) => {
         gateEntryNo: true
       }
     });
+
+    const jobCardQueueStatus = await resolveStatusFromCodes(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_STATUS,
+      ['JOB_CARD_PENDING']
+    );
+
+    if (jobCardQueueStatus) {
+      await startStage({
+        locationId,
+        gateEntryId: gateEntry.id,
+        jobCardId: null,
+        customerId: customer.id,
+        vehicleId: vehicle.id,
+        moduleId: jobCardQueueStatus.moduleId,
+        statusId: jobCardQueueStatus.id,
+        createdById: user.userId || null
+      }, tx);
+    }
 
     // await createAudit(tx, {
     //   tableName: 'gate_entries',

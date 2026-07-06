@@ -9,6 +9,7 @@ const canCreateNotifications = permissionMiddleware('/notifications', 'canCreate
 
 router.use(authenticate);
 
+router.get('/unread-count', canReadNotifications, notificationController.unreadCount);
 router.get('/', canReadNotifications, notificationController.listNotifications);
 router.patch('/read-all', canUpdateNotifications, notificationController.markAllNotificationsRead);
 router.patch('/:id/read', canUpdateNotifications, notificationController.markNotificationRead);
