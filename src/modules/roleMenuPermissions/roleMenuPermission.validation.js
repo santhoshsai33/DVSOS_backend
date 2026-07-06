@@ -4,7 +4,7 @@ const isPositiveInt = (value) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0;
 };
-const isSlug = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
+const isSlug = (value) => /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(String(value || '').trim());
 
 const sendValidationError = (res, message) => {
   return apiResponse(res, {

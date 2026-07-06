@@ -1,7 +1,7 @@
 const { apiResponse } = require('../../common/utils/apiResponse');
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
-const isSlug = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
+const isSlug = (value) => /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(String(value || '').trim());
 
 const validateIdParam = (req, res, next) => {
   const identifier = req.params.id;

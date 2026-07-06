@@ -1,5 +1,3 @@
-const { generateSlug } = require('../../src/common/utils/slug.util');
-
 const rolesData = [
   { name: 'Floor Supervisor', slug: 'floor_supervisor', description: 'Floor supervisor managing mechanical stage' },
   { name: 'Manager', slug: 'manager', description: 'Workshop manager' },
@@ -7,11 +5,47 @@ const rolesData = [
   { name: 'CRM Team', slug: 'crm_team', description: 'Customer relationship management team' }
 ];
 
-async function seedStageTimeLimits(prisma) {
-  console.log('Seeding roles and stage time limits...');
+const limitsData = [
+  {
+    stageCode: 'APPROVAL_PENDING',
+    moduleCode: 'job-card',
+    statusCode: 'APPROVAL_PENDING',
+    allowedMinutes: 2,
+    notifyRoleSlug: 'crm_team'
+  },
+  {
+    stageCode: 'ADDITIONAL_WORK',
+    moduleCode: 'approval-status',
+    statusCode: 'PENDING',
+    allowedMinutes: 2,
+    notifyRoleSlug: 'crm_team'
+  },
+  {
+    stageCode: 'MECHANICAL_IN_PROGRESS',
+    moduleCode: 'job-card',
+    statusCode: 'MECHANICAL_IN_PROGRESS',
+    allowedMinutes: 2,
+    notifyRoleSlug: 'floor_supervisor'
+  },
+  {
+    stageCode: 'BODY_SHOP_IN_PROGRESS',
+    moduleCode: 'job-card',
+    statusCode: 'BODY_SHOP_IN_PROGRESS',
+    allowedMinutes: 2,
+    notifyRoleSlug: 'floor_supervisor'
+  },
+  {
+    stageCode: 'WATER_WASH_IN_PROGRESS',
+    moduleCode: 'job-card',
+    statusCode: 'WATER_WASH_IN_PROGRESS',
+    allowedMinutes: 2,
+    notifyRoleSlug: 'floor_supervisor'
+  }
+];
 
-  // 1. Seed Roles
+const seedRoles = async (prisma) => {
   const rolesMap = {};
+
   for (const roleInfo of rolesData) {
     const role = await prisma.role.upsert({
       where: { slug: roleInfo.slug },
@@ -27,106 +61,76 @@ async function seedStageTimeLimits(prisma) {
         isActive: true
       }
     });
+
     rolesMap[roleInfo.slug] = role.id;
   }
+
+  return rolesMap;
+};
+
+const resolveStatus = async (prisma, { moduleCode, statusCode }) => {
+  const status = await prisma.statusMaster.findFirst({
+    where: {
+      statusCode,
+      module: { moduleCode }
+    },
+    select: {
+      id: true,
+      moduleId: true
+    }
+  });
+
+  if (!status) {
+    throw new Error(`Status ${moduleCode}.${statusCode} must be seeded before stage time limits`);
+  }
+
+  return status;
+};
+
+async function seedStageTimeLimits(prisma) {
+  console.log('Seeding roles and stage time limits...');
+
+  const rolesMap = await seedRoles(prisma);
   console.log('Roles upserted successfully.');
 
-  // 2. Fetch Status Masters
-  const approvalPendingStatus = await prisma.statusMaster.findFirst({
-    where: {
-      statusCode: 'APPROVAL_PENDING',
-      module: { moduleCode: 'job-card' }
-    }
-  });
-
-  const mechanicalInProgressStatus = await prisma.statusMaster.findFirst({
-    where: {
-      statusCode: 'MECHANICAL_IN_PROGRESS',
-      module: { moduleCode: 'job-card' }
-    }
-  });
-
-  const bodyShopInProgressStatus = await prisma.statusMaster.findFirst({
-    where: {
-      statusCode: 'BODY_SHOP_IN_PROGRESS',
-      module: { moduleCode: 'job-card' }
-    }
-  });
-
-  const waterWashInProgressStatus = await prisma.statusMaster.findFirst({
-    where: {
-      statusCode: 'WATER_WASH_IN_PROGRESS',
-      module: { moduleCode: 'job-card' }
-    }
-  });
-
-  // 3. Define Stage Limits Data (2 minutes as requested by the user)
-  const limitsData = [
-    {
-      stageCode: 'APPROVAL_PENDING',
-      stageName: 'Customer Approval',
-      allowedMinutes: 2,
-      statusId: approvalPendingStatus?.id || null,
-      notifyRoleId: rolesMap['crm_team']
-    },
-    {
-      stageCode: 'ADDITIONAL_WORK',
-      stageName: 'Additional Work Approval',
-      allowedMinutes: 2,
-      statusId: null,
-      notifyRoleId: rolesMap['crm_team']
-    },
-    {
-      stageCode: 'MECHANICAL_IN_PROGRESS',
-      stageName: 'Mechanical Work',
-      allowedMinutes: 2,
-      statusId: mechanicalInProgressStatus?.id || null,
-      notifyRoleId: rolesMap['floor_supervisor']
-    },
-    {
-      stageCode: 'BODY_SHOP_IN_PROGRESS',
-      stageName: 'Body Shop Work',
-      allowedMinutes: 2,
-      statusId: bodyShopInProgressStatus?.id || null,
-      notifyRoleId: rolesMap['floor_supervisor']
-    },
-    {
-      stageCode: 'WATER_WASH_IN_PROGRESS',
-      stageName: 'Water Wash Work',
-      allowedMinutes: 2,
-      statusId: waterWashInProgressStatus?.id || null,
-      notifyRoleId: rolesMap['floor_supervisor']
-    }
-  ];
-
-  // 4. Seed Stage Limits
   for (const limit of limitsData) {
+    const status = await resolveStatus(prisma, limit);
+    const notifyRoleId = rolesMap[limit.notifyRoleSlug] || null;
+
     const existing = await prisma.stageTimeLimit.findFirst({
-      where: { stageCode: limit.stageCode }
+      where: {
+        OR: [
+          {
+            locationId: null,
+            moduleId: status.moduleId,
+            statusId: status.id
+          },
+          {
+            stageCode: limit.stageCode
+          }
+        ]
+      },
+      select: { id: true }
     });
+
+    const data = {
+      locationId: null,
+      moduleId: status.moduleId,
+      statusId: status.id,
+      stageCode: limit.stageCode,
+      allowedMinutes: limit.allowedMinutes,
+      notifyRoleId,
+      notifyUserId: null,
+      isActive: true
+    };
 
     if (existing) {
       await prisma.stageTimeLimit.update({
         where: { id: existing.id },
-        data: {
-          stageName: limit.stageName,
-          allowedMinutes: limit.allowedMinutes,
-          statusId: limit.statusId,
-          notifyRoleId: limit.notifyRoleId,
-          isActive: true
-        }
+        data
       });
     } else {
-      await prisma.stageTimeLimit.create({
-        data: {
-          stageCode: limit.stageCode,
-          stageName: limit.stageName,
-          allowedMinutes: limit.allowedMinutes,
-          statusId: limit.statusId,
-          notifyRoleId: limit.notifyRoleId,
-          isActive: true
-        }
-      });
+      await prisma.stageTimeLimit.create({ data });
     }
   }
 
@@ -136,3 +140,17 @@ async function seedStageTimeLimits(prisma) {
 module.exports = {
   seedStageTimeLimits
 };
+
+if (require.main === module) {
+  const { PrismaClient } = require('@prisma/client');
+  const prisma = new PrismaClient();
+
+  seedStageTimeLimits(prisma)
+    .catch((error) => {
+      console.error('Stage time limits seed failed:', error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
