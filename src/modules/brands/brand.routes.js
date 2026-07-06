@@ -24,7 +24,7 @@ router.patch('/status/:id', canUpdateBrands, validateIdParam, validateStatusPayl
 
 const crmRouter = require('express').Router();
 crmRouter.use(authenticate);
-crmRouter.get('/list', canReadBrands, brandController.listBrands);
+crmRouter.get('/list', brandController.listBrands);
 
 module.exports = {
   brandRoutes: router,
