@@ -2,17 +2,18 @@ const router = require('express').Router();
 const jobCardController = require('./jobCard.controller');
 const additionalWorkRoutes = require('../additionalWork/additionalWork.routes');
 const { authenticate } = require('../../common/middleware/auth.middleware');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const canViewJobCards = roleMiddleware(['admin', 'manager', 'managing_director', 'service_advisor', 'technician', 'mechanical', 'mechanic', 'crm_team', 'floor_supervisor', 'body_shop_supervisor', 'water_wash_team', 'water_wash', 'gatekeeper', 'gate_security']);
+const canReadJobCards = permissionMiddleware('/job-cards', 'canRead');
+const canUpdateJobCards = permissionMiddleware('/job-cards', 'canUpdate');
 
 router.use(authenticate);
 
-router.get('/list', canViewJobCards, jobCardController.getJobCards);
-router.get('/statuses/list', canViewJobCards, jobCardController.getJobCardStatuses);
-router.get('/service-statuses/list', canViewJobCards, jobCardController.getJobCardServiceStatuses);
-router.get('/detail/:id', canViewJobCards, jobCardController.getJobCard);
-router.put('/update/:id', canViewJobCards, jobCardController.updateJobCard);
+router.get('/list', canReadJobCards, jobCardController.getJobCards);
+router.get('/statuses/list', canReadJobCards, jobCardController.getJobCardStatuses);
+router.get('/service-statuses/list', canReadJobCards, jobCardController.getJobCardServiceStatuses);
+router.get('/detail/:id', canReadJobCards, jobCardController.getJobCard);
+router.put('/update/:id', canUpdateJobCards, jobCardController.updateJobCard);
 router.use('/:jobCardId/additional-work', additionalWorkRoutes);
 
 module.exports = router;

@@ -118,6 +118,9 @@ model Location {
   stageTimeLimits StageTimeLimit[]
   auditLogs       AuditLog[]
   settings        ServiceCenterSetting[]
+  processStageTrackings ProcessStageTracking[]
+  stageTimeLimits StageTimeLimit[]
+  notifications Notification[]
 
   @@map("locations")
 }
@@ -136,6 +139,8 @@ model Module {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
 
   statuses  StatusMaster[]
+  processStageTrackings ProcessStageTracking[]
+ stageTimeLimits StageTimeLimit[]
 
   createdBy  User? @relation("ModuleCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   modifiedBy User? @relation("ModuleModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -173,6 +178,8 @@ model StatusMaster {
   notifications           Notification[]
   statusLogs              JobCardStatusLog[]
   stageTimeLimits         StageTimeLimit[]
+  processStageTrackings ProcessStageTracking[]
+ stageTimeLimits StageTimeLimit[]
 
   @@unique([moduleId, statusCode])
   @@unique([moduleId, slug])
@@ -327,23 +334,185 @@ model User {
   modifiedSettings        ServiceCenterSetting[] @relation("ServiceCenterSettingModifiedBy")
   deviceTokens            UserDeviceToken[]
 
+  processStageTrackingCreated ProcessStageTracking[] @relation("ProcessStageTrackingCreatedBy")
+  processStageTrackingModified ProcessStageTracking[] @relation("ProcessStageTrackingModifiedBy")
+
+stageTimeLimitNotifyUsers StageTimeLimit[] @relation("StageTimeLimitNotifyUser")
+stageTimeLimitCreated StageTimeLimit[] @relation("StageTimeLimitCreatedBy")
+stageTimeLimitModified StageTimeLimit[] @relation("StageTimeLimitModifiedBy")
+
+deviceTokens UserDeviceToken[]
+notifications Notification[]
+
   @@map("users")
 }
 
+model ProcessStageTracking {
+  id Int @id @default(autoincrement())
+
+  locationId Int @map("location_id")
+
+  gateEntryId Int? @map("gate_entry_id")
+  jobCardId   Int? @map("job_card_id")
+
+  customerId Int @map("customer_id")
+  vehicleId  Int @map("vehicle_id")
+
+  moduleId Int @map("module_id")
+  statusId Int @map("status_id")
+
+  stageStatus String @default("PENDING") @map("stage_status") @db.NVarChar(30)
+  // PENDING / COMPLETED / DELAYED / CANCELLED
+
+  startedAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("started_at") @db.DateTime2
+  completedAt DateTime? @map("completed_at") @db.DateTime2
+
+  isDelayNotified Boolean @default(false) @map("is_delay_notified")
+  delayNotifiedAt DateTime? @map("delay_notified_at") @db.DateTime2
+
+  createdById Int? @map("created_by")
+  modifiedById Int? @map("modified_by")
+
+  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
+
+  location Location @relation(fields: [locationId], references: [id])
+  gateEntry GateEntry? @relation(fields: [gateEntryId], references: [id])
+  jobCard JobCard? @relation(fields: [jobCardId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+  module Module @relation(fields: [moduleId], references: [id])
+  status StatusMaster @relation(fields: [statusId], references: [id])
+
+  createdBy User? @relation("ProcessStageTrackingCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  modifiedBy User? @relation("ProcessStageTrackingModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([locationId])
+  @@index([gateEntryId])
+  @@index([jobCardId])
+  @@index([customerId])
+  @@index([vehicleId])
+  @@index([moduleId])
+  @@index([statusId])
+  @@index([stageCode])
+  @@index([stageStatus])
+  @@index([startedAt])
+  @@map("process_stage_tracking")
+}
+
+model StageTimeLimit {
+  id Int @id @default(autoincrement())
+
+  locationId Int? @map("location_id")
+
+  moduleId Int @map("module_id")
+  statusId Int @map("status_id")
+
+  stageCode String @map("stage_code") @db.NVarChar(50)
+  allowedMinutes Int @map("allowed_minutes")
+
+  notifyRoleId Int? @map("notify_role_id")
+  notifyUserId Int? @map("notify_user_id")
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdById Int? @map("created_by")
+  modifiedById Int? @map("modified_by")
+
+  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
+
+  location Location? @relation(fields: [locationId], references: [id])
+  module Module @relation(fields: [moduleId], references: [id])
+  status StatusMaster @relation(fields: [statusId], references: [id])
+
+  notifyRole Role? @relation(fields: [notifyRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  notifyUser User? @relation("StageTimeLimitNotifyUser", fields: [notifyUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  createdBy User? @relation("StageTimeLimitCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  modifiedBy User? @relation("StageTimeLimitModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([locationId, moduleId, statusId])
+  @@index([moduleId])
+  @@index([statusId])
+  @@index([stageCode])
+  @@index([notifyRoleId])
+  @@index([notifyUserId])
+  @@map("stage_time_limits")
+}
+
+model Notification {
+  id Int @id @default(autoincrement())
+
+  userId Int @map("user_id")
+
+  title String @db.NVarChar(150)
+  message String @db.NVarChar(1000)
+
+  type String @db.NVarChar(50)
+  // DELAY_ALERT / APPROVAL_PENDING / JOB_CARD_CREATED / GENERAL
+
+  locationId Int? @map("location_id")
+
+  gateEntryId Int? @map("gate_entry_id")
+  jobCardId Int? @map("job_card_id")
+  processStageTrackingId Int? @map("process_stage_tracking_id")
+
+  readAt DateTime? @map("read_at") @db.DateTime2
+
+  sentAt DateTime? @map("sent_at") @db.DateTime2
+  failedAt DateTime? @map("failed_at") @db.DateTime2
+  failureReason String? @map("failure_reason") @db.NVarChar(1000)
+  retryCount Int @default(0) @map("retry_count")
+
+  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [id])
+
+  location Location? @relation(fields: [locationId], references: [id])
+  gateEntry GateEntry? @relation(fields: [gateEntryId], references: [id])
+  jobCard JobCard? @relation(fields: [jobCardId], references: [id])
+  processStageTracking ProcessStageTracking? @relation(fields: [processStageTrackingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId])
+  @@index([locationId])
+  @@index([gateEntryId])
+  @@index([jobCardId])
+  @@index([processStageTrackingId])
+  @@index([stageCode])
+  @@index([readAt])
+  @@index([sentAt])
+  @@index([type])
+  @@map("notifications")
+}
+
 model UserDeviceToken {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  token     String   @unique @db.NVarChar(500)
-  isActive  Boolean  @default(true) @map("is_active")
+  id Int @id @default(autoincrement())
+
+  userId Int @map("user_id")
+
+  token String @unique @db.NVarChar(500)
+
+  platform String? @db.NVarChar(30)
+  // WEB / ANDROID / IOS
+
+  deviceId String? @map("device_id") @db.NVarChar(100)
+
+  isActive Boolean @default(true) @map("is_active")
+
+  lastUsedAt DateTime? @map("last_used_at") @db.DateTime2
+
   createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
   updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
 
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([platform])
+  @@index([deviceId])
+  @@index([isActive])
   @@map("user_device_tokens")
 }
-
 model Customer {
   id                Int     @id @default(autoincrement())
   locationId        Int?    @map("location_id")
@@ -422,21 +591,6 @@ model VehicleBrand {
   @@map("vehicle_brands")
 }
 
-model UserVehicle {
-  id            Int @id @default(autoincrement())
-  userId        Int @map("user_id")
-  vehicleId     Int @map("vehicle_id")
-  totalServices Int @default(0) @map("total_services")
-
-  createdAt DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
-  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime2
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([userId, vehicleId])
-  @@map("user_vehicles")
-}
 
 model GateEntry {
   id         Int  @id @default(autoincrement())
@@ -473,6 +627,9 @@ model GateEntry {
   modifiedBy User? @relation("GateEntryModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   jobCards JobCard[]
+  notifications Notification[]
+
+  processStageTrackings ProcessStageTracking[]
   notifications Notification[]
 
   @@index([locationId])
@@ -566,6 +723,9 @@ model JobCard {
   workAssignments WorkAssignment[]
   statusLogs      JobCardStatusLog[]
   notifications   Notification[]
+
+  processStageTrackings ProcessStageTracking[]
+  notifications Notification[]
 
   @@map("job_cards")
 }
@@ -716,59 +876,6 @@ model JobCardStatusLog {
   @@map("job_card_status_logs")
 }
 
-model Notification {
-  id               Int       @id @default(autoincrement())
-  locationId       Int?      @map("location_id")
-  userId           Int       @map("user_id")
-  jobCardId        Int?      @map("job_card_id")
-  statusId         Int?      @map("status_id")
-  gateEntryId      Int?      @map("gate_entry_id")
-  title            String    @db.NVarChar(255)
-  message          String?
-  notificationType String    @map("notification_type") @db.NVarChar(50)
-  sentAt           DateTime? @map("sent_at") @db.DateTime2
-  readAt           DateTime? @map("read_at") @db.DateTime2
-
-  createdById  Int?     @map("created_by")
-  modifiedById Int?     @map("modified_by")
-  createdAt    DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
-
-  location   Location?     @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  user       User          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  jobCard    JobCard?      @relation(fields: [jobCardId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  status     StatusMaster? @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  gateEntry  GateEntry?    @relation(fields: [gateEntryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy  User?         @relation("NotificationCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  modifiedBy User?         @relation("NotificationModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@map("notifications")
-}
-
-model StageTimeLimit {
-  id             Int    @id @default(autoincrement())
-  locationId     Int?   @map("location_id")
-  statusId       Int?   @map("status_id")
-  stageCode      String @map("stage_code") @db.NVarChar(50)
-  stageName      String @map("stage_name") @db.NVarChar(100)
-  allowedMinutes Int    @map("allowed_minutes")
-  notifyRoleId   Int?   @map("notify_role_id")
-
-  isActive     Boolean  @default(true) @map("is_active")
-  createdById  Int?     @map("created_by")
-  modifiedById Int?     @map("modified_by")
-  createdAt    DateTime @default(dbgenerated("SYSUTCDATETIME()")) @map("created_at") @db.DateTime2
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime2
-
-  location   Location?     @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  status     StatusMaster? @relation(fields: [statusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  notifyRole Role?         @relation(fields: [notifyRoleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy  User?         @relation("StageTimeLimitCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  modifiedBy User?         @relation("StageTimeLimitModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-
-  @@unique([locationId, stageCode])
-  @@map("stage_time_limits")
-}
 
 model ServiceCenterSetting {
   id              Int  @id @default(autoincrement())

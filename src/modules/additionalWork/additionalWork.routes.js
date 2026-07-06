@@ -1,20 +1,12 @@
 const router = require('express').Router({ mergeParams: true });
 const controller = require('./additionalWork.controller');
-const { roleMiddleware } = require('../../common/middleware/role.middleware');
+const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
-const additionalWorkAccess = roleMiddleware([
-  'admin',
-  'manager',
-  'managing_director',
-  'mechanical',
-  'mechanic',
-  'floor_supervisor',
-  'body_shop_supervisor',
-  'water_wash_team',
-  'water_wash'
-]);
+const additionalWorkMenuPaths = ['/additional-work', '/body-shop-additional-work'];
+const canReadAdditionalWork = permissionMiddleware(additionalWorkMenuPaths, 'canRead');
+const canCreateAdditionalWork = permissionMiddleware(additionalWorkMenuPaths, 'canCreate');
 
-router.get('/context', additionalWorkAccess, controller.getContext);
-router.post('/request', additionalWorkAccess, controller.createRequest);
+router.get('/context', canReadAdditionalWork, controller.getContext);
+router.post('/request', canCreateAdditionalWork, controller.createRequest);
 
 module.exports = router;
