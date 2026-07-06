@@ -3,13 +3,7 @@ const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.ut
 const prisma = require('../../config/db');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
-const VIEW_ACTIVE_ONLY_ROLES = new Set([
-  'crm_team',
-  'crm-team',
-  'manager',
-  'managing_director',
-  'managing-director'
-]);
+// Removed VIEW_ACTIVE_ONLY_ROLES per user request
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -52,9 +46,7 @@ const parseOptionalPositiveInt = (value) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 };
 
-const shouldRestrictToActive = (user) => {
-  return user && VIEW_ACTIVE_ONLY_ROLES.has(user.roleSlug);
-};
+
 
 const toServiceItemResource = (serviceItem) => ({
   id: serviceItem.id,
@@ -212,16 +204,14 @@ const listServiceItems = async (query, user) => {
   const limit = parsePositiveInt(query.limit, 10);
   const search = query.search ? query.search.trim() : undefined;
   const categoryId = parseOptionalPositiveInt(query.categoryId);
-  const activeOnlyViewer = shouldRestrictToActive(user);
-  const isActive = activeOnlyViewer ? true : parseBooleanFilter(query.isActive);
+  const isActive = parseBooleanFilter(query.isActive);
 
   const { serviceItems, total } = await serviceItemRepository.listServiceItems({
     page,
     limit,
     search,
     categoryId,
-    isActive,
-    onlyActiveCategory: activeOnlyViewer
+    isActive
   });
 
   return {
@@ -236,11 +226,7 @@ const listServiceItems = async (query, user) => {
 };
 
 const getServiceItemDetail = async (identifier, user) => {
-  const activeOnlyViewer = shouldRestrictToActive(user);
-  const serviceItem = await ensureServiceItemExistsByIdentifier(identifier, {
-    onlyActive: activeOnlyViewer,
-    onlyActiveCategory: activeOnlyViewer
-  });
+  const serviceItem = await ensureServiceItemExistsByIdentifier(identifier, {});
   return toServiceItemResource(serviceItem);
 };
 

@@ -1,0 +1,263 @@
+const { generateUniqueSlug } = require('../../common/utils/slug.util');
+const prisma = require('../../config/db');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
+
+// Removed VIEW_ACTIVE_ONLY_ROLES per user request
+
+const createHttpError = (statusCode, message) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+};
+
+const parseBooleanFilter = (value) => {
+  if (value === undefined || value === '') return undefined;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return undefined;
+};
+
+
+
+const getActiveStatusId = async () => {
+  const status = await prisma.statusMaster.findFirst({
+    where: {
+      module: { moduleCode: 'bay' },
+      statusCode: 'ACTIVE'
+    }
+  });
+  return status?.id;
+};
+
+const createBay = async (payload, actorUserId) => {
+  const bayName = payload.bayName.trim();
+  const bayType = payload.bayType;
+
+  // Try to use provided locationId, user's locationId, or default to the first location
+  let locationId = payload.locationId;
+  if (!locationId) {
+    const user = await prisma.user.findUnique({ where: { id: actorUserId } });
+    if (user?.locationId) {
+      locationId = user.locationId;
+    } else {
+      const firstLocation = await prisma.location.findFirst({ orderBy: { id: 'asc' } });
+      if (firstLocation) locationId = firstLocation.id;
+    }
+  }
+
+  if (!locationId) {
+    throw createHttpError(400, 'Location is required to create a Bay');
+  }
+
+  // Check if name already exists in location
+  const existing = await prisma.bay.findFirst({
+    where: {
+      bayName: { equals: bayName },
+      locationId: locationId
+    }
+  });
+
+  if (existing) {
+    throw createHttpError(409, 'Bay with this name already exists in the selected location');
+  }
+
+  let bayCode = payload.bayCode;
+  if (!bayCode) {
+    // Generate a simple unique bay code
+    const count = await prisma.bay.count();
+    bayCode = `BAY-${String(count + 1).padStart(3, '0')}`;
+  }
+
+  const statusId = await getActiveStatusId();
+  if (!statusId) {
+    throw createHttpError(500, 'Bay ACTIVE status is not configured in the system');
+  }
+
+  const bay = await prisma.bay.create({
+    data: {
+      locationId,
+      bayName,
+      bayType,
+      bayCode,
+      statusId,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+  });
+
+  await createAuditLog(prisma, {
+    tableName: 'bays',
+    recordId: bay.id,
+    actionType: 'CREATE',
+    performedByUserId: actorUserId,
+    recordName: bay.bayName
+  }).catch((err) => console.error('Failed to create audit log:', err));
+
+  return bay;
+};
+
+const updateBay = async (identifier, payload, actorUserId) => {
+  const isId = !Number.isNaN(Number(identifier));
+  const where = isId ? { id: Number(identifier) } : { bayCode: identifier }; // Use bayCode if not ID
+
+  const existingBay = await prisma.bay.findFirst({ where });
+
+  if (!existingBay) {
+    throw createHttpError(404, 'Bay not found');
+  }
+
+  const bayName = payload.bayName.trim();
+  const bayType = payload.bayType;
+
+  if (bayName.toLowerCase() !== existingBay.bayName.toLowerCase()) {
+    const duplicate = await prisma.bay.findFirst({
+      where: {
+        bayName: { equals: bayName },
+        locationId: existingBay.locationId,
+        id: { not: existingBay.id }
+      }
+    });
+
+    if (duplicate) {
+      throw createHttpError(409, 'Bay with this name already exists in this location');
+    }
+  }
+
+  const updatedBay = await prisma.bay.update({
+    where: { id: existingBay.id },
+    data: {
+      bayName,
+      bayType,
+      updatedAt: new Date()
+    }
+  });
+
+  await createAuditLog(prisma, {
+    tableName: 'bays',
+    recordId: updatedBay.id,
+    actionType: 'UPDATE',
+    performedByUserId: actorUserId,
+    recordName: updatedBay.bayName,
+    details: buildChangeDetails(existingBay, updatedBay, ['bayName', 'bayType'])
+  }).catch((err) => console.error('Failed to create audit log:', err));
+
+  return updatedBay;
+};
+
+const listBays = async (query, user) => {
+  const page = parsePositiveInt(query.page, 1);
+  const limit = parsePositiveInt(query.limit, 10);
+  const skip = (page - 1) * limit;
+
+  const search = query.search?.trim();
+  const isActive = parseBooleanFilter(query.isActive);
+  const locationId = parsePositiveInt(query.locationId, undefined);
+
+  const where = {};
+
+  if (search) {
+    where.bayName = { contains: search };
+  }
+
+  if (locationId) {
+    where.locationId = locationId;
+  }
+
+  if (isActive !== undefined) {
+    where.isActive = isActive;
+  }
+
+  const [bays, total] = await Promise.all([
+    prisma.bay.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        location: {
+          select: { locationName: true, locationCode: true }
+        },
+        status: {
+          select: { statusName: true, statusCode: true }
+        }
+      }
+    }),
+    prisma.bay.count({ where })
+  ]);
+
+  return {
+    bays,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+};
+
+const getBayDropdown = async (locationId) => {
+  const where = { isActive: true };
+  if (locationId) {
+    where.locationId = Number(locationId);
+  }
+  const bays = await prisma.bay.findMany({
+    where,
+    select: { id: true, bayName: true, bayType: true, bayCode: true },
+    orderBy: { bayName: 'asc' }
+  });
+  return bays;
+};
+
+const updateBayStatus = async (id, payload, actorUserId) => {
+  const bayId = Number(id);
+  const existingBay = await prisma.bay.findUnique({
+    where: { id: bayId }
+  });
+
+  if (!existingBay) {
+    throw createHttpError(404, 'Bay not found');
+  }
+
+  const { isActive } = payload;
+
+  if (existingBay.isActive === isActive) {
+    return existingBay;
+  }
+
+  const updatedBay = await prisma.bay.update({
+    where: { id: bayId },
+    data: {
+      isActive,
+      updatedAt: new Date()
+    }
+  });
+
+  await createAuditLog(prisma, {
+    tableName: 'bays',
+    recordId: updatedBay.id,
+    actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+    performedByUserId: actorUserId,
+    recordName: updatedBay.bayName,
+    details: buildChangeDetails({ isActive: existingBay.isActive }, { isActive: updatedBay.isActive }, ['isActive'])
+  }).catch((err) => console.error('Failed to create audit log:', err));
+
+  return updatedBay;
+};
+
+module.exports = {
+  createBay,
+  updateBay,
+  listBays,
+  getBayDropdown,
+  updateBayStatus
+};

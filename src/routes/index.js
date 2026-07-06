@@ -37,6 +37,7 @@ const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
 const { brandRoutes, crmBrandRoutes } = require('../modules/brands/brand.routes');
 const stageTimeLimitRoutes = require('../modules/stageTimeLimits/stageTimeLimit.routes');
 const stageTimeLimitDropdownRoutes = require('../modules/stageTimeLimits/stageTimeLimitDropdown.routes');
+const { bayRoutes, crmBayRoutes } = require('../modules/bays/bay.routes');
 
 router.use('/', stageTimeLimitDropdownRoutes);
 router.use('/auth', authRoutes);
@@ -76,5 +77,7 @@ router.use('/stage-time-limits', stageTimeLimitRoutes);
 router.use('/admin/brands', brandRoutes);
 router.use('/brands', brandRoutes);
 router.use('/crm/brands', crmBrandRoutes);
+router.use('/bays', bayRoutes);
+router.use('/crm/bays', crmBayRoutes);
 
 module.exports = router;

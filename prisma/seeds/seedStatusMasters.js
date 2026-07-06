@@ -75,6 +75,15 @@ const statusModules = [
       { statusCode: 'COMPLETED', statusName: 'Completed', sortOrder: 4, isFinal: true },
       { statusCode: 'REJECTED', statusName: 'Rejected', sortOrder: 5, isFinal: true }
     ]
+  },
+  {
+    moduleCode: 'bay',
+    moduleName: 'Bay',
+    description: 'Bay statuses',
+    statuses: [
+      { statusCode: 'ACTIVE', statusName: 'Active', sortOrder: 1 },
+      { statusCode: 'INACTIVE', statusName: 'Inactive', sortOrder: 2, isFinal: true }
+    ]
   }
 ];
 

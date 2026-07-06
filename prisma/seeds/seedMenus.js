@@ -77,7 +77,8 @@ const MENU_SEED_DATA = [
       { name: 'Audit Logs', path: '/audit-logs', icon: 'FileText' },
       { name: 'Notifications', path: '/notifications', icon: 'Bell' },
       // { name: 'System Settings', path: '/system-settings', icon: 'Settings' },
-      { name: 'TV Display', path: '/kiosk/tv', icon: 'Monitor' }
+      { name: 'TV Display', path: '/kiosk/tv', icon: 'Monitor' },
+      { name: 'Bays', path: '/md-bays', icon: 'Tool' }
     ]
   },
   {
@@ -109,7 +110,9 @@ const MENU_SEED_DATA = [
 const REMOVED_MENU_PATHS = [
   { module: 'floor-supervisor', path: '/work-status' },
   { module: 'body-shop-supervisor', path: '/body-shop-work-status' },
-  { module: 'body-shop-supervisor', path: '/body-shop-queue' }
+  { module: 'body-shop-supervisor', path: '/body-shop-queue' },
+  { module: 'admin', path: '/master-bays' },
+  { module: 'managing-director', path: '/master-bays' }
 ];
 
 const seedMenus = async (prisma) => {
