@@ -22,7 +22,7 @@ const canViewBrands = roleMiddleware([
 
 router.use(authenticate);
 
-router.get('/list', brandController.getBrandDropdown);
+router.get('/dropdown', brandController.getBrandDropdown);
 router.post('/create', adminOnly, validateBrandPayload, brandController.createBrand);
 router.put('/update/:id', adminOnly, validateIdentifierParam, validateBrandPayload, brandController.updateBrand);
 router.get('/list', canViewBrands, brandController.listBrands);
