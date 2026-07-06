@@ -1,12 +1,7 @@
 const router = require('express').Router();
 
 const serviceItemController = require('./service-item.controller');
-const {
-  validateIdParam,
-  validateIdentifierParam,
-  validateServiceItemPayload,
-  validateStatusPayload
-} = require('./service-item.validation');
+const { validateIdParam, validateIdentifierParam, validateServiceItemPayload, validateStatusPayload } = require('./service-item.validation');
 const { authenticate } = require('../../common/middleware/auth.middleware');
 const { permissionMiddleware } = require('../../common/middleware/permission.middleware');
 
@@ -24,7 +19,7 @@ router.patch('/status/:id', canUpdateItems, validateIdParam, validateStatusPaylo
 
 const crmRouter = require('express').Router();
 crmRouter.use(authenticate);
-crmRouter.get('/list', canReadItems, serviceItemController.listServiceItems);
+crmRouter.get('/list', serviceItemController.listServiceItems);
 
 module.exports = {
   serviceItemRoutes: router,
