@@ -17,6 +17,13 @@ const userWithRoleSelect = {
       slug: true,
       isActive: true
     }
+  },
+  location: {
+    select: {
+      id: true,
+      locationName: true,
+      locationCode: true
+    }
   }
 };
 

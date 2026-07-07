@@ -128,7 +128,7 @@ async function runApprovalFollowupWorkflow() {
               where: {
                 userId: recipientId,
                 jobCardId: jobCard.id,
-                notificationType,
+                type: notificationType,
                 createdAt: { gte: new Date(referenceTime) }
               }
             });
@@ -147,10 +147,10 @@ async function runApprovalFollowupWorkflow() {
                 locationId: jobCard.locationId,
                 userId: recipientId,
                 jobCardId: jobCard.id,
-                statusId: jobCard.currentStatusId,
                 title,
                 message,
-                notificationType
+                type: notificationType,
+                retryCount: 0
               }
             });
 

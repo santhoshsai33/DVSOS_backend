@@ -3,18 +3,23 @@ const prisma = require('../../config/db');
 /**
  * Upsert a device token for a user.
  */
-async function upsertDeviceToken(userId, token) {
+async function upsertDeviceToken(userId, { token, platform = null, deviceId = null }) {
   return prisma.userDeviceToken.upsert({
     where: { token },
     update: {
       userId,
+      platform,
+      deviceId,
       isActive: true,
-      updatedAt: new Date()
+      lastUsedAt: new Date()
     },
     create: {
       userId,
       token,
-      isActive: true
+      platform,
+      deviceId,
+      isActive: true,
+      lastUsedAt: new Date()
     }
   });
 }
@@ -22,10 +27,15 @@ async function upsertDeviceToken(userId, token) {
 /**
  * Get paginated notifications for a specific user.
  */
-async function getUserNotifications(userId, limit = 20, offset = 0) {
+async function getUserNotifications(userId, limit = 20, offset = 0, unreadOnly = false) {
+  const where = {
+    userId,
+    ...(unreadOnly ? { readAt: null } : {})
+  };
+
   const [notifications, total] = await Promise.all([
     prisma.notification.findMany({
-      where: { userId },
+      where,
       include: {
         jobCard: {
           select: {
@@ -45,11 +55,20 @@ async function getUserNotifications(userId, limit = 20, offset = 0) {
       skip: offset
     }),
     prisma.notification.count({
-      where: { userId }
+      where
     })
   ]);
 
   return { notifications, total };
+}
+
+async function countUnread(userId) {
+  return prisma.notification.count({
+    where: {
+      userId,
+      readAt: null
+    }
+  });
 }
 
 /**
@@ -114,7 +133,10 @@ async function getManagersWithTokens() {
 async function deactivateDeviceToken(token) {
   return prisma.userDeviceToken.updateMany({
     where: { token },
-    data: { isActive: false }
+    data: {
+      isActive: false,
+      lastUsedAt: new Date()
+    }
   });
 }
 
@@ -130,6 +152,7 @@ async function createNotification(data) {
 module.exports = {
   upsertDeviceToken,
   getUserNotifications,
+  countUnread,
   markAsRead,
   markAllAsRead,
   getManagersWithTokens,

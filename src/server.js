@@ -6,10 +6,9 @@ const prisma = require('./config/db');
 const { initializeSocket } = require('./config/socket');
 const { initializeFirebase } = require('./config/firebase');
 const { initializeTwilio } = require('./config/twilio');
-const { startGateEntryTimeoutJob } = require('./jobs/gate-entry-timeout.job');
 const { startFcmSenderJob } = require('./jobs/fcm-sender.job');
 const { startApprovalFollowupJob } = require('./jobs/approval-followup.job');
-const { startDelayMonitorJob } = require('./jobs/delay-monitor.job');
+const { startProcessStageDelayMonitorJob } = require('./jobs/process-stage-delay-monitor.job');
 
 const server = http.createServer(app);
 
@@ -23,9 +22,8 @@ const startServer = async () => {
     console.info('Database connection established through Prisma.');
 
     // Start background jobs
-    startGateEntryTimeoutJob();
     startApprovalFollowupJob();
-    startDelayMonitorJob();
+    startProcessStageDelayMonitorJob();
     try {
       startFcmSenderJob();
     } catch (jobErr) {

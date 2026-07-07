@@ -4,6 +4,29 @@ const { admin } = require('../config/firebase');
 
 let isRegistered = false;
 let isProcessing = false;
+const MAX_RETRY_COUNT = 3;
+
+const isInvalidTokenError = (err) => {
+  const message = String(err && err.message ? err.message : '');
+
+  return err.code === 'messaging/registration-token-not-registered'
+    || err.code === 'messaging/invalid-registration-token'
+    || message.includes('registration-token-not-registered')
+    || message.includes('invalid-registration-token')
+    || message.includes('not a valid FCM registration token')
+    || message.includes('invalid-argument');
+};
+
+const markNotificationFailure = async (notificationId, reason, retryCount) => {
+  return prisma.notification.update({
+    where: { id: notificationId },
+    data: {
+      failedAt: new Date(),
+      failureReason: reason,
+      retryCount
+    }
+  });
+};
 
 /**
  * Main workflow to send pending notifications via FCM.
@@ -23,10 +46,14 @@ async function runFcmSenderWorkflow() {
       return;
     }
 
-    // Query up to 100 notifications where sentAt is null
+    // Query up to 100 notifications that are still retryable.
     const notifications = await prisma.notification.findMany({
       where: {
-        sentAt: null
+        sentAt: null,
+        failedAt: null,
+        retryCount: {
+          lt: MAX_RETRY_COUNT
+        }
       },
       include: {
         user: {
@@ -48,11 +75,19 @@ async function runFcmSenderWorkflow() {
 
       if (tokens.length === 0) {
         console.warn(`[FCM Sender Job] Notification ${notification.id} skipped: User ${notification.userId} has no active device tokens.`);
+        await markNotificationFailure(
+          notification.id,
+          'NO_ACTIVE_DEVICE_TOKEN',
+          Math.min(notification.retryCount + 1, MAX_RETRY_COUNT)
+        );
         skippedCount++;
         continue;
       }
 
       let sentAny = false;
+      let temporaryFailureCount = 0;
+      let invalidTokenCount = 0;
+      let lastFailureReason = null;
 
       for (const tokenEntity of tokens) {
         try {
@@ -65,7 +100,9 @@ async function runFcmSenderWorkflow() {
             data: {
               notificationId: String(notification.id),
               gateEntryId: String(notification.gateEntryId || ''),
-              statusId: String(notification.statusId || '')
+              jobCardId: String(notification.jobCardId || ''),
+              processStageTrackingId: String(notification.processStageTrackingId || ''),
+              type: notification.type || ''
             }
           };
 
@@ -75,15 +112,10 @@ async function runFcmSenderWorkflow() {
           console.error(`[FCM Sender Job] Failed to send push to token ID ${tokenEntity.id}:`, err.message);
 
           // Check if token is invalid or expired
-          const isInvalidToken =
-            err.code === 'messaging/registration-token-not-registered' ||
-            err.code === 'messaging/invalid-registration-token' ||
-            err.message.includes('registration-token-not-registered') ||
-            err.message.includes('invalid-registration-token') ||
-            err.message.includes('not a valid FCM registration token') ||
-            err.message.includes('invalid-argument');
+          lastFailureReason = err.code || err.message || 'FCM_SEND_FAILED';
 
-          if (isInvalidToken) {
+          if (isInvalidTokenError(err)) {
+            invalidTokenCount++;
             console.info(`[FCM Sender Job] Deactivating invalid token ID ${tokenEntity.id}`);
             try {
               await prisma.userDeviceToken.update({
@@ -93,22 +125,49 @@ async function runFcmSenderWorkflow() {
             } catch (updateErr) {
               console.error(`[FCM Sender Job] Failed to deactivate token ${tokenEntity.id}:`, updateErr.message);
             }
+          } else {
+            temporaryFailureCount++;
           }
         }
       }
 
-      // Update sentAt only if at least one token succeeded
       if (sentAny) {
         try {
           await prisma.notification.update({
             where: { id: notification.id },
-            data: { sentAt: new Date() }
+            data: {
+              sentAt: new Date(),
+              failureReason: null
+            }
           });
           successCount++;
         } catch (dbErr) {
           console.error(`[FCM Sender Job] Failed to update sentAt for Notification ${notification.id}:`, dbErr.message);
         }
+        continue;
       }
+
+      const nextRetryCount = notification.retryCount + 1;
+
+      if (temporaryFailureCount === 0 && invalidTokenCount > 0) {
+        await markNotificationFailure(notification.id, 'NO_DELIVERABLE_DEVICE_TOKEN', nextRetryCount);
+        skippedCount++;
+        continue;
+      }
+
+      if (nextRetryCount >= MAX_RETRY_COUNT) {
+        await markNotificationFailure(notification.id, lastFailureReason || 'FCM_SEND_FAILED', nextRetryCount);
+        skippedCount++;
+        continue;
+      }
+
+      await prisma.notification.update({
+        where: { id: notification.id },
+        data: {
+          retryCount: nextRetryCount,
+          failureReason: lastFailureReason
+        }
+      });
     }
   } catch (error) {
     console.error('[FCM Sender Job] Critical error in background job:', error.message);

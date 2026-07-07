@@ -7,7 +7,7 @@ const { admin } = require('../../config/firebase');
  */
 async function registerDeviceToken(req, res, next) {
   try {
-    const { token } = req.body;
+    const { token, platform = null, deviceId = null } = req.body;
     if (!token) {
       const error = new Error('Device token is required');
       error.statusCode = 400;
@@ -15,12 +15,32 @@ async function registerDeviceToken(req, res, next) {
     }
 
     const userId = req.user.userId;
-    const deviceToken = await notificationService.upsertDeviceToken(userId, token);
+    const deviceToken = await notificationService.upsertDeviceToken(userId, { token, platform, deviceId });
 
     return apiResponse(res, {
       statusCode: 200,
       message: 'Device token registered successfully',
       data: deviceToken
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function removeDeviceToken(req, res, next) {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      const error = new Error('Device token is required');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    await notificationService.deactivateDeviceToken(token);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      message: 'Device token removed successfully'
     });
   } catch (error) {
     next(error);
@@ -36,8 +56,9 @@ async function listNotifications(req, res, next) {
     const limit = parseInt(req.query.limit, 10) || 20;
     const page = parseInt(req.query.page, 10) || 1;
     const offset = (page - 1) * limit;
+    const unreadOnly = String(req.query.unreadOnly || '').toLowerCase() === 'true';
 
-    const { notifications, total } = await notificationService.getUserNotifications(userId, limit, offset);
+    const { notifications, total } = await notificationService.getUserNotifications(userId, limit, offset, unreadOnly);
 
     return apiResponse(res, {
       statusCode: 200,
@@ -51,6 +72,21 @@ async function listNotifications(req, res, next) {
           totalPages: Math.ceil(total / limit)
         }
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function unreadCount(req, res, next) {
+  try {
+    const userId = req.user.userId;
+    const count = await notificationService.countUnread(userId);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      message: 'Unread notification count retrieved successfully',
+      data: { count }
     });
   } catch (error) {
     next(error);
@@ -152,7 +188,8 @@ async function sendTestNotificationToManager(req, res, next) {
           locationId: manager.locationId,
           title,
           message,
-          notificationType: 'TEST_PUSH'
+          type: 'TEST_PUSH',
+          retryCount: 0
         });
         results.push({ userId: manager.id, name: manager.fullName, status: 'queued_in_db', notificationId: notification.id });
       }
@@ -170,7 +207,9 @@ async function sendTestNotificationToManager(req, res, next) {
 
 module.exports = {
   registerDeviceToken,
+  removeDeviceToken,
   listNotifications,
+  unreadCount,
   markNotificationRead,
   markAllNotificationsRead,
   sendTestNotificationToManager

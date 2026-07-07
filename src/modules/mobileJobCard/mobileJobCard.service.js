@@ -7,9 +7,11 @@ const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber')
 const { createStorageProvider } = require('../../providers/storage/storage.provider');
 const {
   STATUS_MODULE_CODES,
+  resolveStatusFromCodes,
   resolveStatusIdFromCodes,
   statusModuleFilter
 } = require('../../common/utils/status.util');
+const { completeStage } = require('../processStageTracking/processStageTracking.service');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
 const JOB_CARD_APPROVED_STATUS_CODES = ['APPROVED'];
@@ -1687,6 +1689,22 @@ const createFromGateEntry = async (payload, user, files = []) => {
         jobCardNo: true
       }
     });
+
+    const jobCardQueueStatus = await resolveStatusFromCodes(
+      tx,
+      STATUS_MODULE_CODES.JOB_CARD_STATUS,
+      ['JOB_CARD_PENDING']
+    );
+
+    if (jobCardQueueStatus) {
+      await completeStage({
+        gateEntryId: gateEntry.id,
+        jobCardId: jobCard.id,
+        moduleId: jobCardQueueStatus.moduleId,
+        statusId: jobCardQueueStatus.id,
+        modifiedById: user.userId || null
+      }, tx);
+    }
 
     const approval = customerApprovalDecision
       ? await tx.jobCardApproval.create({

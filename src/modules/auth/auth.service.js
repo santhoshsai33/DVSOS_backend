@@ -44,7 +44,14 @@ const toPublicUser = (user) => ({
     name: user.role.name,
     slug: user.role.slug
   },
-  locationId: user.locationId
+  locationId: user.locationId,
+  location: user.location
+    ? {
+      id: user.location.id,
+      locationName: user.location.locationName,
+      locationCode: user.location.locationCode
+    }
+    : null
 });
 
 const buildJwtPayload = (user) => ({

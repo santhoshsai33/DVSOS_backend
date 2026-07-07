@@ -35,8 +35,11 @@ const notificationRoutes = require('../modules/notifications/notification.routes
 const deviceTokenRoutes = require('../modules/notifications/deviceToken.routes');
 const auditLogRoutes = require('../modules/auditLogs/auditLog.routes');
 const { brandRoutes, crmBrandRoutes } = require('../modules/brands/brand.routes');
+const stageTimeLimitRoutes = require('../modules/stageTimeLimits/stageTimeLimit.routes');
+const stageTimeLimitDropdownRoutes = require('../modules/stageTimeLimits/stageTimeLimitDropdown.routes');
 const { bayRoutes, crmBayRoutes } = require('../modules/bays/bay.routes');
 
+router.use('/', stageTimeLimitDropdownRoutes);
 router.use('/auth', authRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/device-token', deviceTokenRoutes);
@@ -70,6 +73,7 @@ router.use('/job-cards', jobCardRoutes);
 router.use('/queues', queueRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/audit-logs', auditLogRoutes);
+router.use('/stage-time-limits', stageTimeLimitRoutes);
 router.use('/admin/brands', brandRoutes);
 router.use('/brands', brandRoutes);
 router.use('/crm/brands', crmBrandRoutes);
