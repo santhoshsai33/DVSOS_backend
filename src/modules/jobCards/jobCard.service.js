@@ -1,4 +1,5 @@
 const prisma = require('../../config/db');
+const { getSocket } = require('../../config/socket');
 const {
   STATUS_MODULE_CODES,
   statusModuleFilter,
@@ -1013,6 +1014,13 @@ const updateJobCard = async (id, payload, user) => {
           remarks: `Job card status derived from service updates: ${nextStatus.statusName}`
         }
       });
+      
+      // Emit socket event for TV Kiosk
+      const io = getSocket();
+      if (io) {
+        // We just need to ping the client so it can refetch, or we can send the partial updated data
+        io.emit('jobCardStatusChanged', { jobCardId, newStatus: nextStatus.statusCode });
+      }
     }
     const updatedJobCard = await tx.jobCard.findUnique({
       where: { id: jobCardId },

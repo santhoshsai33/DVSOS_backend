@@ -788,11 +788,82 @@ const getWaterWashDashboard = async ({ locationId } = {}) => {
   };
 };
 
+const getTvKioskDashboard = async ({ locationId } = {}) => {
+  const dateFilter = {};
+  if (locationId) {
+    dateFilter.locationId = locationId;
+  }
+
+  const allJobCards = await prisma.jobCard.findMany({
+    where: {
+      ...dateFilter,
+      currentStatus: {
+        statusCode: { 
+          notIn: [
+            'DELIVERED',
+            'GATE_ENTRY_CREATED',
+            'JOB_CARD_PENDING',
+            'JOB_CARD_CREATED',
+            'APPROVAL_PENDING',
+            'APPROVED',
+            'REJECTED'
+          ]
+        }
+      }
+    },
+    include: {
+      customer: true,
+      vehicle: {
+        include: { brand: true }
+      },
+      currentStatus: true
+    },
+    orderBy: {
+      updatedAt: 'desc'
+    }
+  });
+
+  const queue = allJobCards.map(jc => {
+    const statusCode = jc.currentStatus?.statusCode || '';
+    
+    let column = 'MECHANICAL';
+    if (statusCode === 'READY_FOR_DELIVERY' || statusCode.includes('DELIVERY')) {
+      column = 'READY_FOR_DELIVERY';
+    } else if (statusCode.includes('WATER_WASH') || statusCode.includes('WASH')) {
+      column = 'WATER_WASH';
+    } else if (statusCode.includes('BODY_SHOP') || statusCode.includes('PAINT')) {
+      column = 'BODY_SHOP';
+    } else if (statusCode.includes('MECHANICAL')) {
+      column = 'MECHANICAL';
+    } else {
+      // Fallback
+      column = 'MECHANICAL';
+    }
+
+    const waitMinutes = Math.max(0, Math.floor((new Date().getTime() - new Date(jc.updatedAt).getTime()) / 60000));
+
+    return {
+      id: jc.jobCardNo || jc.id,
+      rawId: jc.id,
+      vehicleNumber: jc.vehicle?.registrationNo || 'N/A',
+      customerName: jc.customer?.fullName || 'Unknown',
+      vehicleInfo: `${jc.vehicle?.brand?.name || ''} ${jc.vehicle?.model || ''}`.trim() || 'Unknown',
+      status: statusCode,
+      column,
+      waitMinutes,
+      updatedAt: jc.updatedAt
+    };
+  });
+
+  return queue;
+};
+
 module.exports = {
   getAdminDashboard,
   getMdDashboard,
   getFloorSupervisorDashboard,
   getManagerDashboard,
   getBodyShopDashboard,
-  getWaterWashDashboard
+  getWaterWashDashboard,
+  getTvKioskDashboard
 };

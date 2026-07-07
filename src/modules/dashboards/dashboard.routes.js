@@ -11,6 +11,8 @@ const canReadManagerDashboard = permissionMiddleware('/manager-dashboard', 'canR
 const canReadBodyShopDashboard = permissionMiddleware('/body-shop-dashboard', 'canRead');
 const canReadWaterWashDashboard = permissionMiddleware('/water-wash-dashboard', 'canRead');
 
+// Public route for TV Kiosk in the lobby (Moved to /kiosk/tv in index.js)
+
 router.use(authenticate);
 
 router.get('/admin', canReadAdminDashboard, dashboardController.getAdminDashboard);

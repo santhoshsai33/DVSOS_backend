@@ -4,6 +4,7 @@ const {
   resolveStatusIdFromCodes
 } = require('../../common/utils/status.util');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
+const { getSocket } = require('../../config/socket');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
