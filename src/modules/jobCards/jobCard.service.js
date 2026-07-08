@@ -9,6 +9,7 @@ const {
 } = require('../../common/utils/status.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { createAuditLog } = require('../../common/utils/audit.util');
+const { syncAssignmentPendingStages } = require('../processStageTracking/departmentAssignmentStage.service');
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
 
@@ -1021,6 +1022,20 @@ const updateJobCard = async (id, payload, user) => {
       where: { id: jobCardId },
       select: {
         id: true,
+        locationId: true,
+        gateEntryId: true,
+        customerId: true,
+        vehicleId: true,
+        currentStatus: {
+          select: {
+            statusCode: true
+          }
+        },
+        approvalStatus: {
+          select: {
+            statusCode: true
+          }
+        },
         services: {
           include: {
             serviceStatus: true,
@@ -1145,6 +1160,51 @@ const updateJobCard = async (id, payload, user) => {
         io.emit('jobCardStatusChanged', { jobCardId, newStatus: nextStatus.statusCode });
       }
     }
+
+    const trackingJobCard = await tx.jobCard.findUnique({
+      where: { id: jobCardId },
+      select: {
+        id: true,
+        locationId: true,
+        gateEntryId: true,
+        customerId: true,
+        vehicleId: true,
+        currentStatus: {
+          select: {
+            statusCode: true
+          }
+        },
+        approvalStatus: {
+          select: {
+            statusCode: true
+          }
+        },
+        services: {
+          include: {
+            serviceStatus: true,
+            approvalStatus: true,
+            serviceItem: {
+              include: {
+                category: true
+              }
+            },
+            workAssignments: {
+              include: {
+                status: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (trackingJobCard) {
+      await syncAssignmentPendingStages(tx, {
+        jobCard: trackingJobCard,
+        actorUserId: user && user.userId ? user.userId : null
+      });
+    }
+
     const updatedJobCard = await tx.jobCard.findUnique({
       where: { id: jobCardId },
       include: {

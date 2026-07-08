@@ -5,6 +5,10 @@ const {
 } = require('../../common/utils/status.util');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 const { getSocket } = require('../../config/socket');
+const {
+  completeDepartmentAssignmentPendingStage,
+  syncAssignmentPendingStages
+} = require('../processStageTracking/departmentAssignmentStage.service');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
@@ -241,6 +245,9 @@ const buildWhere = (query, user) => {
 const queueJobCardSelect = {
   id: true,
   locationId: true,
+  gateEntryId: true,
+  customerId: true,
+  vehicleId: true,
   jobCardNo: true,
   expectedDeliveryAt: true,
   createdAt: true,
@@ -611,6 +618,12 @@ const assignWork = async (jobCardId, payload, user) => {
         currentStatusId: jobCardStatusId,
         modifiedById: user && user.userId ? user.userId : null
       }
+    });
+
+    await completeDepartmentAssignmentPendingStage(tx, {
+      jobCard,
+      department,
+      modifiedById: user && user.userId ? user.userId : null
     });
 
     const assignments = await tx.workAssignment.findMany({
@@ -1039,6 +1052,13 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         //     remarks: `${department} work completed`
         //   }
         // });
+      }
+
+      if (latestJobCard && isDepartmentComplete) {
+        await syncAssignmentPendingStages(tx, {
+          jobCard: latestJobCard,
+          actorUserId: user && user.userId ? user.userId : null
+        });
       }
     } else {
       await tx.jobCard.update({
