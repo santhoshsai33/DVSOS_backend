@@ -39,8 +39,16 @@ const listCustomers = async (query) => {
     locationId
   });
 
+  const mappedCustomers = customers.map(c => {
+    const { _count, ...rest } = c;
+    return {
+      ...rest,
+      visits: _count?.jobCards || 0
+    };
+  });
+
   return {
-    customers,
+    customers: mappedCustomers,
     meta: {
       total,
       page,

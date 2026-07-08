@@ -19,6 +19,11 @@ const customerSelect = {
       locationCode: true,
       locationName: true
     }
+  },
+  _count: {
+    select: {
+      jobCards: true
+    }
   }
 };
 
