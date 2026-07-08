@@ -80,4 +80,7 @@ router.use('/crm/brands', crmBrandRoutes);
 router.use('/bays', bayRoutes);
 router.use('/crm/bays', crmBayRoutes);
 
+// Kiosk routes
+router.get('/kiosk/tv', require('../modules/dashboards/dashboard.controller').getTvKioskDashboard);
+
 module.exports = router;

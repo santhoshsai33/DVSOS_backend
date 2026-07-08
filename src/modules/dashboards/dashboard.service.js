@@ -24,11 +24,16 @@ const getWaterWashDashboard = (locationId) => {
   return dashboardRepository.getWaterWashDashboard({ locationId });
 };
 
+const getTvKioskDashboard = (locationId) => {
+  return dashboardRepository.getTvKioskDashboard({ locationId });
+};
+
 module.exports = {
   getAdminDashboard,
   getMdDashboard,
   getFloorSupervisorDashboard,
   getManagerDashboard,
   getBodyShopDashboard,
-  getWaterWashDashboard
+  getWaterWashDashboard,
+  getTvKioskDashboard
 };

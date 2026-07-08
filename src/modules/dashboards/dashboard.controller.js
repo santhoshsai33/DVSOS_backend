@@ -85,11 +85,26 @@ const getWaterWashDashboard = async (req, res, next) => {
   }
 };
 
+const getTvKioskDashboard = async (req, res, next) => {
+  try {
+    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const dashboard = await dashboardService.getTvKioskDashboard(locationId);
+
+    return apiResponse(res, {
+      message: 'TV Kiosk dashboard fetched successfully',
+      data: dashboard
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   getAdminDashboard,
   getMdDashboard,
   getFloorSupervisorDashboard,
   getManagerDashboard,
   getBodyShopDashboard,
-  getWaterWashDashboard
+  getWaterWashDashboard,
+  getTvKioskDashboard
 };
