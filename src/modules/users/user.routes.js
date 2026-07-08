@@ -13,7 +13,7 @@ router.use(authenticate);
 
 router.post('/create', canCreateUsers, validateUserPayload(), userController.createUser);
 router.put('/update/:id', canUpdateUsers, validateIdParam, validateUserPayload(), userController.updateUser);
-router.get('/mechanics/dropdown', canReadUsers, userController.listMechanicDropdown);
+router.get('/mechanics/dropdown',userController.listMechanicDropdown);
 router.get('/list', canReadUsers, userController.listUsers);
 router.get('/detail/:id', canReadUsers, validateIdParam, userController.getUserDetail);
 router.patch('/status/:id', canUpdateUsers, validateIdParam, validateStatusPayload, userController.updateUserStatus);

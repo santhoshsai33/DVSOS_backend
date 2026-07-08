@@ -44,8 +44,10 @@ const listBays = async (req, res, next) => {
 
 const getBayDropdown = async (req, res, next) => {
   try {
-    const locationId = req.query.locationId || req.user.locationId;
-    const bays = await bayService.getBayDropdown(locationId);
+    const bays = await bayService.getBayDropdown({
+      ...req.query,
+      locationId: req.query.locationId || req.user.locationId
+    });
 
     return apiResponse(res, {
       message: 'Bay dropdown fetched successfully',

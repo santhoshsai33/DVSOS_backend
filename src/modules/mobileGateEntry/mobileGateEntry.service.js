@@ -14,6 +14,9 @@ const { startStage } = require('../processStageTracking/processStageTracking.ser
 
 const ENTRY_STATUS_CODES = ['ACTIVE', 'OPEN', 'ENTERED', 'ENTRY_CREATED'];
 const EXIT_STATUS_CODES = ['EXITED', 'CLOSED'];
+const DELIVERED_JOB_CARD_STATUS_CODES = ['DELIVERED'];
+const TERMINAL_SERVICE_STATUS_CODES = ['COMPLETED', 'REJECTED'];
+const TERMINAL_APPROVAL_STATUS_CODES = ['REJECTED'];
 const ENTRY_TYPE_MAP = {
   service: 'SERVICE',
   pickup: 'PICKUP',
@@ -62,6 +65,32 @@ const parseDate = (value, endOfDay = false) => {
 const normalizeHistoryRecordType = (value) => {
   const recordType = String(value || 'all').trim().toLowerCase();
   return HISTORY_RECORD_TYPES.includes(recordType) ? recordType : 'all';
+};
+
+const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
+
+const isTerminalServiceStatus = (status) => {
+  const code = getStatusCode(status);
+  return TERMINAL_SERVICE_STATUS_CODES.includes(code) || code.endsWith('_COMPLETED');
+};
+
+const isTerminalApprovalStatus = (status) => {
+  return TERMINAL_APPROVAL_STATUS_CODES.includes(getStatusCode(status));
+};
+
+const isJobCardServiceReadyForExit = (service) => {
+  if (isTerminalServiceStatus(service.serviceStatus) || isTerminalApprovalStatus(service.approvalStatus)) {
+    return true;
+  }
+
+  const assignments = service.workAssignments || [];
+  return assignments.length > 0 && assignments.every((assignment) => {
+    return assignment.completedAt || isTerminalServiceStatus(assignment.status);
+  });
+};
+
+const getIncompleteJobCardServices = (jobCard) => {
+  return (jobCard.services || []).filter((service) => !isJobCardServiceReadyForExit(service));
 };
 
 const formatDateKey = (date) => {
@@ -615,6 +644,87 @@ const submitExit = async (id, payload, user) => {
 
   return prisma.$transaction(async (tx) => {
     const exitStatusId = await resolveStatusIdFromCodes(tx, STATUS_MODULE_CODES.GATE_ENTRY, EXIT_STATUS_CODES);
+    const linkedJobCards = await tx.jobCard.findMany({
+      where: {
+        gateEntryId
+      },
+      select: {
+        id: true,
+        jobCardNo: true,
+        currentStatus: {
+          select: {
+            statusCode: true
+          }
+        },
+        services: {
+          select: {
+            id: true,
+            serviceName: true,
+            serviceStatus: {
+              select: {
+                statusCode: true,
+                statusName: true
+              }
+            },
+            approvalStatus: {
+              select: {
+                statusCode: true,
+                statusName: true
+              }
+            },
+            workAssignments: {
+              select: {
+                id: true,
+                completedAt: true,
+                status: {
+                  select: {
+                    statusCode: true,
+                    statusName: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    const blockedJobCards = linkedJobCards
+      .map((jobCard) => ({
+        jobCardId: jobCard.id,
+        jobCardNo: jobCard.jobCardNo,
+        incompleteServices: getIncompleteJobCardServices(jobCard).map((service) => ({
+          id: service.id,
+          serviceName: service.serviceName,
+          serviceStatus: service.serviceStatus
+            ? {
+              code: service.serviceStatus.statusCode,
+              name: service.serviceStatus.statusName
+            }
+            : null,
+          approvalStatus: service.approvalStatus
+            ? {
+              code: service.approvalStatus.statusCode,
+              name: service.approvalStatus.statusName
+            }
+            : null
+        }))
+      }))
+      .filter((jobCard) => jobCard.incompleteServices.length > 0);
+
+    if (blockedJobCards.length > 0) {
+      throw createHttpError(400, 'All job card services must be completed before vehicle exit', {
+        jobCards: blockedJobCards
+      });
+    }
+
+    const deliveredStatusId = linkedJobCards.length > 0
+      ? await resolveStatusIdFromCodes(tx, STATUS_MODULE_CODES.JOB_CARD_STATUS, DELIVERED_JOB_CARD_STATUS_CODES)
+      : null;
+
+    if (linkedJobCards.length > 0 && !deliveredStatusId) {
+      throw createHttpError(500, 'Delivered job card status is not configured');
+    }
+
     const gateEntry = await tx.gateEntry.update({
       where: { id: gateEntryId },
       data: {
@@ -625,6 +735,37 @@ const submitExit = async (id, payload, user) => {
       },
       select: gateEntrySelect
     });
+
+    if (linkedJobCards.length > 0) {
+      const jobCardIds = linkedJobCards.map((jobCard) => jobCard.id);
+
+      await tx.jobCard.updateMany({
+        where: {
+          id: {
+            in: jobCardIds
+          }
+        },
+        data: {
+          currentStatusId: deliveredStatusId,
+          modifiedById: user.userId || null
+        }
+      });
+
+      const statusLogRows = linkedJobCards
+        .filter((jobCard) => getStatusCode(jobCard.currentStatus) !== 'DELIVERED')
+        .map((jobCard) => ({
+          jobCardId: jobCard.id,
+          statusId: deliveredStatusId,
+          changedById: user.userId || null,
+          remarks: 'Vehicle exited from gate'
+        }));
+
+      if (statusLogRows.length > 0) {
+        await tx.jobCardStatusLog.createMany({
+          data: statusLogRows
+        });
+      }
+    }
 
     // await createAudit(tx, {
     //   tableName: 'gate_entries',
@@ -642,6 +783,11 @@ const submitExit = async (id, payload, user) => {
 
     return {
       gateEntry: toGateEntryResponse(gateEntry),
+      jobCards: linkedJobCards.map((jobCard) => ({
+        id: jobCard.id,
+        jobCardNo: jobCard.jobCardNo,
+        status: linkedJobCards.length > 0 ? 'DELIVERED' : null
+      })),
       nextAction: 'EXIT_SUBMITTED'
     };
   }, { timeout: 20000 });

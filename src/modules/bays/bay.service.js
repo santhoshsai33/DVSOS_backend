@@ -25,6 +25,42 @@ const parseBooleanFilter = (value) => {
   return undefined;
 };
 
+const toTrimmedString = (value) => {
+  if (value === undefined || value === null) return undefined;
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const toBayResource = (bay, activeBayIds = new Set()) => {
+  const isBusy = activeBayIds.has(bay.id);
+
+  return {
+    ...bay,
+    availability: isBusy ? 'BUSY' : 'AVAILABLE',
+    availabilityLabel: isBusy ? 'Busy' : 'Available'
+  };
+};
+
+const resolveActiveBayIds = async (bayIds = []) => {
+  if (!bayIds.length) {
+    return new Set();
+  }
+
+  const assignments = await prisma.workAssignment.findMany({
+    where: {
+      bayId: {
+        in: bayIds
+      },
+      completedAt: null
+    },
+    select: {
+      bayId: true
+    }
+  });
+
+  return new Set(assignments.map((assignment) => assignment.bayId).filter(Boolean));
+};
+
 
 
 const getActiveStatusId = async () => {
@@ -161,6 +197,7 @@ const listBays = async (query, user) => {
   const search = query.search?.trim();
   const isActive = parseBooleanFilter(query.isActive);
   const locationId = parsePositiveInt(query.locationId, undefined);
+  const bayType = toTrimmedString(query.bayType || query.type);
 
   const where = {};
 
@@ -170,6 +207,10 @@ const listBays = async (query, user) => {
 
   if (locationId) {
     where.locationId = locationId;
+  }
+
+  if (bayType) {
+    where.bayType = bayType;
   }
 
   if (isActive !== undefined) {
@@ -193,9 +234,10 @@ const listBays = async (query, user) => {
     }),
     prisma.bay.count({ where })
   ]);
+  const activeBayIds = await resolveActiveBayIds(bays.map((bay) => bay.id));
 
   return {
-    bays,
+    bays: bays.map((bay) => toBayResource(bay, activeBayIds)),
     meta: {
       total,
       page,
@@ -205,17 +247,34 @@ const listBays = async (query, user) => {
   };
 };
 
-const getBayDropdown = async (locationId) => {
+const getBayDropdown = async (query = {}) => {
+  const locationId = parsePositiveInt(query.locationId, undefined);
+  const bayType = toTrimmedString(query.bayType || query.type);
   const where = { isActive: true };
+
   if (locationId) {
-    where.locationId = Number(locationId);
+    where.locationId = locationId;
   }
+
+  if (bayType) {
+    where.bayType = bayType;
+  }
+
   const bays = await prisma.bay.findMany({
     where,
-    select: { id: true, bayName: true, bayType: true, bayCode: true },
+    select: { id: true, bayName: true, bayType: true, bayCode: true, currentWorkAssignmentId: true },
     orderBy: { bayName: 'asc' }
   });
-  return bays;
+  const activeBayIds = await resolveActiveBayIds(bays.map((bay) => bay.id));
+
+  return bays
+    .map((bay) => toBayResource(bay, activeBayIds))
+    .sort((a, b) => {
+      if (a.availability !== b.availability) {
+        return a.availability === 'AVAILABLE' ? -1 : 1;
+      }
+      return String(a.bayName || '').localeCompare(String(b.bayName || ''));
+    });
 };
 
 const updateBayStatus = async (id, payload, actorUserId) => {

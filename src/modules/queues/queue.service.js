@@ -13,6 +13,12 @@ const DEPARTMENT_ALIASES = {
   'water-wash': ['water-wash', 'water_wash', 'water wash', 'wash']
 };
 
+const BAY_TYPE_BY_DEPARTMENT = {
+  mechanical: 'Mechanical',
+  'body-shop': 'Body Shop',
+  'water-wash': 'Water Wash'
+};
+
 const ASSIGNMENT_STATUS_CODES = {
   mechanical: {
     assigned: ['MECHANICAL_ASSIGNED'],
@@ -80,6 +86,18 @@ const getServiceDepartment = (service) => {
 };
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
+
+const toBaySummary = (bay, availability) => bay
+  ? {
+    id: bay.id,
+    bayName: bay.bayName,
+    bayCode: bay.bayCode,
+    bayType: bay.bayType,
+    currentWorkAssignmentId: bay.currentWorkAssignmentId || null,
+    availability: availability || (bay.currentWorkAssignmentId ? 'BUSY' : 'AVAILABLE'),
+    availabilityLabel: availability === 'BUSY' || bay.currentWorkAssignmentId ? 'Busy' : 'Available'
+  }
+  : null;
 
 const isApprovedForWork = (service) => {
   if (!service || !service.isAdditional) {
@@ -297,6 +315,7 @@ const queueJobCardSelect = {
         select: {
           id: true,
           assignedUserId: true,
+          bayId: true,
           assignedAt: true,
           startedAt: true,
           completedAt: true,
@@ -429,6 +448,7 @@ const toAssignmentResponse = (assignment) => ({
   jobCardId: assignment.jobCardId,
   jobCardServiceId: assignment.jobCardServiceId,
   assignedUserId: assignment.assignedUserId,
+  bayId: assignment.bayId || null,
   assignedById: assignment.assignedById,
   assignedAt: assignment.assignedAt,
   startedAt: assignment.startedAt,
@@ -447,6 +467,7 @@ const assignWork = async (jobCardId, payload, user) => {
   const id = Number(jobCardId);
   const department = getAssignDepartment(payload);
   const assignedUserId = Number(payload.assignedUserId);
+  const bayId = Number(payload.bayId);
   const requestedServiceIds = Array.isArray(payload.jobCardServiceIds) ? payload.jobCardServiceIds.map(Number) : undefined;
 
   return prisma.$transaction(async (tx) => {
@@ -481,6 +502,56 @@ const assignWork = async (jobCardId, payload, user) => {
       throw createHttpError(400, 'Assigned user is invalid or inactive for this location');
     }
 
+    const bay = await tx.bay.findFirst({
+      where: {
+        id: bayId,
+        isActive: true,
+        locationId: jobCard.locationId,
+        bayType: BAY_TYPE_BY_DEPARTMENT[department]
+      },
+      select: {
+        id: true,
+        bayName: true,
+        bayCode: true,
+        bayType: true,
+        currentWorkAssignmentId: true
+      }
+    });
+
+    if (!bay) {
+      throw createHttpError(400, 'Selected bay is invalid, inactive, or not available for this queue category');
+    }
+
+    if (bay.currentWorkAssignmentId) {
+      const currentBayAssignment = await tx.workAssignment.findFirst({
+        where: {
+          id: bay.currentWorkAssignmentId,
+          completedAt: null
+        },
+        select: {
+          id: true
+        }
+      });
+
+      if (currentBayAssignment) {
+        throw createHttpError(400, 'Selected bay is already assigned to an active job');
+      }
+    }
+
+    const activeBayAssignment = await tx.workAssignment.findFirst({
+      where: {
+        bayId: bay.id,
+        completedAt: null
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (activeBayAssignment) {
+      throw createHttpError(400, 'Selected bay is already assigned to an active job');
+    }
+
     const serviceIds = buildAssignmentServiceIds(jobCard, department, requestedServiceIds);
 
     if (serviceIds.length === 0) {
@@ -507,6 +578,7 @@ const assignWork = async (jobCardId, payload, user) => {
         jobCardServiceId,
         statusId,
         assignedUserId,
+        bayId: bay.id,
         assignedById: user && user.userId ? user.userId : null,
         remarks: payload.remarks ? String(payload.remarks).trim() : null,
         createdById: user && user.userId ? user.userId : null
@@ -540,21 +612,13 @@ const assignWork = async (jobCardId, payload, user) => {
       }
     });
 
-    // await tx.jobCardStatusLog.create({
-    //   data: {
-    //     jobCardId: jobCard.id,
-    //     statusId: jobCardStatusId,
-    //     changedById: user && user.userId ? user.userId : null,
-    //     remarks: `${department} work assigned`
-    //   }
-    // });
-
     const assignments = await tx.workAssignment.findMany({
       where: {
         jobCardId: jobCard.id,
         jobCardServiceId: {
           in: serviceIds
-        }
+        },
+        bayId: bay.id
       },
       include: {
         status: {
@@ -569,6 +633,24 @@ const assignWork = async (jobCardId, payload, user) => {
         id: 'asc'
       }
     });
+
+    if (assignments.length > 0) {
+      await tx.bay.update({
+        where: { id: bay.id },
+        data: {
+          currentWorkAssignmentId: assignments[0].id
+        }
+      });
+    }
+
+    // await tx.jobCardStatusLog.create({
+    //   data: {
+    //     jobCardId: jobCard.id,
+    //     statusId: jobCardStatusId,
+    //     changedById: user && user.userId ? user.userId : null,
+    //     remarks: `${department} work assigned`
+    //   }
+    // });
 
     await createAuditLog(tx, {
       moduleCode: 'work-assignments',
@@ -585,6 +667,197 @@ const assignWork = async (jobCardId, payload, user) => {
     return {
       jobCardId: jobCard.id,
       category: department,
+      bay: toBaySummary({ ...bay, currentWorkAssignmentId: assignments[0]?.id || null }, 'BUSY'),
+      assignments: assignments.map(toAssignmentResponse)
+    };
+  });
+};
+
+const reassignWork = async (jobCardId, payload, user) => {
+  const id = Number(jobCardId);
+  const department = getAssignDepartment(payload);
+  const assignedUserId = Number(payload.assignedUserId);
+  const bayId = Number(payload.bayId);
+
+  return prisma.$transaction(async (tx) => {
+    const jobCard = await tx.jobCard.findFirst({
+      where: {
+        id,
+        ...(user && user.locationId ? { locationId: Number(user.locationId) } : {})
+      },
+      select: queueJobCardSelect
+    });
+
+    if (!jobCard) {
+      throw createHttpError(404, 'Job card not found');
+    }
+
+    const assignedUser = await tx.user.findFirst({
+      where: {
+        id: assignedUserId,
+        isActive: true,
+        ...(jobCard.locationId ? { locationId: jobCard.locationId } : {})
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (!assignedUser) {
+      throw createHttpError(400, 'Assigned user is invalid or inactive for this location');
+    }
+
+    const bay = await tx.bay.findFirst({
+      where: {
+        id: bayId,
+        isActive: true,
+        locationId: jobCard.locationId,
+        bayType: BAY_TYPE_BY_DEPARTMENT[department]
+      },
+      select: {
+        id: true,
+        bayName: true,
+        bayCode: true,
+        bayType: true,
+        currentWorkAssignmentId: true
+      }
+    });
+
+    if (!bay) {
+      throw createHttpError(400, 'Selected bay is invalid, inactive, or not available for this queue category');
+    }
+
+    const departmentServices = getDepartmentServices(jobCard, department)
+      .filter((service) => isApprovedForWork(service) && !isRejectedAdditionalService(service));
+    const activeAssignmentIds = departmentServices
+      .flatMap((service) => service.workAssignments || [])
+      .filter((assignment) => !assignment.completedAt)
+      .map((assignment) => assignment.id);
+
+    if (activeAssignmentIds.length === 0) {
+      throw createHttpError(400, 'No active assignments found for this queue category');
+    }
+
+    const activeAssignmentIdSet = new Set(activeAssignmentIds);
+
+    if (bay.currentWorkAssignmentId && !activeAssignmentIdSet.has(bay.currentWorkAssignmentId)) {
+      const currentBayAssignment = await tx.workAssignment.findFirst({
+        where: {
+          id: bay.currentWorkAssignmentId,
+          completedAt: null
+        },
+        select: {
+          id: true,
+          jobCardId: true
+        }
+      });
+
+      if (currentBayAssignment && currentBayAssignment.jobCardId !== jobCard.id) {
+        throw createHttpError(400, 'Selected bay is already assigned to an active job');
+      }
+    }
+
+    const activeBayAssignment = await tx.workAssignment.findFirst({
+      where: {
+        bayId: bay.id,
+        completedAt: null,
+        id: {
+          notIn: activeAssignmentIds
+        }
+      },
+      select: {
+        id: true,
+        jobCardId: true
+      }
+    });
+
+    if (activeBayAssignment && activeBayAssignment.jobCardId !== jobCard.id) {
+      throw createHttpError(400, 'Selected bay is already assigned to an active job');
+    }
+
+    const oldBayIds = Array.from(new Set(
+      departmentServices
+        .flatMap((service) => service.workAssignments || [])
+        .filter((assignment) => !assignment.completedAt && assignment.bayId && assignment.bayId !== bay.id)
+        .map((assignment) => assignment.bayId)
+    ));
+
+    await tx.workAssignment.updateMany({
+      where: {
+        id: {
+          in: activeAssignmentIds
+        }
+      },
+      data: {
+        assignedUserId,
+        bayId: bay.id,
+        assignedById: user && user.userId ? user.userId : null,
+        modifiedById: user && user.userId ? user.userId : null,
+        remarks: payload.remarks ? String(payload.remarks).trim() : undefined
+      }
+    });
+
+    const assignments = await tx.workAssignment.findMany({
+      where: {
+        id: {
+          in: activeAssignmentIds
+        }
+      },
+      include: {
+        status: {
+          select: {
+            id: true,
+            statusCode: true,
+            statusName: true
+          }
+        }
+      },
+      orderBy: {
+        id: 'asc'
+      }
+    });
+
+    await tx.bay.update({
+      where: { id: bay.id },
+      data: {
+        currentWorkAssignmentId: assignments[0].id
+      }
+    });
+
+    for (const oldBayId of oldBayIds) {
+      const activeAssignmentsForOldBay = await tx.workAssignment.count({
+        where: {
+          bayId: oldBayId,
+          completedAt: null
+        }
+      });
+
+      if (activeAssignmentsForOldBay === 0) {
+        await tx.bay.update({
+          where: { id: oldBayId },
+          data: {
+            currentWorkAssignmentId: null
+          }
+        });
+      }
+    }
+
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'work_assignments',
+      recordId: jobCard.id,
+      actionType: 'UPDATE',
+      performedByUserId: user && user.userId ? user.userId : null,
+      recordName: jobCard.jobCardNo,
+      comments: `Work reassigned to user ${assignedUserId}`,
+      details: []
+    });
+
+    return {
+      jobCardId: jobCard.id,
+      category: department,
+      bay: toBaySummary({ ...bay, currentWorkAssignmentId: assignments[0]?.id || null }, 'BUSY'),
       assignments: assignments.map(toAssignmentResponse)
     };
   });
@@ -700,6 +973,26 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
     });
 
     if (requestedStatus === 'COMPLETED') {
+      if (assignment.bayId) {
+        const activeAssignmentsForBay = await tx.workAssignment.count({
+          where: {
+            bayId: assignment.bayId,
+            completedAt: null
+          }
+        });
+
+        if (activeAssignmentsForBay === 0) {
+          await tx.bay.updateMany({
+            where: {
+              id: assignment.bayId
+            },
+            data: {
+              currentWorkAssignmentId: null
+            }
+          });
+        }
+      }
+
       const latestJobCard = await tx.jobCard.findUnique({
         where: {
           id: assignment.jobCardId
@@ -788,5 +1081,6 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
 module.exports = {
   listQueue,
   assignWork,
+  reassignWork,
   updateAssignmentStatus
 };

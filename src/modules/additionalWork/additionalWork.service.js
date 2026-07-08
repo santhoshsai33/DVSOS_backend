@@ -5,7 +5,7 @@ const {
   resolveStatusFromCodes,
   resolveStatusIdFromCodes
 } = require('../../common/utils/status.util');
-const { sendAdditionalWorkApproval, validateTwilioRequest } = require('../../providers/whatsapp/whatsapp.service');
+const { validateTwilioRequest } = require('../../providers/whatsapp/whatsapp.service');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 const DEPARTMENT_ALIASES = {
@@ -39,6 +39,12 @@ const ADDITIONAL_WORK_SCHEMA_STATEMENTS = [
 IF COL_LENGTH('job_card_approvals', 'approval_code') IS NULL
 BEGIN
   ALTER TABLE job_card_approvals ADD approval_code NVARCHAR(30) NULL;
+END
+  `,
+  `
+IF COL_LENGTH('job_card_approvals', 'mechanic_explanation') IS NULL
+BEGIN
+  ALTER TABLE job_card_approvals ADD mechanic_explanation NVARCHAR(MAX) NULL;
 END
   `,
   `
@@ -193,6 +199,7 @@ const toApprovalResource = (approval) => approval
     totalAmount: Number(approval.totalAmount),
     whatsappMessageId: approval.whatsappMessageId,
     customerResponse: approval.customerResponse,
+    mechanicExplanation: approval.mechanicExplanation || null,
     sentAt: approval.sentAt,
     respondedAt: approval.respondedAt,
     status: toStatusResource(approval.status),
@@ -227,6 +234,19 @@ const parsePositiveInt = (value, label) => {
   }
 
   return parsed;
+};
+
+const parseOptionalDate = (value, label) => {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw createHttpError(400, `${label} must be a valid date time`);
+  }
+
+  return date;
 };
 
 const normalizeServiceSelections = (serviceItems) => {
@@ -345,6 +365,11 @@ const buildJobCardResource = (jobCard) => ({
   approvalStatus: jobCard.approvalStatus ? jobCard.approvalStatus.statusCode : null,
   createdAt: jobCard.createdAt,
   expectedDeliveryAt: jobCard.expectedDeliveryAt,
+  serviceSubtotal: jobCard.serviceSubtotal === null || jobCard.serviceSubtotal === undefined ? null : Number(jobCard.serviceSubtotal),
+  taxRate: jobCard.taxRate === null || jobCard.taxRate === undefined ? null : Number(jobCard.taxRate),
+  taxAmount: jobCard.taxAmount === null || jobCard.taxAmount === undefined ? null : Number(jobCard.taxAmount),
+  discountAmount: jobCard.discountAmount === null || jobCard.discountAmount === undefined ? null : Number(jobCard.discountAmount),
+  finalAmount: jobCard.finalAmount === null || jobCard.finalAmount === undefined ? null : Number(jobCard.finalAmount),
   technician: (jobCard.workAssignments || [])
     .map((assignment) => assignment.assignedUser && assignment.assignedUser.fullName)
     .filter(Boolean)
@@ -429,6 +454,7 @@ const createRequest = async (jobCardId, payload, user) => {
   const department = getDepartmentForUser(user, payload.department || payload.category);
   const parentJobCardServiceId = parsePositiveInt(payload.parentJobCardServiceId, 'parentJobCardServiceId');
   const selections = normalizeServiceSelections(payload.serviceItems || payload.services);
+  const expectedDeliveryAt = parseOptionalDate(payload.expectedDeliveryAt, 'expectedDeliveryAt');
 
   return prisma.$transaction(async (tx) => {
     const jobCard = await getJobCardForAdditionalWork(tx, id, user);
@@ -471,7 +497,7 @@ const createRequest = async (jobCardId, payload, user) => {
       }
     }
 
-    const pendingApprovalStatus = await resolveRequiredStatus(tx, STATUS_MODULE_CODES.APPROVAL_STATUS, ['PENDING'], 'Pending approval');
+    const approvedApprovalStatus = await resolveRequiredStatus(tx, STATUS_MODULE_CODES.APPROVAL_STATUS, ['APPROVED'], 'Approved approval');
     const pendingServiceStatusId = await resolveRequiredStatusId(tx, STATUS_MODULE_CODES.JOB_CARD_SERVICE, ['PENDING'], 'Pending job card service');
     const approvalCode = await generateApprovalCode(tx);
     const totalAmount = selections.reduce((sum, selection) => {
@@ -482,15 +508,22 @@ const createRequest = async (jobCardId, payload, user) => {
     const approval = await tx.jobCardApproval.create({
       data: {
         jobCardId: jobCard.id,
-        statusId: pendingApprovalStatus.id,
+        statusId: approvedApprovalStatus.id,
         approvalCode,
         approvalType: APPROVAL_TYPE_ADDITIONAL_WORK,
         totalAmount,
-        customerResponse: null,
-        sentAt: new Date(),
+        customerResponse: 'AUTO_APPROVED',
+        sentAt: null,
+        respondedAt: new Date(),
         createdById: user && user.userId ? user.userId : null
       }
     });
+
+    await tx.$executeRaw`
+      UPDATE job_card_approvals
+      SET mechanic_explanation = ${explanation}
+      WHERE id = ${approval.id}
+    `;
 
     const createdServices = [];
     for (const selection of selections) {
@@ -501,7 +534,7 @@ const createRequest = async (jobCardId, payload, user) => {
           approvalId: approval.id,
           parentJobCardServiceId,
           serviceItemId: serviceItem.id,
-          approvalStatusId: pendingApprovalStatus.id,
+          approvalStatusId: approvedApprovalStatus.id,
           serviceStatusId: pendingServiceStatusId,
           serviceName: serviceItem.name,
           price: Number(serviceItem.defaultPrice),
@@ -525,28 +558,14 @@ const createRequest = async (jobCardId, payload, user) => {
     await tx.jobCard.update({
       where: { id: jobCard.id },
       data: {
-        approvalStatusId: pendingApprovalStatus.id,
+        approvalStatusId: approvedApprovalStatus.id,
+        ...(expectedDeliveryAt ? { expectedDeliveryAt } : {}),
         modifiedById: user && user.userId ? user.userId : null
       }
     });
 
-    const sentMessage = await sendAdditionalWorkApproval({
-      jobCard,
-      approval: {
-        ...approval,
-        approvalCode,
-        totalAmount
-      },
-      services: createdServices,
-      explanation
-    });
-
-    const updatedApproval = await tx.jobCardApproval.update({
+    const updatedApproval = await tx.jobCardApproval.findUnique({
       where: { id: approval.id },
-      data: {
-        whatsappMessageId: sentMessage && sentMessage.sid ? sentMessage.sid : null,
-        modifiedById: user && user.userId ? user.userId : null
-      },
       include: {
         status: true,
         services: {

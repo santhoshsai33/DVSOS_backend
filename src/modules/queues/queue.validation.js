@@ -32,9 +32,14 @@ const validateAssignmentIdParam = (req, res, next) => {
 
 const validateAssignPayload = (req, res, next) => {
   const assignedUserId = Number(req.body && req.body.assignedUserId);
+  const bayId = Number(req.body && req.body.bayId);
 
   if (!Number.isInteger(assignedUserId) || assignedUserId <= 0) {
     return sendValidationError(res, 'Valid assignedUserId is required');
+  }
+
+  if (!Number.isInteger(bayId) || bayId <= 0) {
+    return sendValidationError(res, 'Valid bayId is required');
   }
 
   if (req.body.jobCardServiceIds !== undefined) {

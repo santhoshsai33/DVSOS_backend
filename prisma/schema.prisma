@@ -752,6 +752,7 @@ model JobCardApproval {
   totalAmount       Decimal   @default(0) @map("total_amount") @db.Decimal(10, 2)
   whatsappMessageId String?   @map("whatsapp_message_id") @db.NVarChar(255)
   customerResponse  String?   @map("customer_response")
+  mechanicExplanation String? @map("mechanic_explanation")
   sentAt            DateTime? @map("sent_at") @db.DateTime2
   respondedAt       DateTime? @map("responded_at") @db.DateTime2
 

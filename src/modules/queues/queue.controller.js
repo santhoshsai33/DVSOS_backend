@@ -57,6 +57,19 @@ const assignWork = async (req, res, next) => {
   }
 };
 
+const reassignWork = async (req, res, next) => {
+  try {
+    const data = await queueService.reassignWork(req.params.jobCardId, req.body, req.user);
+
+    return apiResponse(res, {
+      message: 'Work reassigned successfully',
+      data
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const updateAssignmentStatus = async (req, res, next) => {
   try {
     const data = await queueService.updateAssignmentStatus(req.params.assignmentId, req.body, req.user);
@@ -75,5 +88,6 @@ module.exports = {
   listBodyShopQueue,
   listWaterWashQueue,
   assignWork,
+  reassignWork,
   updateAssignmentStatus
 };

@@ -11,11 +11,6 @@ const { createAuditLog } = require('../../common/utils/audit.util');
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
 
-const isMechanicalCategory = (category) => {
-  const normalized = normalizeText(category && (category.slug || category.name));
-  return ['mechanical', 'mechanic', 'mechnanic', 'floor'].includes(normalized);
-};
-
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -35,6 +30,11 @@ const toOptionalNumber = (value) => {
 };
 
 const JOB_CARD_SERVICE_PENDING_STATUS_CODES = ['PENDING'];
+const JOB_CARD_SERVICE_REJECTED_STATUS_CODES = ['REJECTED'];
+const JOB_CARD_APPROVED_STATUS_CODES = ['APPROVED'];
+const JOB_CARD_REJECTED_STATUS_CODES = ['REJECTED'];
+const APPROVAL_APPROVED_STATUS_CODES = ['APPROVED'];
+const APPROVAL_REJECTED_STATUS_CODES = ['REJECTED'];
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 const DEPARTMENT_ALIASES = {
   mechanical: ['mechanical', 'mechanic', 'mechnanic', 'floor'],
@@ -67,6 +67,30 @@ const parseExpectedDeliveryAt = (value) => {
   }
 
   return date;
+};
+
+const normalizeCustomerApprovalDecision = (payload = {}) => {
+  const rawValue = payload.customer_approval
+    ?? payload.customerApproval
+    ?? payload.customerApprovalStatus
+    ?? payload.approvalStatus
+    ?? payload.approvalDecision;
+
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return null;
+  }
+
+  const normalized = String(rawValue).trim().toUpperCase();
+
+  if (['YES', 'Y', 'APPROVE', 'APPROVED', 'TRUE'].includes(normalized)) {
+    return 'APPROVED';
+  }
+
+  if (['NO', 'N', 'REJECT', 'REJECTED', 'FALSE'].includes(normalized)) {
+    return 'REJECTED';
+  }
+
+  throw createHttpError(400, 'customer_approval must be yes or no');
 };
 
 const buildJobCardIdentifierWhere = (identifier) => {
@@ -445,11 +469,24 @@ const deriveJobCardStatus = async (tx, jobCard) => {
   return null;
 };
 
-const toAssignmentSummary = (assignment) => ({
+const toBaySummary = (bay) => bay
+  ? {
+    id: bay.id,
+    bayName: bay.bayName,
+    bayCode: bay.bayCode,
+    bayType: bay.bayType,
+    currentWorkAssignmentId: bay.currentWorkAssignmentId || null,
+    availability: bay.currentWorkAssignmentId ? 'BUSY' : 'AVAILABLE'
+  }
+  : null;
+
+const toAssignmentSummary = (assignment, bayMap = new Map()) => ({
   id: assignment.id,
   jobCardId: assignment.jobCardId,
   jobCardServiceId: assignment.jobCardServiceId,
   assignedUserId: assignment.assignedUserId,
+  bayId: assignment.bayId || null,
+  bay: assignment.bayId ? toBaySummary(bayMap.get(assignment.bayId)) : null,
   assignedAt: assignment.assignedAt,
   startedAt: assignment.startedAt,
   completedAt: assignment.completedAt,
@@ -483,17 +520,15 @@ const toAssignmentSummary = (assignment) => ({
     : null
 });
 
-const toJobCardListResponse = (jobCard, department) => {
-  const allAssignments = (jobCard.workAssignments || []).map(toAssignmentSummary);
+const toJobCardListResponse = (jobCard, department, bayMap = new Map()) => {
+  const allAssignments = (jobCard.workAssignments || []).map((assignment) => toAssignmentSummary(assignment, bayMap));
   const activeAssignments = allAssignments.filter((assignment) => !assignment.completedAt);
   const displayAssignments = allAssignments;
   const departmentAssignments = department
     ? displayAssignments.filter((assignment) => {
       return normalizeDepartment(assignment.service && assignment.service.category && (assignment.service.category.slug || assignment.service.category.name)) === department;
     })
-    : displayAssignments.filter((assignment) => {
-      return isMechanicalCategory(assignment.service && assignment.service.category);
-  });
+    : displayAssignments;
   const assignedMechanics = Array.from(
     new Map(
       departmentAssignments
@@ -502,6 +537,14 @@ const toJobCardListResponse = (jobCard, department) => {
     ).values()
   );
   const assignedMechanic = assignedMechanics[0] || null;
+  const assignedBays = Array.from(
+    new Map(
+      departmentAssignments
+        .filter((assignment) => assignment.bay)
+        .map((assignment) => [assignment.bay.id, assignment.bay])
+    ).values()
+  );
+  const assignedBay = assignedBays[0] || null;
 
   return {
     ...jobCard,
@@ -510,6 +553,9 @@ const toJobCardListResponse = (jobCard, department) => {
     assignmentHistory: displayAssignments,
     assignedMechanic,
     assignedMechanics,
+    assignedBay,
+    assignedBays,
+    bay: assignedBay,
     technician: assignedMechanics.length > 0 ? assignedMechanics.map((mechanic) => mechanic.fullName).join(', ') : null,
     technicianId: assignedMechanic ? assignedMechanic.id : null,
     technicianEmployeeCode: assignedMechanic ? assignedMechanic.employeeCode : null
@@ -633,9 +679,32 @@ const listJobCards = async (query, user) => {
     }),
     prisma.jobCard.count({ where })
   ]);
+  const bayIds = Array.from(new Set(
+    jobCards
+      .flatMap((jobCard) => jobCard.workAssignments || [])
+      .map((assignment) => assignment.bayId)
+      .filter(Boolean)
+  ));
+  const bays = bayIds.length > 0
+    ? await prisma.bay.findMany({
+      where: {
+        id: {
+          in: bayIds
+        }
+      },
+      select: {
+        id: true,
+        bayName: true,
+        bayCode: true,
+        bayType: true,
+        currentWorkAssignmentId: true
+      }
+    })
+    : [];
+  const bayMap = new Map(bays.map((bay) => [bay.id, bay]));
 
   return {
-    jobCards: jobCards.map((jobCard) => toJobCardListResponse(jobCard, department)),
+    jobCards: jobCards.map((jobCard) => toJobCardListResponse(jobCard, department, bayMap)),
     meta: {
       total,
       page,
@@ -669,6 +738,9 @@ const getJobCardById = async (id, user) => {
         }
       },
       currentStatus: {
+        select: { id: true, statusCode: true, statusName: true }
+      },
+      approvalStatus: {
         select: { id: true, statusCode: true, statusName: true }
       },
       location: {
@@ -809,6 +881,7 @@ const updateJobCard = async (id, payload, user) => {
   const notes = toTrimmedString(payload.notes || payload.customerComplaint);
   const additionalNotes = toTrimmedString(payload.additionalNotes);
   const expectedDeliveryAt = parseExpectedDeliveryAt(payload.deliveryDate || payload.expectedDeliveryAt);
+  const customerApprovalDecision = normalizeCustomerApprovalDecision(payload);
   const selectedServices = await prisma.$transaction(async (tx) => {
     return resolveServiceSelections(tx, payload.serviceItems || payload.services || []);
   });
@@ -966,6 +1039,47 @@ const updateJobCard = async (id, payload, user) => {
       }
     });
     const nextStatus = latestJobCardForStatus ? await deriveJobCardStatus(tx, latestJobCardForStatus) : null;
+    let approvalStatus = null;
+    let approvalJobCardStatus = null;
+
+    if (customerApprovalDecision) {
+      const isApproved = customerApprovalDecision === 'APPROVED';
+
+      approvalStatus = await resolveRequiredStatus(
+        tx,
+        STATUS_MODULE_CODES.APPROVAL_STATUS,
+        isApproved ? APPROVAL_APPROVED_STATUS_CODES : APPROVAL_REJECTED_STATUS_CODES,
+        `${customerApprovalDecision.toLowerCase()} approval`
+      );
+
+      approvalJobCardStatus = await resolveRequiredStatus(
+        tx,
+        STATUS_MODULE_CODES.JOB_CARD_STATUS,
+        isApproved ? JOB_CARD_APPROVED_STATUS_CODES : JOB_CARD_REJECTED_STATUS_CODES,
+        `${customerApprovalDecision.toLowerCase()} job card`
+      );
+
+      const rejectedServiceStatus = isApproved
+        ? null
+        : await resolveRequiredStatus(
+          tx,
+          STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+          JOB_CARD_SERVICE_REJECTED_STATUS_CODES,
+          'Rejected job card service'
+        );
+
+      await tx.jobCardService.updateMany({
+        where: {
+          jobCardId,
+          isAdditional: false
+        },
+        data: {
+          approvalStatusId: approvalStatus.id,
+          ...(rejectedServiceStatus ? { serviceStatusId: rejectedServiceStatus.id } : {}),
+          modifiedById: user && user.userId ? user.userId : null
+        }
+      });
+    }
 
     const servicesAfterUpdate = await tx.jobCardService.findMany({
       where: { jobCardId },
@@ -989,7 +1103,12 @@ const updateJobCard = async (id, payload, user) => {
         ...(expectedDeliveryAt !== undefined ? { expectedDeliveryAt } : {}),
         ...(notes !== undefined ? { customerComplaint: notes } : {}),
         ...(additionalNotes !== undefined ? { additionalNotes } : {}),
-        ...(nextStatus && nextStatus.id !== existingJobCard.currentStatusId ? { currentStatusId: nextStatus.id } : {}),
+        ...(approvalStatus ? { approvalStatusId: approvalStatus.id } : {}),
+        ...(approvalJobCardStatus
+          ? { currentStatusId: approvalJobCardStatus.id }
+          : nextStatus && nextStatus.id !== existingJobCard.currentStatusId
+            ? { currentStatusId: nextStatus.id }
+            : {}),
         ...(shouldUpdateFinancials
           ? {
             serviceSubtotal,
@@ -1004,13 +1123,17 @@ const updateJobCard = async (id, payload, user) => {
       }
     });
 
-    if (nextStatus && nextStatus.id !== existingJobCard.currentStatusId) {
+    const statusForLog = approvalJobCardStatus || nextStatus;
+
+    if (statusForLog && statusForLog.id !== existingJobCard.currentStatusId) {
       await tx.jobCardStatusLog.create({
         data: {
           jobCardId,
-          statusId: nextStatus.id,
+          statusId: statusForLog.id,
           changedById: user && user.userId ? user.userId : null,
-          remarks: `Job card status derived from service updates: ${nextStatus.statusName}`
+          remarks: approvalJobCardStatus
+            ? `Job card customer approval updated: ${approvalJobCardStatus.statusName}`
+            : `Job card status derived from service updates: ${nextStatus.statusName}`
         }
       });
     }
@@ -1034,6 +1157,9 @@ const updateJobCard = async (id, payload, user) => {
           }
         },
         currentStatus: {
+          select: { id: true, statusCode: true, statusName: true }
+        },
+        approvalStatus: {
           select: { id: true, statusCode: true, statusName: true }
         },
         location: {

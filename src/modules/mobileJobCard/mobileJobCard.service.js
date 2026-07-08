@@ -331,21 +331,40 @@ const buildBillingSummary = (billing = {}, serviceSubtotal, defaultTaxRate = 0) 
   };
 };
 
-const buildAdditionalNotes = (payload) => toTrimmedString(payload.additionalNotes) || null;
+const getBillingField = (payload = {}, fieldName) => {
+  if (payload[fieldName] !== undefined) {
+    return payload[fieldName];
+  }
+
+  return payload.billing && typeof payload.billing === 'object' ? payload.billing[fieldName] : undefined;
+};
+
+const getPayloadField = (payload = {}, ...fieldNames) => {
+  for (const fieldName of fieldNames) {
+    const value = getBillingField(payload, fieldName);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const buildAdditionalNotes = (payload) => toTrimmedString(getPayloadField(payload, 'additionalNotes')) || null;
 
 const normalizeCustomerApproval = (payload = {}) => {
-  const rawValue = payload.customer_approval ?? payload.customerApproval;
+  const rawValue = getPayloadField(payload, 'customer_approval', 'customerApproval');
 
   if (rawValue === undefined || rawValue === null || rawValue === '') {
     return null;
   }
 
   const normalized = String(rawValue).trim().toUpperCase();
-  if (['YES', 'Y'].includes(normalized)) {
+  if (['YES', 'Y', 'APPROVE', 'APPROVED', 'TRUE'].includes(normalized)) {
     return 'APPROVED';
   }
 
-  if (['NO', 'N'].includes(normalized)) {
+  if (['NO', 'N', 'REJECT', 'REJECTED', 'FALSE'].includes(normalized)) {
     return 'REJECTED';
   }
 
@@ -1456,7 +1475,7 @@ const toJobCardResponse = (jobCard) => ({
 
 const createFromGateEntry = async (payload, user, files = []) => {
   const gateEntryId = Number(payload.gateEntryId);
-  const expectedDeliveryAt = new Date(payload.expectedDeliveryAt);
+  const expectedDeliveryAt = new Date(getPayloadField(payload, 'expectedDeliveryAt'));
   const normalizedServiceItems = normalizeServiceItems(payload.serviceItems);
 
   const gateEntry = await prisma.gateEntry.findFirst({
@@ -1661,6 +1680,8 @@ const createFromGateEntry = async (payload, user, files = []) => {
     const jobCardNo = await generateJobCardNo(tx);
     const jobCardSlug = await createUniqueSlug(tx, 'jobCard', jobCardNo);
     const additionalNotes = buildAdditionalNotes(payload);
+    const customerComplaint = toTrimmedString(getPayloadField(payload, 'customerComplaint'));
+    const customerApprovalResponse = toTrimmedString(getPayloadField(payload, 'customer_approval', 'customerApproval'));
 
     const jobCard = await tx.jobCard.create({
       data: {
@@ -1680,7 +1701,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
         discountAmount: billingSummary.discountAmount,
         finalAmount: billingSummary.finalAmount,
         discountReason: billingSummary.discountReason,
-        customerComplaint: payload.customerComplaint ? String(payload.customerComplaint).trim() : null,
+        customerComplaint,
         additionalNotes,
         createdById: user.userId || null
       },
@@ -1713,7 +1734,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
           statusId: approvalStatusId,
           approvalType: INITIAL_APPROVAL_TYPE,
           totalAmount: billingSummary.finalAmount,
-          customerResponse: String(payload.customer_approval ?? payload.customerApproval).trim(),
+          customerResponse: customerApprovalResponse,
           sentAt: new Date(),
           respondedAt: new Date(),
           createdById: user.userId || null

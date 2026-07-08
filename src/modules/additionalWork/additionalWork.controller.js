@@ -23,7 +23,7 @@ const createRequest = async (req, res, next) => {
     return apiResponse(res, {
       statusCode: 201,
       success: true,
-      message: 'Additional work approval sent to customer',
+      message: 'Additional work approved successfully',
       data
     });
   } catch (error) {

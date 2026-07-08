@@ -16,6 +16,7 @@ router.get('/mechanical/list', canReadMechanicalQueue, controller.listMechanical
 router.get('/body-shop/list', canReadBodyShopQueue, controller.listBodyShopQueue);
 router.get('/water-wash/list', canReadWaterWashQueue, controller.listWaterWashQueue);
 router.post('/assign/:jobCardId', canUpdateJobCards, validateJobCardIdParam, validateAssignPayload, controller.assignWork);
+router.put('/reassign/:jobCardId', canUpdateJobCards, validateJobCardIdParam, validateAssignPayload, controller.reassignWork);
 router.patch('/status/:assignmentId', canUpdateJobCards, validateAssignmentIdParam, validateStatusPayload, controller.updateAssignmentStatus);
 
 module.exports = router;

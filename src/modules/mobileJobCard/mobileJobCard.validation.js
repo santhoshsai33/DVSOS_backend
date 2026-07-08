@@ -2,7 +2,18 @@ const { apiResponse } = require('../../common/utils/apiResponse');
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
-const CUSTOMER_APPROVAL_VALUES = new Set(['YES', 'Y', 'NO', 'N']);
+const CUSTOMER_APPROVAL_VALUES = new Set([
+  'YES',
+  'Y',
+  'APPROVE',
+  'APPROVED',
+  'TRUE',
+  'NO',
+  'N',
+  'REJECT',
+  'REJECTED',
+  'FALSE'
+]);
 
 const getServiceItemId = (item) => {
   if (!isPlainObject(item)) {
@@ -61,18 +72,23 @@ const validateIdParam = (req, res, next) => {
 
 const validateCreateJobCardPayload = (req, res, next) => {
   const { gateEntryId, expectedDeliveryAt, serviceItems, vehicleInfo, customerInfo, billing, photoCategories } = req.body || {};
-  const customerApproval = req.body.customer_approval ?? req.body.customerApproval;
+  const billingObject = isPlainObject(billing) ? billing : {};
+  const resolvedExpectedDeliveryAt = expectedDeliveryAt ?? billingObject.expectedDeliveryAt;
+  const customerApproval = req.body.customer_approval
+    ?? req.body.customerApproval
+    ?? billingObject.customer_approval
+    ?? billingObject.customerApproval;
   const resolvedGateEntryId = Number(gateEntryId);
 
   if (!Number.isInteger(resolvedGateEntryId) || resolvedGateEntryId <= 0) {
     return sendValidationError(res, 'Valid gateEntryId is required');
   }
 
-  if (!isNonEmptyString(expectedDeliveryAt)) {
+  if (!isNonEmptyString(resolvedExpectedDeliveryAt)) {
     return sendValidationError(res, 'expectedDeliveryAt is required');
   }
 
-  const deliveryDate = new Date(expectedDeliveryAt);
+  const deliveryDate = new Date(resolvedExpectedDeliveryAt);
   if (Number.isNaN(deliveryDate.getTime())) {
     return sendValidationError(res, 'expectedDeliveryAt must be a valid date time');
   }

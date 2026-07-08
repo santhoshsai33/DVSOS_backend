@@ -1,5 +1,46 @@
 const prisma = require('../../config/db');
 
+const toDashboardBay = (bay) => bay
+  ? {
+    id: bay.id,
+    bayName: bay.bayName,
+    bayCode: bay.bayCode,
+    bayType: bay.bayType,
+    currentWorkAssignmentId: bay.currentWorkAssignmentId || null,
+    availability: bay.currentWorkAssignmentId ? 'BUSY' : 'AVAILABLE'
+  }
+  : null;
+
+const buildBayMapForJobCards = async (jobCards = []) => {
+  const bayIds = Array.from(new Set(
+    jobCards
+      .flatMap((jobCard) => jobCard.workAssignments || [])
+      .map((assignment) => assignment.bayId)
+      .filter(Boolean)
+  ));
+
+  if (bayIds.length === 0) {
+    return new Map();
+  }
+
+  const bays = await prisma.bay.findMany({
+    where: {
+      id: {
+        in: bayIds
+      }
+    },
+    select: {
+      id: true,
+      bayName: true,
+      bayCode: true,
+      bayType: true,
+      currentWorkAssignmentId: true
+    }
+  });
+
+  return new Map(bays.map((bay) => [bay.id, bay]));
+};
+
 const recentUserSelect = {
   id: true,
   fullName: true,
@@ -315,6 +356,7 @@ const getFloorSupervisorDashboard = async ({ locationId } = {}) => {
       createdAt: 'desc'
     }
   });
+  const bayMap = await buildBayMapForJobCards(allJobCards);
 
   let pendingCount = 0;
   let assignedCount = 0;
@@ -350,10 +392,12 @@ const getFloorSupervisorDashboard = async ({ locationId } = {}) => {
     }
 
     // Attempt to find mechanic from work assignments
+    const assignment = jc.workAssignments && jc.workAssignments.length > 0 ? jc.workAssignments[0] : null;
     if (jc.workAssignments && jc.workAssignments.length > 0) {
       // Just pick the first assigned mechanic for display, or could join them
-      mechanicText = jc.workAssignments[0].assignedUser?.fullName || 'Unassigned';
+      mechanicText = assignment.assignedUser?.fullName || 'Unassigned';
     }
+    const bay = assignment && assignment.bayId ? toDashboardBay(bayMap.get(assignment.bayId)) : null;
 
     // Format services
     const servicesList = jc.services?.map(s => s.serviceItem?.name).filter(Boolean).join(', ') || 'No Services';
@@ -371,6 +415,8 @@ const getFloorSupervisorDashboard = async ({ locationId } = {}) => {
       },
       services: servicesList,
       mechanic: mechanicText,
+      bay,
+      bayName: bay ? bay.bayName : null,
       status: statusText,
       delivery: jc.expectedDeliveryAt ? jc.expectedDeliveryAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A'
     };
@@ -575,6 +621,7 @@ const getBodyShopDashboard = async ({ locationId } = {}) => {
       createdAt: 'desc'
     }
   });
+  const bayMap = await buildBayMapForJobCards(allJobCards);
 
   const isBodyShopService = (service) => {
     const catName = (service.serviceItem?.category?.name || '').toLowerCase();
@@ -620,9 +667,11 @@ const getBodyShopDashboard = async ({ locationId } = {}) => {
     }
 
     // Attempt to find mechanic from work assignments
+    const assignment = jc.workAssignments && jc.workAssignments.length > 0 ? jc.workAssignments[0] : null;
     if (jc.workAssignments && jc.workAssignments.length > 0) {
-      mechanicText = jc.workAssignments[0].assignedUser?.fullName || 'Unassigned';
+      mechanicText = assignment.assignedUser?.fullName || 'Unassigned';
     }
+    const bay = assignment && assignment.bayId ? toDashboardBay(bayMap.get(assignment.bayId)) : null;
 
     // Format services (only showing body shop services for clarity, or all?)
     const servicesList = jc.services
@@ -641,6 +690,8 @@ const getBodyShopDashboard = async ({ locationId } = {}) => {
       vehicleSpec: `${jc.vehicle?.vehicleColor || ''} - ${jc.vehicle?.fuelType || ''}`.trim() || 'N/A',
       services: servicesList,
       mechanic: mechanicText,
+      bay,
+      bayName: bay ? bay.bayName : null,
       status: statusText,
       delivery: jc.expectedDeliveryAt ? jc.expectedDeliveryAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A'
     };
@@ -690,6 +741,7 @@ const getWaterWashDashboard = async ({ locationId } = {}) => {
       createdAt: 'desc'
     }
   });
+  const bayMap = await buildBayMapForJobCards(allJobCards);
 
   const isWaterWashService = (service) => {
     const catName = (service.serviceItem?.category?.name || '').toLowerCase();
@@ -744,9 +796,11 @@ const getWaterWashDashboard = async ({ locationId } = {}) => {
       statusText = 'DELIVERED';
     }
 
+    const assignment = jc.workAssignments && jc.workAssignments.length > 0 ? jc.workAssignments[0] : null;
     if (jc.workAssignments && jc.workAssignments.length > 0) {
-      mechanicText = jc.workAssignments[0].assignedUser?.fullName || '';
+      mechanicText = assignment.assignedUser?.fullName || '';
     }
+    const bay = assignment && assignment.bayId ? toDashboardBay(bayMap.get(assignment.bayId)) : null;
 
     const servicesList = jc.services
       ?.filter(isWaterWashService)
@@ -771,6 +825,8 @@ const getWaterWashDashboard = async ({ locationId } = {}) => {
       washService: servicesList,
       previousStages,
       assignee: mechanicText,
+      bay,
+      bayName: bay ? bay.bayName : null,
       status: statusText,
       waitMinutes,
       delivery: jc.expectedDeliveryAt ? jc.expectedDeliveryAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A'

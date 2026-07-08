@@ -12,6 +12,10 @@ const { permissionMiddleware } = require('../../common/middleware/permission.mid
 const canReadBays = permissionMiddleware('/md-bays', 'canRead');
 const canCreateBays = permissionMiddleware('/md-bays', 'canCreate');
 const canUpdateBays = permissionMiddleware('/md-bays', 'canUpdate');
+const canReadOperationalBays = permissionMiddleware(
+  ['/md-bays', '/assign-mechanic', '/body-shop-assign-mechanic', '/water-wash-assign-member'],
+  'canRead'
+);
 
 router.use(authenticate);
 
@@ -23,7 +27,8 @@ router.patch('/status/:id', canUpdateBays, validateIdParam, validateStatusPayloa
 
 const crmRouter = require('express').Router();
 crmRouter.use(authenticate);
-crmRouter.get('/list', canReadBays, bayController.listBays);
+crmRouter.get('/dropdown', canReadOperationalBays, bayController.getBayDropdown);
+crmRouter.get('/list', canReadOperationalBays, bayController.listBays);
 
 module.exports = {
   bayRoutes: router,

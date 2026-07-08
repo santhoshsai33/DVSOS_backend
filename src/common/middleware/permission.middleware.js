@@ -23,7 +23,7 @@ const isAdminUser = (user) => {
 };
 
 const permissionMiddleware = (menuPathOrOptions, actionArg) => {
-  const options = typeof menuPathOrOptions === 'object'
+  const options = menuPathOrOptions && typeof menuPathOrOptions === 'object' && !Array.isArray(menuPathOrOptions)
     ? menuPathOrOptions || {}
     : { menuPath: menuPathOrOptions, action: actionArg };
   const { menuPath, action } = options;
