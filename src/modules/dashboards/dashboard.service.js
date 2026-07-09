@@ -12,8 +12,8 @@ const getFloorSupervisorDashboard = (locationId) => {
   return dashboardRepository.getFloorSupervisorDashboard({ locationId });
 };
 
-const getManagerDashboard = (locationId) => {
-  return dashboardRepository.getManagerDashboard({ locationId });
+const getManagerDashboard = (locationId, page, limit) => {
+  return dashboardRepository.getManagerDashboard({ locationId, page, limit });
 };
 
 const getBodyShopDashboard = (locationId) => {

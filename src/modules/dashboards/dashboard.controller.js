@@ -46,7 +46,9 @@ const getFloorSupervisorDashboard = async (req, res, next) => {
 const getManagerDashboard = async (req, res, next) => {
   try {
     const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
-    const dashboard = await dashboardService.getManagerDashboard(locationId);
+    const page = req.query.page ? parseInt(req.query.page) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit) : 5;
+    const dashboard = await dashboardService.getManagerDashboard(locationId, page, limit);
 
     return apiResponse(res, {
       message: 'Manager dashboard fetched successfully',

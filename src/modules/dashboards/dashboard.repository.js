@@ -433,7 +433,7 @@ const getFloorSupervisorDashboard = async ({ locationId } = {}) => {
   };
 };
 
-const getManagerDashboard = async ({ locationId } = {}) => {
+const getManagerDashboard = async ({ locationId, page = 1, limit = 5 } = {}) => {
   const dateFilter = {};
   if (locationId) {
     dateFilter.locationId = locationId;
@@ -583,7 +583,13 @@ const getManagerDashboard = async ({ locationId } = {}) => {
       { label: 'Water Wash', value: washActive + washWaiting, meta: `${washActive} washing - ${washWaiting} queue`, color: '#0891B2', bg: '#ECFEFF' },
       { label: 'Completed', value: completedPipelineCount, meta: 'Ready for delivery', color: '#059669', bg: '#ECFDF5' },
     ],
-    vehicles: vehicles.slice(0, 15) // Return top 15 recent job cards
+    vehicles: vehicles.slice((page - 1) * limit, page * limit),
+    pagination: {
+      total: vehicles.length,
+      page,
+      limit,
+      totalPages: Math.ceil(vehicles.length / limit)
+    }
   };
 };
 
