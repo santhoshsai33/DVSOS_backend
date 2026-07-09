@@ -35,10 +35,10 @@ const LOCATION_REQUIRED_ROLE_SLUGS = new Set([
   'water_wash_team',
   'manager'
 ]);
-const ASSIGNABLE_ROLE_SLUGS_BY_CATEGORY = {
-  mechanical: ['mechanical', 'mechanic'],
-  'body-shop': ['body_shop_supervisor', 'body-shop-supervisor', 'body_shop', 'body-shop', 'bodyshop'],
-  'water-wash': ['water_wash_team', 'water-wash-team', 'water_wash_supervisor', 'water-wash-supervisor', 'water_wash', 'water-wash']
+const ASSIGNABLE_MODULE_BY_CATEGORY = {
+  mechanical: 'floor-supervisor',
+  'body-shop': 'body-shop-supervisor',
+  'water-wash': 'water-wash-team'
 };
 
 const createHttpError = (statusCode, message) => {
@@ -583,7 +583,7 @@ const listMechanicDropdown = async (query, actor) => {
   const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
   const locationId = actor && actor.locationId ? Number(actor.locationId) : requestedLocationId;
   const category = normalizeAssignmentCategory(query.category);
-  const roleSlugs = ASSIGNABLE_ROLE_SLUGS_BY_CATEGORY[category] || ASSIGNABLE_ROLE_SLUGS_BY_CATEGORY.mechanical;
+  const targetModule = ASSIGNABLE_MODULE_BY_CATEGORY[category] || ASSIGNABLE_MODULE_BY_CATEGORY.mechanical;
 
   const users = await prisma.user.findMany({
     where: {
@@ -591,8 +591,14 @@ const listMechanicDropdown = async (query, actor) => {
       ...(locationId ? { locationId } : {}),
       role: {
         isActive: true,
-        slug: {
-          in: roleSlugs
+        rolePermissions: {
+          some: {
+            canRead: true,
+            menu: {
+              isActive: true,
+              module: targetModule
+            }
+          }
         }
       }
     },

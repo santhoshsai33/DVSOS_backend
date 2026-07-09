@@ -16,6 +16,22 @@ const getContext = async (req, res, next) => {
   }
 };
 
+const listRequests = async (req, res, next) => {
+  try {
+    const { requests, department, meta } = await service.listRequests(req.query, req.user);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Additional work requests fetched successfully',
+      data: { requests, department },
+      meta
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const createRequest = async (req, res, next) => {
   try {
     const data = await service.createRequest(req.params.jobCardId, req.body, req.user);
@@ -48,6 +64,7 @@ const twilioWebhook = async (req, res, next) => {
 
 module.exports = {
   getContext,
+  listRequests,
   createRequest,
   twilioWebhook
 };

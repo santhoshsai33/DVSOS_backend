@@ -207,6 +207,47 @@ const toApprovalResource = (approval) => approval
   }
   : null;
 
+const toAdditionalWorkListResource = (approval) => {
+  const services = (approval.services || []).map((service) => ({
+    ...toServiceResource(service),
+    parentService: service.parentService ? toServiceResource(service.parentService) : null
+  }));
+  const linkedServiceNames = [...new Set(
+    services
+      .map((service) => service.parentService && service.parentService.serviceName)
+      .filter(Boolean)
+  )];
+  const status = toStatusResource(approval.status);
+
+  return {
+    id: approval.id,
+    approvalId: approval.id,
+    approvalCode: approval.approvalCode,
+    approvalType: approval.approvalType,
+    jobCardId: approval.jobCardId,
+    jobCardNo: approval.jobCard ? approval.jobCard.jobCardNo : null,
+    vehicleNumber: approval.jobCard && approval.jobCard.vehicle ? approval.jobCard.vehicle.registrationNo : null,
+    customerName: approval.jobCard && approval.jobCard.customer ? approval.jobCard.customer.fullName : null,
+    customerMobile: approval.jobCard && approval.jobCard.customer ? approval.jobCard.customer.mobileNo : null,
+    makeModel: approval.jobCard && approval.jobCard.vehicle
+      ? [approval.jobCard.vehicle.brand && approval.jobCard.vehicle.brand.name, approval.jobCard.vehicle.model].filter(Boolean).join(' ')
+      : null,
+    locationId: approval.jobCard ? approval.jobCard.locationId : null,
+    mechanicExplanation: approval.mechanicExplanation || null,
+    description: approval.mechanicExplanation || services.map((service) => service.serviceName).join(', '),
+    linkedServiceNames,
+    linkedServiceLabel: linkedServiceNames.length ? linkedServiceNames.join(', ') : null,
+    totalAmount: Number(approval.totalAmount),
+    requestedAt: approval.sentAt || approval.createdAt,
+    respondedAt: approval.respondedAt,
+    customerResponse: approval.customerResponse,
+    status,
+    statusCode: status ? status.code : null,
+    statusName: status ? status.name : null,
+    services
+  };
+};
+
 const resolveRequiredStatus = async (tx, moduleCode, statusCodes, label) => {
   const status = await resolveStatusFromCodes(tx, moduleCode, statusCodes);
 
@@ -247,6 +288,24 @@ const parseOptionalDate = (value, label) => {
   }
 
   return date;
+};
+
+const parsePositiveIntWithFallback = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const normalizeStatusFilter = (value) => {
+  const normalized = String(value || '').trim().toUpperCase().replace(/[-\s]+/g, '_');
+  if (!normalized || normalized === 'ALL') {
+    return null;
+  }
+
+  if (normalized === 'PENDING_APPROVAL') {
+    return 'PENDING';
+  }
+
+  return normalized;
 };
 
 const normalizeServiceSelections = (serviceItems) => {
@@ -352,6 +411,133 @@ const getLatestPendingAdditionalApproval = (tx, jobCardId) => {
     },
     orderBy: { createdAt: 'desc' }
   });
+};
+
+const listRequests = async (query, user) => {
+  await ensureAdditionalWorkSchema();
+
+  const department = getDepartmentForUser(user, query.department || query.category);
+  const page = parsePositiveIntWithFallback(query.page, 1);
+  const limit = parsePositiveIntWithFallback(query.limit, 20);
+  const search = String(query.search || '').trim();
+  const statusCode = normalizeStatusFilter(query.status);
+  const departmentCategoryFilter = {
+    OR: DEPARTMENT_ALIASES[department].map((alias) => ({
+      slug: normalizeText(alias)
+    }))
+  };
+
+  const where = {
+    approvalType: APPROVAL_TYPE_ADDITIONAL_WORK,
+    ...(statusCode
+      ? {
+        status: {
+          is: {
+            statusCode
+          }
+        }
+      }
+      : {}),
+    ...(user && user.locationId
+      ? {
+        jobCard: {
+          is: {
+            locationId: Number(user.locationId)
+          }
+        }
+      }
+      : {}),
+    services: {
+      some: {
+        isAdditional: true,
+        serviceItem: {
+          category: departmentCategoryFilter
+        }
+      }
+    },
+    ...(search
+      ? {
+        OR: [
+          { approvalCode: { contains: search } },
+          { mechanicExplanation: { contains: search } },
+          {
+            jobCard: {
+              is: {
+                OR: [
+                  { jobCardNo: { contains: search } },
+                  { vehicle: { is: { registrationNo: { contains: search } } } },
+                  { customer: { is: { fullName: { contains: search } } } }
+                ]
+              }
+            }
+          }
+        ]
+      }
+      : {})
+  };
+
+  const [requests, total] = await prisma.$transaction([
+    prisma.jobCardApproval.findMany({
+      where,
+      include: {
+        status: true,
+        jobCard: {
+          include: {
+            customer: true,
+            vehicle: {
+              include: {
+                brand: true
+              }
+            }
+          }
+        },
+        services: {
+          where: {
+            isAdditional: true,
+            serviceItem: {
+              category: departmentCategoryFilter
+            }
+          },
+          include: {
+            serviceItem: {
+              include: {
+                category: true
+              }
+            },
+            parentService: {
+              include: {
+                serviceItem: {
+                  include: {
+                    category: true
+                  }
+                },
+                approvalStatus: true,
+                serviceStatus: true
+              }
+            },
+            approvalStatus: true,
+            serviceStatus: true
+          },
+          orderBy: { id: 'asc' }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit
+    }),
+    prisma.jobCardApproval.count({ where })
+  ]);
+
+  return {
+    department,
+    requests: requests.map(toAdditionalWorkListResource),
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
 };
 
 const buildJobCardResource = (jobCard) => ({
@@ -704,5 +890,6 @@ const handleTwilioWebhook = async (req) => {
 module.exports = {
   getContext,
   createRequest,
+  listRequests,
   handleTwilioWebhook
 };

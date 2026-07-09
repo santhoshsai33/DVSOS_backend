@@ -12,7 +12,7 @@ router.use(authenticate);
 router.get('/unread-count', canReadNotifications, notificationController.unreadCount);
 router.get('/', canReadNotifications, notificationController.listNotifications);
 router.patch('/read-all', canUpdateNotifications, notificationController.markAllNotificationsRead);
-router.patch('/:id/read', canUpdateNotifications, notificationController.markNotificationRead);
+router.put('/read/:id', canReadNotifications, notificationController.markNotificationRead);
 router.post('/test-manager', canCreateNotifications, notificationController.sendTestNotificationToManager);
 
 module.exports = router;
