@@ -499,19 +499,19 @@ const createGateEntry = async (payload, user) => {
         });
         isNewCustomer = true;
 
-        // await createAudit(tx, {
-        //   tableName: 'customers',
-        //   recordId: customer.id,
-        //   actionType: 'CREATE',
-        //   actorUserId: user.userId,
-        //   recordName: customer.fullName,
-        //   comments: 'Customer created from gate entry',
-        //   locationId,
-        //   moduleId: auditModuleId,
-        //   details: [
-        //     { fieldName: 'mobileNo', oldValue: null, newValue: customer.mobileNo, dataType: 'string' }
-        //   ]
-        // });
+        await createAudit(tx, {
+          tableName: 'customers',
+          recordId: customer.id,
+          actionType: 'CREATE',
+          actorUserId: user.userId,
+          recordName: customer.fullName,
+          comments: 'Customer created from gate entry',
+          locationId,
+          moduleId: auditModuleId,
+          details: [
+            { fieldName: 'mobileNo', oldValue: null, newValue: customer.mobileNo, dataType: 'string' }
+          ]
+        });
       }
 
       const vehicleSlug = await createUniqueSlug(tx, 'vehicle', normalizedRegistrationNumber);
@@ -531,19 +531,19 @@ const createGateEntry = async (payload, user) => {
       });
       isNewVehicle = true;
 
-      // await createAudit(tx, {
-      //   tableName: 'vehicles',
-      //   recordId: vehicle.id,
-      //   actionType: 'CREATE',
-      //   actorUserId: user.userId,
-      //   recordName: vehicle.registrationNo,
-      //   comments: 'Vehicle created from gate entry',
-      //   locationId,
-      //   moduleId: auditModuleId,
-      //   details: [
-      //     { fieldName: 'registrationNo', oldValue: null, newValue: vehicle.registrationNo, dataType: 'string' }
-      //   ]
-      // });
+      await createAudit(tx, {
+        tableName: 'vehicles',
+        recordId: vehicle.id,
+        actionType: 'CREATE',
+        actorUserId: user.userId,
+        recordName: vehicle.registrationNo,
+        comments: 'Vehicle created from gate entry',
+        locationId,
+        moduleId: auditModuleId,
+        details: [
+          { fieldName: 'registrationNo', oldValue: null, newValue: vehicle.registrationNo, dataType: 'string' }
+        ]
+      });
     }
 
     const entryStatusId = await resolveStatusIdFromCodes(tx, STATUS_MODULE_CODES.GATE_ENTRY, ENTRY_STATUS_CODES);
@@ -588,20 +588,20 @@ const createGateEntry = async (payload, user) => {
       }, tx);
     }
 
-    // await createAudit(tx, {
-    //   tableName: 'gate_entries',
-    //   recordId: gateEntry.id,
-    //   actionType: 'CREATE',
-    //   actorUserId: user.userId,
-    //   recordName: gateEntry.gateEntryNo,
-    //   comments: 'Gate entry created',
-    //   locationId,
-    //   moduleId: auditModuleId,
-    //   details: [
-    //     { fieldName: 'registrationNo', oldValue: null, newValue: normalizedRegistrationNumber, dataType: 'string' },
-    //     { fieldName: 'entryType', oldValue: null, newValue: entryType, dataType: 'string' }
-    //   ]
-    // });
+    await createAudit(tx, {
+      tableName: 'gate_entries',
+      recordId: gateEntry.id,
+      actionType: 'CREATE',
+      actorUserId: user.userId,
+      recordName: gateEntry.gateEntryNo,
+      comments: 'Gate entry created',
+      locationId,
+      moduleId: auditModuleId,
+      details: [
+        { fieldName: 'registrationNo', oldValue: null, newValue: normalizedRegistrationNumber, dataType: 'string' },
+        { fieldName: 'entryType', oldValue: null, newValue: entryType, dataType: 'string' }
+      ]
+    });
 
     return {
       gateEntryId: gateEntry.id,
@@ -767,19 +767,19 @@ const submitExit = async (id, payload, user) => {
       }
     }
 
-    // await createAudit(tx, {
-    //   tableName: 'gate_entries',
-    //   recordId: gateEntry.id,
-    //   actionType: 'UPDATE',
-    //   actorUserId: user.userId,
-    //   recordName: gateEntry.gateEntryNo,
-    //   comments: 'Gate entry exited',
-    //   locationId: gateEntry.location.id,
-    //   moduleId: auditModuleId,
-    //   details: [
-    //     { fieldName: 'exitTime', oldValue: null, newValue: gateEntry.exitTime, dataType: 'date' }
-    //   ]
-    // });
+    await createAudit(tx, {
+      tableName: 'gate_entries',
+      recordId: gateEntry.id,
+      actionType: 'UPDATE',
+      actorUserId: user.userId,
+      recordName: gateEntry.gateEntryNo,
+      comments: 'Gate entry exited',
+      locationId: gateEntry.location.id,
+      moduleId: auditModuleId,
+      details: [
+        { fieldName: 'exitTime', oldValue: null, newValue: gateEntry.exitTime, dataType: 'date' }
+      ]
+    });
 
     return {
       gateEntry: toGateEntryResponse(gateEntry),
