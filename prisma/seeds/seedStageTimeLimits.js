@@ -1,5 +1,7 @@
 const rolesData = [
   { name: 'Floor Supervisor', slug: 'floor_supervisor', description: 'Floor supervisor managing mechanical stage' },
+  { name: 'Body Shop Supervisor', slug: 'body_shop_supervisor', description: 'Body shop supervisor managing body shop stage' },
+  { name: 'Water Wash Supervisor', slug: 'water_wash_supervisor', description: 'Water wash supervisor managing wash stage' },
   { name: 'Manager', slug: 'manager', description: 'Workshop manager' },
   { name: 'Managing Director', slug: 'managing_director', description: 'Managing Director' },
   { name: 'CRM Team', slug: 'crm_team', description: 'Customer relationship management team' }
@@ -26,6 +28,27 @@ const limitsData = [
     statusCode: 'PENDING',
     allowedMinutes: 2,
     notifyRoleSlug: 'crm_team'
+  },
+  {
+    stageCode: 'MECHANICAL_ASSIGNMENT_PENDING',
+    moduleCode: 'job-card',
+    statusCode: 'MECHANICAL_ASSIGNMENT_PENDING',
+    allowedMinutes: 20,
+    notifyRoleSlug: 'floor_supervisor'
+  },
+  {
+    stageCode: 'BODY_SHOP_ASSIGNMENT_PENDING',
+    moduleCode: 'job-card',
+    statusCode: 'BODY_SHOP_ASSIGNMENT_PENDING',
+    allowedMinutes: 20,
+    notifyRoleSlug: 'body_shop_supervisor'
+  },
+  {
+    stageCode: 'WATER_WASH_ASSIGNMENT_PENDING',
+    moduleCode: 'job-card',
+    statusCode: 'WATER_WASH_ASSIGNMENT_PENDING',
+    allowedMinutes: 20,
+    notifyRoleSlug: 'water_wash_supervisor'
   },
   {
     stageCode: 'MECHANICAL_WORK',

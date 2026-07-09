@@ -12,6 +12,7 @@ const {
   statusModuleFilter
 } = require('../../common/utils/status.util');
 const { completeStage } = require('../processStageTracking/processStageTracking.service');
+const { startNextAssignmentPendingStage } = require('../processStageTracking/departmentAssignmentStage.service');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
 const JOB_CARD_APPROVED_STATUS_CODES = ['APPROVED'];
@@ -1550,7 +1551,14 @@ const createFromGateEntry = async (payload, user, files = []) => {
       id: true,
       name: true,
       slug: true,
-      defaultPrice: true
+      defaultPrice: true,
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true
+        }
+      }
     }
   });
 
@@ -1571,7 +1579,8 @@ const createFromGateEntry = async (payload, user, files = []) => {
       ...item,
       serviceItemId: serviceItem.id,
       serviceName: serviceItem.name,
-      price: Number(serviceItem.defaultPrice)
+      price: Number(serviceItem.defaultPrice),
+      category: serviceItem.category
     };
   });
 
@@ -1773,6 +1782,73 @@ const createFromGateEntry = async (payload, user, files = []) => {
         };
       })
     });
+
+    const trackingJobCard = await tx.jobCard.findUnique({
+      where: {
+        id: jobCard.id
+      },
+      select: {
+        id: true,
+        locationId: true,
+        gateEntryId: true,
+        customerId: true,
+        vehicleId: true,
+        currentStatus: {
+          select: {
+            statusCode: true
+          }
+        },
+        approvalStatus: {
+          select: {
+            statusCode: true
+          }
+        },
+        services: {
+          select: {
+            id: true,
+            isAdditional: true,
+            serviceStatus: {
+              select: {
+                statusCode: true
+              }
+            },
+            approvalStatus: {
+              select: {
+                statusCode: true
+              }
+            },
+            workAssignments: {
+              select: {
+                id: true,
+                completedAt: true,
+                status: {
+                  select: {
+                    statusCode: true
+                  }
+                }
+              }
+            },
+            serviceItem: {
+              select: {
+                category: {
+                  select: {
+                    name: true,
+                    slug: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (trackingJobCard) {
+      await startNextAssignmentPendingStage(tx, {
+        jobCard: trackingJobCard,
+        createdById: user.userId || null
+      });
+    }
 
     const mediaRows = buildMediaRows({
       uploadedPhotos,

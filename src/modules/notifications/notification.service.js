@@ -40,13 +40,26 @@ async function getUserNotifications(userId, limit = 20, offset = 0, unreadOnly =
         jobCard: {
           select: {
             slug: true,
-            jobCardNo: true
+            jobCardNo: true,
+            customer: {
+              select: {
+                mobileNo: true,
+                alternateMobileNo: true
+              }
+            }
           }
         },
         gateEntry: {
           select: {
             slug: true,
-            gateEntryNo: true
+            gateEntryNo: true,
+            entryType: true,
+            customer: {
+              select: {
+                mobileNo: true,
+                alternateMobileNo: true
+              }
+            }
           }
         }
       },

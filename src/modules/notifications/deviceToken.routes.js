@@ -4,6 +4,6 @@ const { authenticate } = require('../../common/middleware/auth.middleware');
 
 router.use(authenticate);
 router.post('/', notificationController.registerDeviceToken);
-router.delete('/', notificationController.removeDeviceToken);
+router.put('/', notificationController.removeDeviceToken);
 
 module.exports = router;
