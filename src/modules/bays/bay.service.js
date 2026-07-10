@@ -135,7 +135,8 @@ const createBay = async (payload, actorUserId) => {
     recordId: bay.id,
     actionType: 'CREATE',
     performedByUserId: actorUserId,
-    recordName: bay.bayName
+    recordName: bay.bayName,
+    comments: 'Bay created'
   }).catch((err) => console.error('Failed to create audit log:', err));
 
   return bay;
@@ -183,6 +184,7 @@ const updateBay = async (identifier, payload, actorUserId) => {
     actionType: 'UPDATE',
     performedByUserId: actorUserId,
     recordName: updatedBay.bayName,
+    comments: 'Bay updated',
     details: buildChangeDetails(existingBay, updatedBay, ['bayName', 'bayType'])
   }).catch((err) => console.error('Failed to create audit log:', err));
 
@@ -307,6 +309,7 @@ const updateBayStatus = async (id, payload, actorUserId) => {
     actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
     performedByUserId: actorUserId,
     recordName: updatedBay.bayName,
+    comments: isActive ? 'Bay activated' : 'Bay deactivated',
     details: buildChangeDetails({ isActive: existingBay.isActive }, { isActive: updatedBay.isActive }, ['isActive'])
   }).catch((err) => console.error('Failed to create audit log:', err));
 
