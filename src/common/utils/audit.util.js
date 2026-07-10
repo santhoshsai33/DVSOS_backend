@@ -110,7 +110,33 @@ const createAuditLog = async (
 
 const buildChangeDetails = (oldRecord, newRecord, fields) => {
   return fields
-    .filter((fieldName) => oldRecord[fieldName] !== newRecord[fieldName])
+    .filter((fieldName) => {
+      // Ignore system fields
+      if (['id', 'modifiedById', 'createdById', 'createdAt', 'updatedAt', 'passwordHash', 'deletedAt'].includes(fieldName)) {
+        return false;
+      }
+
+      const oldVal = oldRecord[fieldName];
+      const newVal = newRecord[fieldName];
+      
+      // If both are falsy (null, undefined, ''), treat as unchanged
+      if (!oldVal && !newVal) return false;
+
+      // Handle Dates
+      if (oldVal instanceof Date || newVal instanceof Date) {
+        const oldTime = oldVal ? new Date(oldVal).getTime() : 0;
+        const newTime = newVal ? new Date(newVal).getTime() : 0;
+        return oldTime !== newTime;
+      }
+
+      // Handle objects/arrays (including Prisma Decimal or JSON)
+      if (typeof oldVal === 'object' || typeof newVal === 'object') {
+        return JSON.stringify(oldVal) !== JSON.stringify(newVal);
+      }
+
+      // Robust primitive comparison
+      return String(oldVal) !== String(newVal);
+    })
     .map((fieldName) => ({
       fieldName,
       oldValue: oldRecord[fieldName],
