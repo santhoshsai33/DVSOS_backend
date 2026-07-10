@@ -46,7 +46,6 @@ const MENU_SEED_DATA = [
     menus: [
       { name: 'Dashboard', path: '/water-wash-dashboard', icon: 'LayoutDashboard' },
       { name: 'Assign Member', path: '/water-wash-assign-member', icon: 'User' },
-      { name: 'Vehicles', path: '/vehicles', icon: 'Car' },
       { name: 'Job Cards', path: '/job-cards', icon: 'ClipboardList' },
       { name: 'Notifications', path: '/notifications', icon: 'Bell' }
     ]
@@ -112,7 +111,8 @@ const REMOVED_MENU_PATHS = [
   { module: 'body-shop-supervisor', path: '/body-shop-work-status' },
   { module: 'body-shop-supervisor', path: '/body-shop-queue' },
   { module: 'admin', path: '/master-bays' },
-  { module: 'managing-director', path: '/master-bays' }
+  { module: 'managing-director', path: '/master-bays' },
+  { module: 'water-wash-team', path: '/vehicles' }
 ];
 
 const seedMenus = async (prisma) => {
