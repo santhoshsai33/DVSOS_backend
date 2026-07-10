@@ -1871,20 +1871,20 @@ const createFromGateEntry = async (payload, user, files = []) => {
     //   }
     // });
 
-    // await createAudit(tx, {
-    //   tableName: 'job_cards',
-    //   recordId: jobCard.id,
-    //   actionType: 'CREATE',
-    //   actorUserId: user.userId,
-    //   recordName: jobCard.jobCardNo,
-    //   comments: 'Job card created from mobile job card app',
-    //   locationId: gateEntry.locationId,
-    //   moduleId: auditModuleId,
-    //   details: [
-    //     { fieldName: 'gateEntryNo', oldValue: null, newValue: gateEntry.gateEntryNo, dataType: 'string' },
-    //     { fieldName: 'totalEstimate', oldValue: null, newValue: billingSummary.finalAmount, dataType: 'number' }
-    //   ]
-    // });
+    await createAudit(tx, {
+      tableName: 'job_cards',
+      recordId: jobCard.id,
+      actionType: 'CREATE',
+      actorUserId: user.userId,
+      recordName: jobCard.jobCardNo,
+      comments: 'Job card created from mobile job card app',
+      locationId: gateEntry.locationId,
+      moduleId: auditModuleId,
+      details: [
+        { fieldName: 'gateEntryNo', oldValue: null, newValue: gateEntry.gateEntryNo, dataType: 'string' },
+        { fieldName: 'totalEstimate', oldValue: null, newValue: billingSummary.finalAmount, dataType: 'number' }
+      ]
+    });
 
     const createdJobCard = await tx.jobCard.findUnique({
       where: {

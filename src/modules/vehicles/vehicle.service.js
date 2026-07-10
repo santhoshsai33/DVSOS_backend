@@ -1,4 +1,5 @@
 const prisma = require('../../config/db');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const listVehicles = async (query, user) => {
   const page = parseInt(query.page, 10) || 1;
@@ -116,7 +117,8 @@ const updateVehicle = async (idOrSlug, data, user) => {
 
   // First, verify the vehicle exists and user is authorized
   const existingVehicle = await prisma.vehicle.findUnique({
-    where
+    where,
+    include: { customer: true }
   });
 
   if (!existingVehicle) {
@@ -127,31 +129,64 @@ const updateVehicle = async (idOrSlug, data, user) => {
     throw new Error('Unauthorized to update this Vehicle');
   }
 
-  // Update vehicle and its customer
-  const updatedVehicle = await prisma.vehicle.update({
-    where: { id: existingVehicle.id },
-    data: {
-      registrationNo: data.vehicleNumber,
-      model: data.makeModel,
-      variant: data.type,
-      fuelType: data.fuelType,
-      modifiedById: user ? user.id : undefined,
-      customer: {
-        update: {
-          fullName: data.ownerName,
-          mobileNo: data.mobile,
-          modifiedById: user ? user.id : undefined
+  return await prisma.$transaction(async (tx) => {
+    // Update vehicle and its customer
+    const updatedVehicle = await tx.vehicle.update({
+      where: { id: existingVehicle.id },
+      data: {
+        registrationNo: data.vehicleNumber,
+        model: data.makeModel,
+        variant: data.type,
+        fuelType: data.fuelType,
+        isActive: data.status ? data.status === 'ACTIVE' : undefined,
+        modifiedBy: user ? { connect: { id: user.userId || user.id } } : undefined,
+        customer: {
+          update: {
+            fullName: data.ownerName,
+            mobileNo: data.mobile,
+            modifiedBy: user ? { connect: { id: user.userId || user.id } } : undefined
+          }
         }
+      },
+      include: {
+        customer: true,
+        brand: true,
+        location: true
       }
-    },
-    include: {
-      customer: true,
-      brand: true,
-      location: true
-    }
-  });
+    });
 
-  return updatedVehicle;
+    const changedFields = buildChangeDetails(
+      existingVehicle,
+      updatedVehicle,
+      ['registrationNo', 'model', 'variant', 'fuelType', 'isActive']
+    );
+
+    const customerChangedFields = buildChangeDetails(
+      existingVehicle.customer || {},
+      updatedVehicle.customer || {},
+      ['fullName', 'mobileNo']
+    );
+
+    const allChanges = [
+      ...changedFields,
+      ...customerChangedFields.map(c => ({ ...c, fieldName: `customer.${c.fieldName}` }))
+    ];
+
+    if (allChanges.length > 0 && user) {
+      await createAuditLog(tx, {
+        tableName: 'vehicles',
+        recordId: updatedVehicle.id,
+        actionType: 'UPDATE',
+        performedByUserId: user.userId || user.id,
+        recordName: updatedVehicle.registrationNo,
+        comments: 'Vehicle updated',
+        details: allChanges,
+        locationId: updatedVehicle.locationId
+      });
+    }
+
+    return updatedVehicle;
+  });
 };
 
 const getVehicleHistory = async (idOrSlug, query, user) => {

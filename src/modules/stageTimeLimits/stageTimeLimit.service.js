@@ -1,4 +1,10 @@
 const prisma = require('../../config/db');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
+
+const STAGE_SCHEDULE_AUDIT_MODULE = {
+  moduleCode: 'stage-schedules',
+  moduleName: 'Stage Schedules'
+};
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -212,12 +218,31 @@ const createStageTimeLimit = async (payload, actor) => {
 
   await ensureUniqueRule(data);
 
-  const record = await prisma.stageTimeLimit.create({
-    data,
-    include: includeDisplayRelations
-  });
+  return prisma.$transaction(async (tx) => {
+    const record = await tx.stageTimeLimit.create({
+      data,
+      include: includeDisplayRelations
+    });
 
-  return formatStageTimeLimit(record);
+    if (actor && actor.userId) {
+      await createAuditLog(tx, {
+        ...STAGE_SCHEDULE_AUDIT_MODULE,
+        tableName: 'stage_time_limits',
+        recordId: record.id,
+        actionType: 'CREATE',
+        performedByUserId: actor.userId,
+        recordName: `Schedule for ${record.stageCode}`,
+        comments: 'Stage schedule created',
+        locationId: record.locationId,
+        details: [
+          { fieldName: 'stageCode', oldValue: null, newValue: record.stageCode, dataType: 'string' },
+          { fieldName: 'allowedMinutes', oldValue: null, newValue: record.allowedMinutes, dataType: 'number' }
+        ]
+      });
+    }
+
+    return formatStageTimeLimit(record);
+  });
 };
 
 const updateStageTimeLimit = async (id, payload, actor) => {
@@ -233,29 +258,69 @@ const updateStageTimeLimit = async (id, payload, actor) => {
 
   await ensureUniqueRule(data, recordId);
 
-  const record = await prisma.stageTimeLimit.update({
-    where: { id: recordId },
-    data,
-    include: includeDisplayRelations
-  });
+  return prisma.$transaction(async (tx) => {
+    const currentRecord = await tx.stageTimeLimit.findUnique({
+      where: { id: recordId }
+    });
 
-  return formatStageTimeLimit(record);
+    const record = await tx.stageTimeLimit.update({
+      where: { id: recordId },
+      data,
+      include: includeDisplayRelations
+    });
+
+    if (actor && actor.userId) {
+      await createAuditLog(tx, {
+        ...STAGE_SCHEDULE_AUDIT_MODULE,
+        tableName: 'stage_time_limits',
+        recordId: record.id,
+        actionType: 'UPDATE',
+        performedByUserId: actor.userId,
+        recordName: `Schedule for ${record.stageCode}`,
+        comments: 'Stage schedule updated',
+        locationId: record.locationId,
+        details: buildChangeDetails(currentRecord, record, ['locationId', 'moduleId', 'statusId', 'stageCode', 'allowedMinutes', 'notifyRoleId', 'notifyUserId', 'isActive'])
+      });
+    }
+
+    return formatStageTimeLimit(record);
+  });
 };
 
 const updateStageTimeLimitStatus = async (id, { isActive }, actor) => {
   const recordId = Number(id);
   await getStageTimeLimit(recordId, actor);
 
-  const record = await prisma.stageTimeLimit.update({
-    where: { id: recordId },
-    data: {
-      isActive,
-      modifiedById: actor?.userId || null
-    },
-    include: includeDisplayRelations
-  });
+  return prisma.$transaction(async (tx) => {
+    const currentRecord = await tx.stageTimeLimit.findUnique({
+      where: { id: recordId }
+    });
 
-  return formatStageTimeLimit(record);
+    const record = await tx.stageTimeLimit.update({
+      where: { id: recordId },
+      data: {
+        isActive,
+        modifiedById: actor?.userId || null
+      },
+      include: includeDisplayRelations
+    });
+
+    if (actor && actor.userId) {
+      await createAuditLog(tx, {
+        ...STAGE_SCHEDULE_AUDIT_MODULE,
+        tableName: 'stage_time_limits',
+        recordId: record.id,
+        actionType: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+        performedByUserId: actor.userId,
+        recordName: `Schedule for ${record.stageCode}`,
+        comments: isActive ? 'Stage schedule activated' : 'Stage schedule deactivated',
+        locationId: record.locationId,
+        details: buildChangeDetails(currentRecord, record, ['isActive'])
+      });
+    }
+
+    return formatStageTimeLimit(record);
+  });
 };
 
 module.exports = {
