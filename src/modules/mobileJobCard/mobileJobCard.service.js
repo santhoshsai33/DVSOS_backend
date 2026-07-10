@@ -1218,7 +1218,7 @@ const pendingQueue = async (query, user) => {
       where,
       select: pendingQueueSelect,
       orderBy: {
-        entryTime: 'asc'
+        entryTime: 'desc'
       },
       skip: (page - 1) * limit,
       take: limit

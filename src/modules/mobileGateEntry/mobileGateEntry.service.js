@@ -627,6 +627,7 @@ const submitExit = async (id, payload, user) => {
     select: {
       id: true,
       gateEntryNo: true,
+      entryType: true,
       locationId: true,
       exitTime: true
     }
@@ -711,7 +712,7 @@ const submitExit = async (id, payload, user) => {
       }))
       .filter((jobCard) => jobCard.incompleteServices.length > 0);
 
-    if (blockedJobCards.length > 0) {
+    if (currentEntry.entryType !== 'ENQUIRY' && blockedJobCards.length > 0) {
       throw createHttpError(400, 'All job card services must be completed before vehicle exit', {
         jobCards: blockedJobCards
       });
