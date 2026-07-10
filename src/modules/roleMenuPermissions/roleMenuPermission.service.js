@@ -167,6 +167,21 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
         canDelete: readOnlyMenu ? false : permission.canDelete
       };
 
+      const existingPermission = existingPermissionMap.get(menuId);
+
+      if (existingPermission) {
+        const hasChanges =
+          existingPermission.canRead !== data.canRead ||
+          existingPermission.canCreate !== data.canCreate ||
+          existingPermission.canUpdate !== data.canUpdate ||
+          existingPermission.canDelete !== data.canDelete;
+
+        if (!hasChanges) {
+          savedPermissions.push(existingPermission);
+          continue; // Skip DB update and audit log entirely
+        }
+      }
+
       const savedPermission = await tx.roleMenuPermission.upsert({
         where: {
           roleId_menuId: {
@@ -183,15 +198,13 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
         create: data
       });
 
-      const existingPermission = existingPermissionMap.get(menuId);
-
       await createAuditLog(tx, {
         tableName: 'role_menu_permissions',
         recordId: savedPermission.id,
         actionType: existingPermission ? 'UPDATE' : 'CREATE',
         performedByUserId: actorUserId,
-        recordName: `${role.slug}:${menuId}`,
-        comments: existingPermission ? 'Role menu permission updated' : 'Role menu permission created',
+        recordName: `${role.name} - ${menu.name}`,
+        comments: existingPermission ? `Role menu permission updated for ${menu.name}` : `Role menu permission created for ${menu.name}`,
         details: buildPermissionAuditDetails(existingPermission, savedPermission),
         moduleId: auditModule.id
       });
@@ -266,13 +279,16 @@ const deleteRoleMenuPermission = async (roleId, menuId, actorUserId) => {
       }
     });
 
+    const menuMap = await ensureMenusExist([parsedMenuId]);
+    const menu = menuMap.get(parsedMenuId);
+
     await createAuditLog(tx, {
       tableName: 'role_menu_permissions',
       recordId: deletedPermission.id,
       actionType: 'DELETE',
       performedByUserId: actorUserId,
-      recordName: `${role.slug}:${parsedMenuId}`,
-      comments: 'Role menu permission deleted',
+      recordName: `${role.name} - ${menu.name}`,
+      comments: `Role menu permission deleted for ${menu.name}`,
       details: permissionFields.map((fieldName) => ({
         fieldName,
         oldValue: deletedPermission[fieldName],

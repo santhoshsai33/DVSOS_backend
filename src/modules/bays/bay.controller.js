@@ -3,7 +3,7 @@ const bayService = require('./bay.service');
 
 const createBay = async (req, res, next) => {
   try {
-    const bay = await bayService.createBay(req.body, req.user.userId);
+    const bay = await bayService.createBay(req.body, req.user.userId || req.user.id);
 
     return apiResponse(res, {
       statusCode: 201,
@@ -17,7 +17,7 @@ const createBay = async (req, res, next) => {
 
 const updateBay = async (req, res, next) => {
   try {
-    const bay = await bayService.updateBay(req.params.id, req.body, req.user.userId);
+    const bay = await bayService.updateBay(req.params.id, req.body, req.user.userId || req.user.id);
 
     return apiResponse(res, {
       message: 'Bay updated successfully',
@@ -60,7 +60,7 @@ const getBayDropdown = async (req, res, next) => {
 
 const updateBayStatus = async (req, res, next) => {
   try {
-    const bay = await bayService.updateBayStatus(req.params.id, req.body, req.user.userId);
+    const bay = await bayService.updateBayStatus(req.params.id, req.body, req.user.userId || req.user.id);
 
     return apiResponse(res, {
       message: bay.isActive

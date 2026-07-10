@@ -260,19 +260,20 @@ const updateRole = async (id, { name, description, isActive }, actorUserId) => {
       'name',
       'slug',
       'description',
-      'isActive',
-      'modifiedById'
+      'isActive'
     ]);
 
-    await createAuditLog(tx, {
-      tableName: 'roles',
-      recordId: role.id,
-      actionType: 'UPDATE',
-      performedByUserId: actorUserId,
-      recordName: role.name,
-      comments: 'Role updated',
-      details
-    });
+    if (details.length > 0) {
+      await createAuditLog(tx, {
+        tableName: 'roles',
+        recordId: role.id,
+        actionType: 'UPDATE',
+        performedByUserId: actorUserId,
+        recordName: role.name,
+        comments: 'Role updated',
+        details
+      });
+    }
 
     return role;
   });
