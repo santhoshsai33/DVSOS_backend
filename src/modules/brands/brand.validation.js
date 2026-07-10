@@ -73,11 +73,21 @@ const validateBrandPayload = (req, res, next) => {
     });
   }
 
-  if (name.length > 100) {
+  if (name.length > 50) {
     return apiResponse(res, {
       statusCode: 400,
       success: false,
-      message: 'Brand name cannot exceed 100 characters',
+      message: 'Brand name cannot exceed 50 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (name.length < 3) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Brand name must be at least 3 characters',
       data: {},
       meta: {}
     });

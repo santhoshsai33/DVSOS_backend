@@ -29,7 +29,7 @@ const validateIdParam = (req, res, next) => {
 
 const validateUserPayload = ({ requirePassword = false } = {}) => {
   return (req, res, next) => {
-    const { fullName, email, mobile, roleId, password, locationId } = req.body || {};
+    const { fullName, email, mobile, roleId, password, locationId, emergencyContact, address, dob } = req.body || {};
     const parsedRoleId = Number(roleId);
     const parsedLocationId = Number(locationId);
 
@@ -37,8 +37,20 @@ const validateUserPayload = ({ requirePassword = false } = {}) => {
       return sendValidationError(res, 'fullName is required');
     }
 
+    if (fullName.length > 50) {
+      return sendValidationError(res, 'User Full Name cannot exceed 50 characters');
+    }
+
+    if (fullName.length < 3) {
+      return sendValidationError(res, 'User Full Name must be at least 3 characters');
+    }
+
     if (!isNonEmptyString(email)) {
       return sendValidationError(res, 'email is required');
+    }
+
+    if (email.length > 100) {
+      return sendValidationError(res, 'email cannot exceed 100 characters');
     }
 
     if (!emailRegex.test(email.trim())) {
@@ -47,6 +59,25 @@ const validateUserPayload = ({ requirePassword = false } = {}) => {
 
     if (mobile && !mobileRegex.test(String(mobile).trim())) {
       return sendValidationError(res, 'mobile must be valid');
+    }
+
+    if (emergencyContact && !mobileRegex.test(String(emergencyContact).trim())) {
+      return sendValidationError(res, 'emergencyContact must be valid');
+    }
+
+    if (address !== undefined && address !== null) {
+      if (String(address).length > 200) {
+        return sendValidationError(res, 'Address cannot exceed 200 characters');
+      }
+    }
+
+    if (dob) {
+      const inputDate = new Date(dob);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (inputDate >= today) {
+        return sendValidationError(res, 'Date of Birth must be in the past and cannot be today');
+      }
     }
 
     if (!Number.isInteger(parsedRoleId) || parsedRoleId <= 0) {

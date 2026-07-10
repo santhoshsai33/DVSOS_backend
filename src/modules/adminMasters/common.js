@@ -578,8 +578,22 @@ const createValidation = (requiredFields = []) => {
       if (field.type === 'string') {
         if (!isNonEmptyString(value)) {
           if (isRequired) return sendValidationError(res, `${field.name} is required`);
-        } else if (field.maxLength && value.length > field.maxLength) {
-          return sendValidationError(res, `${field.name} must not exceed ${field.maxLength} characters`);
+        } else {
+          if (field.minLength && value.length < field.minLength) {
+            return sendValidationError(res, `${field.name} must be at least ${field.minLength} characters`);
+          }
+          if (field.maxLength && value.length > field.maxLength) {
+            return sendValidationError(res, `${field.name} must not exceed ${field.maxLength} characters`);
+          }
+          if (field.regex && !field.regex.test(value)) {
+            return sendValidationError(res, field.regexMessage || `${field.name} format is invalid`);
+          }
+          if (field.maxValue !== undefined) {
+            const numericValue = Number(value);
+            if (!Number.isNaN(numericValue) && numericValue > field.maxValue) {
+              return sendValidationError(res, `${field.name} cannot exceed ${field.maxValue}`);
+            }
+          }
         }
       }
 

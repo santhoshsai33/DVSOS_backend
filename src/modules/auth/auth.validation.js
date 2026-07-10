@@ -15,6 +15,16 @@ const validateLogin = (req, res, next) => {
     });
   }
 
+  if (emailId.length > 100) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'emailId cannot exceed 100 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
   if (!isNonEmptyString(password)) {
     return apiResponse(res, {
       statusCode: 400,
@@ -41,11 +51,42 @@ const validateUpdateProfile = (req, res, next) => {
     });
   }
 
+  if (fullName.length > 50) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Full Name must not exceed 50 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (fullName.length < 3) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Full Name must be at least 3 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+
   if (!isNonEmptyString(emailId)) {
     return apiResponse(res, {
       statusCode: 400,
       success: false,
       message: 'emailId is required',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (emailId.length > 100) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'emailId cannot exceed 100 characters',
       data: {},
       meta: {}
     });
@@ -72,6 +113,16 @@ const validateForgotPassword = (req, res, next) => {
       statusCode: 400,
       success: false,
       message: 'emailId is required',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (emailId.length > 100) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'emailId cannot exceed 100 characters',
       data: {},
       meta: {}
     });

@@ -4,9 +4,17 @@ const validation = createValidation([
   { name: 'serviceCenterId', type: 'int' },
   { name: 'stateId', type: 'int' },
   { name: 'districtId', type: 'int' },
-  { name: 'locationName', type: 'string', maxLength: 100 },
+  { name: 'locationName', type: 'string', minLength: 3, maxLength: 50 },
   { name: 'locationType', type: 'string' },
-  { name: 'address', type: 'string', required: false, maxLength: 255 }
+  { name: 'address', type: 'string', required: false, maxLength: 200 },
+  { 
+    name: 'pincode', 
+    type: 'string', 
+    required: false, 
+    maxLength: 6,
+    regex: /^[1-9][0-9]{5}$/,
+    regexMessage: 'Pincode must be exactly 6 digits and cannot start with 0'
+  }
 ]);
 
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

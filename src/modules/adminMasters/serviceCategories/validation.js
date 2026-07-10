@@ -1,7 +1,8 @@
 const { createValidation } = require('../common');
 
 const validation = createValidation([
-  { name: 'name', type: 'string' }
+  { name: 'name', type: 'string' },
+  { name: 'description', type: 'string', required: false, maxLength: 200 }
 ]);
 
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

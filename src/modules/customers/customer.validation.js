@@ -36,8 +36,33 @@ const validateCustomerPayload = (req, res, next) => {
     return sendValidationError(res, 'fullName is required');
   }
 
+  if (fullName.length > 50) {
+    return sendValidationError(res, 'Customer Full Name cannot exceed 50 characters');
+  }
+
+  if (fullName.length < 3) {
+    return sendValidationError(res, 'Customer Full Name must be at least 3 characters');
+  }
+
+  if (emailId) {
+    if (emailId.length > 100) {
+      return sendValidationError(res, 'emailId cannot exceed 100 characters');
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailId.trim())) {
+      return sendValidationError(res, 'emailId must be valid');
+    }
+  }
+
   if (!isNonEmptyString(mobileNo)) {
     return sendValidationError(res, 'mobileNo is required');
+  }
+
+  const { address } = req.body || {};
+  if (address !== undefined && address !== null) {
+    if (String(address).length > 200) {
+      return sendValidationError(res, 'Address cannot exceed 200 characters');
+    }
   }
 
   return next();

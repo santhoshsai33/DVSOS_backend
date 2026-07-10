@@ -133,6 +133,24 @@ const validateCreateJobCardPayload = (req, res, next) => {
     }
   }
 
+  const { customerComplaint, additionalNotes } = req.body || {};
+
+  if (customerComplaint && typeof customerComplaint === 'string' && customerComplaint.length > 200) {
+    return sendValidationError(res, 'customerComplaint must not exceed 200 characters');
+  }
+
+  if (additionalNotes && typeof additionalNotes === 'string' && additionalNotes.length > 200) {
+    return sendValidationError(res, 'additionalNotes must not exceed 200 characters');
+  }
+
+  if (customerInfo && typeof customerInfo.address === 'string' && customerInfo.address.length > 200) {
+    return sendValidationError(res, 'customer address must not exceed 200 characters');
+  }
+
+  if (billing && typeof billing.discountReason === 'string' && billing.discountReason.length > 200) {
+    return sendValidationError(res, 'discountReason must not exceed 200 characters');
+  }
+
   return next();
 };
 

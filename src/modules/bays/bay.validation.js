@@ -51,11 +51,21 @@ const validateBayPayload = (req, res, next) => {
     });
   }
 
-  if (bayName.length > 100) {
+  if (bayName.length > 50) {
     return apiResponse(res, {
       statusCode: 400,
       success: false,
-      message: 'Bay name cannot exceed 100 characters',
+      message: 'Bay name cannot exceed 50 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (bayName.length < 3) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Bay name must be at least 3 characters',
       data: {},
       meta: {}
     });
