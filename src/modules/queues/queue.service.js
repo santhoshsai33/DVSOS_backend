@@ -1,8 +1,5 @@
 const prisma = require('../../config/db');
-const {
-  STATUS_MODULE_CODES,
-  resolveStatusIdFromCodes
-} = require('../../common/utils/status.util');
+const { STATUS_MODULE_CODES, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 const { getSocket } = require('../../config/socket');
 const {
@@ -372,7 +369,7 @@ const toQueueResponse = (jobCard, department) => {
         : null
     })),
     serviceNames: services.map((service) => service.serviceName),
-    priority: services.some((service) => service.isAdditional) ? 'HIGH' : 'NORMAL',
+    // priority: services.some((service) => service.isAdditional) ? 'HIGH' : 'NORMAL',
     waitMinutes: minutesBetween(jobCard.createdAt),
     expectedDeliveryAt: jobCard.expectedDeliveryAt,
     currentStatus: jobCard.currentStatus
