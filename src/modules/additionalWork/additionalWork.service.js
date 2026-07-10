@@ -118,6 +118,28 @@ const ensureAdditionalWorkSchema = async () => {
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
 
+const buildJobCardIdentifierWhere = (identifier) => {
+  const normalizedIdentifier = String(identifier || '').trim();
+
+  if (!normalizedIdentifier) {
+    throw createHttpError(400, 'jobCardId is required');
+  }
+
+  const parsedId = Number(normalizedIdentifier);
+  const isNumericId = Number.isInteger(parsedId) && parsedId > 0;
+
+  if (isNumericId) {
+    return { id: parsedId };
+  }
+
+  return {
+    OR: [
+      { slug: normalizedIdentifier },
+      { jobCardNo: normalizedIdentifier }
+    ]
+  };
+};
+
 const normalizeRoleSlug = (roleSlug) => {
   const normalized = String(roleSlug || '').trim().toLowerCase().replace(/[-\s]+/g, '_');
   return ROLE_ALIASES[normalized] || normalized;
@@ -330,10 +352,10 @@ const normalizeServiceSelections = (serviceItems) => {
   });
 };
 
-const getJobCardForAdditionalWork = (tx, jobCardId, user) => {
+const getJobCardForAdditionalWork = (tx, jobCardIdentifier, user) => {
   return tx.jobCard.findFirst({
     where: {
-      id: jobCardId,
+      ...buildJobCardIdentifierWhere(jobCardIdentifier),
       ...(user && user.locationId ? { locationId: Number(user.locationId) } : {})
     },
     include: {
@@ -580,18 +602,20 @@ const listAvailableServiceItems = (tx, department) => {
   });
 };
 
-const getContext = async (jobCardId, query, user) => {
+const getContext = async (jobCardIdentifier, query, user) => {
   await ensureAdditionalWorkSchema();
 
-  const id = parsePositiveInt(jobCardId, 'jobCardId');
   const department = getDepartmentForUser(user, query.department || query.category);
 
   const [jobCard, serviceItems, pendingApproval] = await prisma.$transaction(async (tx) => {
-    const [foundJobCard, availableItems, latestPendingApproval] = await Promise.all([
-      getJobCardForAdditionalWork(tx, id, user),
-      listAvailableServiceItems(tx, department),
-      getLatestPendingAdditionalApproval(tx, id)
+    const [foundJobCard, availableItems] = await Promise.all([
+      getJobCardForAdditionalWork(tx, jobCardIdentifier, user),
+      listAvailableServiceItems(tx, department)
     ]);
+
+    const latestPendingApproval = foundJobCard
+      ? await getLatestPendingAdditionalApproval(tx, foundJobCard.id)
+      : null;
 
     return [foundJobCard, availableItems, latestPendingApproval];
   });
@@ -628,10 +652,9 @@ const generateApprovalCode = async (tx) => {
   throw createHttpError(500, 'Could not generate approval code');
 };
 
-const createRequest = async (jobCardId, payload, user) => {
+const createRequest = async (jobCardIdentifier, payload, user) => {
   await ensureAdditionalWorkSchema();
 
-  const id = parsePositiveInt(jobCardId, 'jobCardId');
   const explanation = String(payload.mechanicExplanation || payload.explanation || payload.notes || '').trim();
   if (explanation.length < 5) {
     throw createHttpError(400, 'Mechanic explanation is required');
@@ -643,7 +666,7 @@ const createRequest = async (jobCardId, payload, user) => {
   const expectedDeliveryAt = parseOptionalDate(payload.expectedDeliveryAt, 'expectedDeliveryAt');
 
   return prisma.$transaction(async (tx) => {
-    const jobCard = await getJobCardForAdditionalWork(tx, id, user);
+    const jobCard = await getJobCardForAdditionalWork(tx, jobCardIdentifier, user);
     if (!jobCard) {
       throw createHttpError(404, 'Job card not found');
     }
