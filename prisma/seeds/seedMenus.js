@@ -55,11 +55,11 @@ const MENU_SEED_DATA = [
     menus: [
       { name: 'Manager Dashboard', path: '/manager-dashboard', icon: 'LayoutDashboard' },
       { name: 'User Management', path: '/users', icon: 'Users' },
-      { name: 'TV Display', path: '/kiosk/tv', icon: 'Monitor' },
       { name: 'Customers', path: '/customers', icon: 'Users' },
       { name: 'Vehicles', path: '/vehicles', icon: 'Car' },
       { name: 'Job Cards', path: '/job-cards', icon: 'ClipboardList' },
-      { name: 'Notifications', path: '/notifications', icon: 'Bell' }
+      { name: 'Notifications', path: '/notifications', icon: 'Bell' },
+      { name: 'TV Display', path: '/kiosk/tv', icon: 'Monitor' }
     ]
   },
   {
