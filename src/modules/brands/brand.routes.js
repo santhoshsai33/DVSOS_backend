@@ -16,7 +16,7 @@ const canUpdateBrands = permissionMiddleware('/master-brands', 'canUpdate');
 
 router.use(authenticate);
 
-router.get('/dropdown', canReadBrands, brandController.getBrandDropdown);
+router.get('/dropdown', brandController.getBrandDropdown);
 router.post('/create', canCreateBrands, validateBrandPayload, brandController.createBrand);
 router.put('/update/:id', canUpdateBrands, validateIdentifierParam, validateBrandPayload, brandController.updateBrand);
 router.get('/list', canReadBrands, brandController.listBrands);

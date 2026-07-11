@@ -8,7 +8,6 @@ const { permissionMiddleware } = require('../../../common/middleware/permission.
 const canRead = permissionMiddleware({ menuPath: '/admin-dashboard', action: 'canRead' });
 
 router.use(authMiddleware);
-router.use(canRead);
 
 router.get('/states', controller.states);
 router.get('/districts', validateOptionalPositiveInt('stateId'), controller.districts);

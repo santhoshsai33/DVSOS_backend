@@ -19,7 +19,7 @@ const canReadOperationalBays = permissionMiddleware(
 
 router.use(authenticate);
 
-router.get('/dropdown', canReadBays, bayController.getBayDropdown);
+router.get('/dropdown', bayController.getBayDropdown);
 router.post('/create', canCreateBays, validateBayPayload, bayController.createBay);
 router.put('/update/:id', canUpdateBays, validateIdParam, validateBayPayload, bayController.updateBay);
 router.get('/list', canReadBays, bayController.listBays);
@@ -27,7 +27,7 @@ router.patch('/status/:id', canUpdateBays, validateIdParam, validateStatusPayloa
 
 const crmRouter = require('express').Router();
 crmRouter.use(authenticate);
-crmRouter.get('/dropdown', canReadOperationalBays, bayController.getBayDropdown);
+crmRouter.get('/dropdown', bayController.getBayDropdown);
 crmRouter.get('/list', canReadOperationalBays, bayController.listBays);
 
 module.exports = {
