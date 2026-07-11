@@ -34,7 +34,7 @@ const validateRegistrationQuery = (req, res, next) => {
 };
 
 const validateCreateGateEntryPayload = (req, res, next) => {
-  const { registrationNumber, entryType, whatsappNumber } = req.body || {};
+  const { registrationNumber, entryType, whatsappNumber, remarks } = req.body || {};
 
   if (!isNonEmptyString(registrationNumber)) {
     return sendValidationError(res, 'registrationNumber is required');
@@ -52,6 +52,12 @@ const validateCreateGateEntryPayload = (req, res, next) => {
     const mobile = String(whatsappNumber).trim();
     if (!indianMobileRegex.test(mobile)) {
       return sendValidationError(res, 'whatsappNumber must be a valid 10 digit India mobile number');
+    }
+  }
+
+  if (remarks !== undefined && remarks !== null) {
+    if (typeof remarks === 'string' && remarks.length > 200) {
+      return sendValidationError(res, 'remarks must not exceed 200 characters');
     }
   }
 

@@ -80,6 +80,26 @@ const validateServiceItemPayload = (req, res, next) => {
     });
   }
 
+  if (name.length > 50) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'service item name cannot exceed 50 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (name.length < 3) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'service item name must be at least 3 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
   if (!isValidNonNegativeNumber(basePrice)) {
     return apiResponse(res, {
       statusCode: 400,

@@ -21,7 +21,7 @@ const validateIdParam = (req, res, next) => {
 };
 
 const validateRolePayload = (req, res, next) => {
-  const { name } = req.body || {};
+  const { name, description } = req.body || {};
 
   if (!isNonEmptyString(name)) {
     return apiResponse(res, {
@@ -33,11 +33,31 @@ const validateRolePayload = (req, res, next) => {
     });
   }
 
-  if (name.length > 100) {
+  if (name.length > 50) {
     return apiResponse(res, {
       statusCode: 400,
       success: false,
-      message: 'role name must not exceed 100 characters',
+      message: 'role name must not exceed 50 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (name.length < 3) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'role name must be at least 3 characters',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (description && typeof description === 'string' && description.length > 200) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'description must not exceed 200 characters',
       data: {},
       meta: {}
     });
