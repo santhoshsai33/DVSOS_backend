@@ -1,12 +1,6 @@
 const prisma = require('../../config/db');
 const { getSocket } = require('../../config/socket');
-const {
-  STATUS_MODULE_CODES,
-  statusModuleFilter,
-  resolveStatusById,
-  resolveStatusFromCodes,
-  resolveStatusIdFromCodes
-} = require('../../common/utils/status.util');
+const { STATUS_MODULE_CODES, statusModuleFilter, resolveStatusById, resolveStatusFromCodes, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { createAuditLog } = require('../../common/utils/audit.util');
 const { syncAssignmentPendingStages } = require('../processStageTracking/departmentAssignmentStage.service');
@@ -1152,7 +1146,7 @@ const updateJobCard = async (id, payload, user) => {
             : `Job card status derived from service updates: ${nextStatus.statusName}`
         }
       });
-      
+
       // Emit socket event for TV Kiosk
       const io = getSocket();
       if (io) {
