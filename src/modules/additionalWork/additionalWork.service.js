@@ -734,6 +734,10 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
       WHERE id = ${approval.id}
     `;
 
+    const activeAssignment = jobCard.workAssignments.find(
+      (wa) => getServiceDepartment(wa.jobCardService) === department
+    );
+
     const createdServices = [];
     for (const selection of selections) {
       const serviceItem = serviceItemMap.get(selection.serviceItemId);
@@ -744,7 +748,7 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
           parentJobCardServiceId,
           serviceItemId: serviceItem.id,
           approvalStatusId: approvedApprovalStatus.id,
-          serviceStatusId: pendingServiceStatusId,
+          serviceStatusId: activeAssignment ? activeAssignment.jobCardService.serviceStatusId : pendingServiceStatusId,
           serviceName: serviceItem.name,
           price: Number(serviceItem.defaultPrice),
           quantity: selection.quantity,
@@ -762,6 +766,23 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
         }
       });
       createdServices.push(createdService);
+
+      if (activeAssignment) {
+        await tx.workAssignment.create({
+          data: {
+            locationId: jobCard.locationId,
+            jobCardId: jobCard.id,
+            jobCardServiceId: createdService.id,
+            statusId: activeAssignment.statusId,
+            assignedUserId: activeAssignment.assignedUserId,
+            bayId: activeAssignment.bayId,
+            assignedById: user && user.userId ? user.userId : null,
+            createdById: user && user.userId ? user.userId : null,
+            assignedAt: new Date(),
+            ...(activeAssignment.startedAt ? { startedAt: new Date() } : {})
+          }
+        });
+      }
     }
 
     await tx.jobCard.update({
@@ -829,12 +850,34 @@ const handleTwilioWebhook = async (req) => {
         approvalType: APPROVAL_TYPE_ADDITIONAL_WORK
       },
       include: {
-        jobCard: true,
+        jobCard: {
+          include: {
+            workAssignments: {
+              where: { completedAt: null },
+              include: {
+                jobCardService: {
+                  include: {
+                    serviceItem: {
+                      include: {
+                        category: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         status: true,
         services: {
           include: {
             approvalStatus: true,
-            serviceStatus: true
+            serviceStatus: true,
+            serviceItem: {
+              include: {
+                category: true
+              }
+            }
           }
         }
       }
@@ -867,16 +910,46 @@ const handleTwilioWebhook = async (req) => {
       }
     });
 
+    const department = approval.services.length > 0 ? getServiceDepartment(approval.services[0]) : null;
+    const activeAssignment = department ? approval.jobCard.workAssignments.find(
+      (wa) => getServiceDepartment(wa.jobCardService) === department
+    ) : null;
+
+    const actualServiceStatusId = serviceStatusId || (
+      (decision === 'APPROVED' && activeAssignment)
+        ? activeAssignment.jobCardService.serviceStatusId
+        : undefined
+    );
+
     await tx.jobCardService.updateMany({
       where: {
         approvalId: approval.id
       },
       data: {
         approvalStatusId: approvalStatus.id,
-        ...(serviceStatusId ? { serviceStatusId } : {}),
+        ...(actualServiceStatusId ? { serviceStatusId: actualServiceStatusId } : {}),
         modifiedById: null
       }
     });
+
+    if (decision === 'APPROVED' && activeAssignment) {
+      for (const service of approval.services) {
+        await tx.workAssignment.create({
+          data: {
+            locationId: approval.jobCard.locationId,
+            jobCardId: approval.jobCard.id,
+            jobCardServiceId: service.id,
+            statusId: activeAssignment.statusId,
+            assignedUserId: activeAssignment.assignedUserId,
+            bayId: activeAssignment.bayId,
+            assignedById: null,
+            createdById: null,
+            assignedAt: new Date(),
+            ...(activeAssignment.startedAt ? { startedAt: new Date() } : {})
+          }
+        });
+      }
+    }
 
     await tx.jobCard.update({
       where: { id: approval.jobCardId },

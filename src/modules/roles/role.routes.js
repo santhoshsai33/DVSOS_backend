@@ -8,12 +8,13 @@ const { permissionMiddleware } = require('../../common/middleware/permission.mid
 const canReadRoles = permissionMiddleware('/roles', 'canRead');
 const canCreateRoles = permissionMiddleware('/roles', 'canCreate');
 const canUpdateRoles = permissionMiddleware('/roles', 'canUpdate');
+const canReadRolesOrUsers = permissionMiddleware({ menuPaths: ['/roles', '/users'], action: 'canRead' });
 
 router.use(authenticate);
 
 router.post('/create', canCreateRoles, validateRolePayload, roleController.createRole);
 router.put('/update/:id', canUpdateRoles, validateIdParam, validateRolePayload, roleController.updateRole);
-router.get('/list', canReadRoles, roleController.listRoles);
+router.get('/list', canReadRolesOrUsers, roleController.listRoles);
 router.get('/detail/:id', canReadRoles, validateIdParam, roleController.getRoleDetail);
 router.patch('/status/:id', canUpdateRoles, validateIdParam, validateStatusPayload, roleController.updateRoleStatus);
 

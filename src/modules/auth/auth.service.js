@@ -207,15 +207,19 @@ const login = async ({ emailId, password }) => {
   const normalizedEmailId = emailId.trim();
   const user = await authRepository.findUserByEmailId(normalizedEmailId);
 
+  if (!user) {
+    throw createHttpError(401, 'Incorrect email and password');
+  }
+
   assertUserCanAuthenticate(user, {
-    genericLoginError: true,
+    genericLoginError: false,
     maskInactiveUser: false
   });
 
   const passwordMatches = await comparePassword(password, user.passwordHash);
 
   if (!passwordMatches) {
-    throw createHttpError(401, LOGIN_ERROR_MESSAGE);
+    throw createHttpError(401, 'Incorrect password');
   }
 
   if (roleRequiresLocation(user.role.slug) && !user.locationId) {

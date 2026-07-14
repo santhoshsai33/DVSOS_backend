@@ -577,6 +577,20 @@ const listJobCards = async (query, user) => {
     where.locationId = Number(locationId);
   }
 
+  let matchingBayIds = [];
+  if (query.search) {
+    const matchingBays = await prisma.bay.findMany({
+      where: {
+        OR: [
+          { bayName: { contains: query.search } },
+          { bayCode: { contains: query.search } }
+        ]
+      },
+      select: { id: true }
+    });
+    matchingBayIds = matchingBays.map((b) => b.id);
+  }
+
   if (query.search) {
     where.OR = [
       { jobCardNo: { contains: query.search } },
@@ -584,6 +598,16 @@ const listJobCards = async (query, user) => {
       { customer: { fullName: { contains: query.search } } },
       { customer: { mobileNo: { contains: query.search } } }
     ];
+    
+    if (matchingBayIds.length > 0) {
+      where.OR.push({
+        workAssignments: {
+          some: {
+            bayId: { in: matchingBayIds }
+          }
+        }
+      });
+    }
   }
 
   if (query.status) {
