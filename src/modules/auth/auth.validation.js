@@ -71,6 +71,16 @@ const validateUpdateProfile = (req, res, next) => {
     });
   }
 
+  if (!/^[a-zA-Z\s]+$/.test(fullName.trim())) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Full Name must contain only letters and spaces',
+      data: {},
+      meta: {}
+    });
+  }
+
 
   if (!isNonEmptyString(emailId)) {
     return apiResponse(res, {
@@ -97,6 +107,26 @@ const validateUpdateProfile = (req, res, next) => {
       statusCode: 400,
       success: false,
       message: 'mobileNo is required',
+      data: {},
+      meta: {}
+    });
+  }
+  
+  if (mobileNo.length !== 10 || !/^\d+$/.test(mobileNo)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Mobile Number must be exactly 10 digits',
+      data: {},
+      meta: {}
+    });
+  }
+
+  if (!/^[6-9]/.test(mobileNo)) {
+    return apiResponse(res, {
+      statusCode: 400,
+      success: false,
+      message: 'Mobile Number must start with 6, 7, 8, or 9',
       data: {},
       meta: {}
     });
