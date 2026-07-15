@@ -1,8 +1,4 @@
-const {
-  createAdminMasterService,
-  ensureForeignKey,
-  ensureUniqueComposite
-} = require('../common');
+const { createAdminMasterService, ensureForeignKey, ensureUniqueComposite } = require('../common');
 const prisma = require('../../../config/db');
 
 const districtSelect = {

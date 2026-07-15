@@ -1,9 +1,4 @@
-const {
-  createAdminMasterService,
-  createHttpError,
-  prisma
-} = require('../common');
-
+const { createAdminMasterService, createHttpError, prisma } = require('../common');
 const locationSelect = {
   id: true,
   serviceCenterId: true,

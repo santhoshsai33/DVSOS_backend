@@ -29,6 +29,12 @@ const ROLE_DEPARTMENTS = {
   water_wash: 'water-wash'
 };
 const PRIVILEGED_ROLES = new Set(['admin', 'super_admin', 'manager', 'managing_director']);
+const MODULE_DEPARTMENTS = {
+  'floor-supervisor': 'mechanical',
+  'body-shop-supervisor': 'body-shop',
+  'water-wash-team': 'water-wash'
+};
+const PRIVILEGED_MODULES = new Set(['admin', 'manager', 'managing-director']);
 const APPROVAL_TYPE_ADDITIONAL_WORK = 'ADDITIONAL_WORK';
 const ADDITIONAL_WORK_SCHEMA_STATEMENTS = [
   `
