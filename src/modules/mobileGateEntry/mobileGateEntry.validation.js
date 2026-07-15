@@ -49,9 +49,12 @@ const validateCreateGateEntryPayload = (req, res, next) => {
   }
 
   if (whatsappNumber !== undefined && whatsappNumber !== null && whatsappNumber !== '') {
-    const mobile = String(whatsappNumber).trim();
-    if (!indianMobileRegex.test(mobile)) {
-      return sendValidationError(res, 'whatsappNumber must be a valid 10 digit India mobile number');
+    const trimmedMobile = String(whatsappNumber).trim();
+    if (trimmedMobile.length !== 10 || !/^\d+$/.test(trimmedMobile)) {
+      return sendValidationError(res, 'whatsappNumber must be exactly 10 digits');
+    }
+    if (!/^[6-9]/.test(trimmedMobile)) {
+      return sendValidationError(res, 'whatsappNumber must start with 6, 7, 8, or 9');
     }
   }
 

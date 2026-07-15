@@ -1,7 +1,7 @@
 const { apiResponse } = require('../../common/utils/apiResponse');
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const mobileRegex = /^\+?[0-9]{10,15}$/;
+const mobileRegex = /^[6-9]\d{9}$/;
 
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
 const isSlug = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value || '').trim());
@@ -57,12 +57,24 @@ const validateUserPayload = ({ requirePassword = false } = {}) => {
       return sendValidationError(res, 'email must be valid');
     }
 
-    if (mobile && !mobileRegex.test(String(mobile).trim())) {
-      return sendValidationError(res, 'mobile must be valid');
+    if (mobile) {
+      const trimmedMobile = String(mobile).trim();
+      if (trimmedMobile.length !== 10 || !/^\d+$/.test(trimmedMobile)) {
+        return sendValidationError(res, 'mobile must be exactly 10 digits');
+      }
+      if (!/^[6-9]/.test(trimmedMobile)) {
+        return sendValidationError(res, 'mobile must start with 6, 7, 8, or 9');
+      }
     }
 
-    if (emergencyContact && !mobileRegex.test(String(emergencyContact).trim())) {
-      return sendValidationError(res, 'emergencyContact must be valid');
+    if (emergencyContact) {
+      const trimmedContact = String(emergencyContact).trim();
+      if (trimmedContact.length !== 10 || !/^\d+$/.test(trimmedContact)) {
+        return sendValidationError(res, 'emergencyContact must be exactly 10 digits');
+      }
+      if (!/^[6-9]/.test(trimmedContact)) {
+        return sendValidationError(res, 'emergencyContact must start with 6, 7, 8, or 9');
+      }
     }
 
     if (address !== undefined && address !== null) {

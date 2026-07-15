@@ -58,6 +58,14 @@ const validateCustomerPayload = (req, res, next) => {
     return sendValidationError(res, 'mobileNo is required');
   }
 
+  if (mobileNo.length !== 10 || !/^\d+$/.test(mobileNo)) {
+    return sendValidationError(res, 'Mobile Number must be exactly 10 digits');
+  }
+
+  if (!/^[6-9]/.test(mobileNo)) {
+    return sendValidationError(res, 'Mobile Number must start with 6, 7, 8, or 9');
+  }
+
   const { address } = req.body || {};
   if (address !== undefined && address !== null) {
     if (String(address).length > 200) {
