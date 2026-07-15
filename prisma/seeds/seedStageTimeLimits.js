@@ -1,11 +1,15 @@
-const rolesData = [
-  { name: 'Floor Supervisor', slug: 'floor_supervisor', description: 'Floor supervisor managing mechanical stage' },
-  { name: 'Body Shop Supervisor', slug: 'body_shop_supervisor', description: 'Body shop supervisor managing body shop stage' },
-  { name: 'Water Wash Supervisor', slug: 'water_wash_supervisor', description: 'Water wash supervisor managing wash stage' },
-  { name: 'Manager', slug: 'manager', description: 'Workshop manager' },
-  { name: 'Managing Director', slug: 'managing_director', description: 'Managing Director' },
-  { name: 'CRM Team', slug: 'crm_team', description: 'Customer relationship management team' }
-];
+const getRolesMap = async (prisma) => {
+  const roles = await prisma.role.findMany({
+    select: { id: true, slug: true }
+  });
+
+  const rolesMap = {};
+  for (const role of roles) {
+    rolesMap[role.slug] = role.id;
+  }
+
+  return rolesMap;
+};
 
 const limitsData = [
   {
@@ -80,31 +84,6 @@ const limitsData = [
   }
 ];
 
-const seedRoles = async (prisma) => {
-  const rolesMap = {};
-
-  for (const roleInfo of rolesData) {
-    const role = await prisma.role.upsert({
-      where: { slug: roleInfo.slug },
-      update: {
-        name: roleInfo.name,
-        description: roleInfo.description,
-        isActive: true
-      },
-      create: {
-        name: roleInfo.name,
-        slug: roleInfo.slug,
-        description: roleInfo.description,
-        isActive: true
-      }
-    });
-
-    rolesMap[roleInfo.slug] = role.id;
-  }
-
-  return rolesMap;
-};
-
 const resolveStatus = async (prisma, { moduleCode, statusCode }) => {
   const status = await prisma.statusMaster.findFirst({
     where: {
@@ -125,10 +104,10 @@ const resolveStatus = async (prisma, { moduleCode, statusCode }) => {
 };
 
 async function seedStageTimeLimits(prisma) {
-  console.log('Seeding roles and stage time limits...');
+  console.log('Seeding stage time limits...');
 
-  const rolesMap = await seedRoles(prisma);
-  console.log('Roles upserted successfully.');
+  const rolesMap = await getRolesMap(prisma);
+  console.log('Roles mapped successfully.');
 
   for (const limit of limitsData) {
     const status = await resolveStatus(prisma, limit);

@@ -1,10 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../../config/db');
-const {
-  STATUS_MODULE_CODES,
-  resolveStatusFromCodes,
-  resolveStatusIdFromCodes
-} = require('../../common/utils/status.util');
+const { STATUS_MODULE_CODES, resolveStatusFromCodes, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
 const { validateTwilioRequest } = require('../../providers/whatsapp/whatsapp.service');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
@@ -153,18 +149,47 @@ const normalizeDepartment = (value) => {
   });
 };
 
-const getDepartmentForUser = (user, requestedDepartment) => {
-  const roleSlug = normalizeRoleSlug(user && user.roleSlug);
-  const userDepartment = ROLE_DEPARTMENTS[roleSlug];
+const getAllowedDepartments = (user) => {
+  if (!user) return [];
 
-  if (userDepartment) {
-    return userDepartment;
+  const allowed = new Set();
+  let isPrivileged = false;
+
+  if (Array.isArray(user.modules)) {
+    for (const mod of user.modules) {
+      if (PRIVILEGED_MODULES.has(mod)) isPrivileged = true;
+      if (MODULE_DEPARTMENTS[mod]) allowed.add(MODULE_DEPARTMENTS[mod]);
+    }
   }
 
+  const roleSlug = normalizeRoleSlug(user.roleSlug);
   if (PRIVILEGED_ROLES.has(roleSlug)) {
+    isPrivileged = true;
+  }
+
+  const deptFromRole = ROLE_DEPARTMENTS[roleSlug];
+  if (deptFromRole) {
+    allowed.add(deptFromRole);
+  }
+
+  if (isPrivileged) return ['all'];
+  return Array.from(allowed);
+};
+
+const getDepartmentForUser = (user, requestedDepartment) => {
+  const allowed = getAllowedDepartments(user);
+
+  if (allowed.includes('all')) {
     const department = normalizeDepartment(requestedDepartment);
     if (department) {
       return department;
+    }
+  } else if (allowed.length > 0) {
+    const reqDept = normalizeDepartment(requestedDepartment);
+    if (reqDept) {
+      if (allowed.includes(reqDept)) return reqDept;
+    } else {
+      if (allowed.length === 1) return allowed[0];
     }
   }
 
@@ -784,12 +809,31 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
         });
       }
     }
+    const activeServices = await tx.jobCardService.findMany({
+      where: {
+        jobCardId: jobCard.id,
+        approvalStatus: {
+          statusCode: { not: 'REJECTED' }
+        }
+      },
+      select: { price: true, quantity: true }
+    });
+
+    const serviceSubtotal = activeServices.reduce((sum, s) => sum + (Number(s.price) * s.quantity), 0);
+    const taxRate = Number(jobCard.taxRate || 0);
+    const discountAmount = Number(jobCard.discountAmount || 0);
+    const taxableAmount = Math.max(0, serviceSubtotal - discountAmount);
+    const taxAmount = (taxableAmount * taxRate) / 100;
+    const finalAmount = taxableAmount + taxAmount;
 
     await tx.jobCard.update({
       where: { id: jobCard.id },
       data: {
         approvalStatusId: approvedApprovalStatus.id,
         ...(expectedDeliveryAt ? { expectedDeliveryAt } : {}),
+        serviceSubtotal,
+        taxAmount,
+        finalAmount,
         modifiedById: user && user.userId ? user.userId : null
       }
     });
@@ -951,10 +995,30 @@ const handleTwilioWebhook = async (req) => {
       }
     }
 
+    const activeServices = await tx.jobCardService.findMany({
+      where: {
+        jobCardId: approval.jobCardId,
+        approvalStatus: {
+          statusCode: { not: 'REJECTED' }
+        }
+      },
+      select: { price: true, quantity: true }
+    });
+
+    const serviceSubtotal = activeServices.reduce((sum, s) => sum + (Number(s.price) * s.quantity), 0);
+    const taxRate = Number(approval.jobCard.taxRate || 0);
+    const discountAmount = Number(approval.jobCard.discountAmount || 0);
+    const taxableAmount = Math.max(0, serviceSubtotal - discountAmount);
+    const taxAmount = (taxableAmount * taxRate) / 100;
+    const finalAmount = taxableAmount + taxAmount;
+
     await tx.jobCard.update({
       where: { id: approval.jobCardId },
       data: {
-        approvalStatusId: approvalStatus.id
+        approvalStatusId: approvalStatus.id,
+        serviceSubtotal,
+        taxAmount,
+        finalAmount
       }
     });
 

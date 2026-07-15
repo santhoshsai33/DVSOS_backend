@@ -3,7 +3,8 @@ const authService = require('./auth.service');
 
 const login = async (req, res, next) => {
   try {
-    const data = await authService.login(req.body);
+    const platform = req.headers['x-client-platform'] || 'web';
+    const data = await authService.login(req.body, platform);
 
     return apiResponse(res, {
       message: 'Login successful',

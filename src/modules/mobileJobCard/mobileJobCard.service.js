@@ -318,8 +318,9 @@ const buildBillingSummary = (billing = {}, serviceSubtotal, defaultTaxRate = 0) 
   const discountAmount = Math.max(0, toOptionalNumber(billing.discountAmount ?? billing.discount) || 0);
   const providedTaxRate = toOptionalNumber(billing.taxRate);
   const taxRate = Math.max(0, providedTaxRate !== undefined ? providedTaxRate : defaultTaxRate);
-  const taxAmount = Math.max(0, toOptionalNumber(billing.taxAmount) ?? ((serviceSubtotal * taxRate) / 100));
-  const finalAmount = Math.max(0, toOptionalNumber(billing.finalAmount) ?? (serviceSubtotal + taxAmount - discountAmount));
+  const taxableAmount = Math.max(0, serviceSubtotal - discountAmount);
+  const taxAmount = Math.max(0, toOptionalNumber(billing.taxAmount) ?? ((taxableAmount * taxRate) / 100));
+  const finalAmount = Math.max(0, toOptionalNumber(billing.finalAmount) ?? (taxableAmount + taxAmount));
   const discountReason = toTrimmedString(billing.discountReason);
 
   return {

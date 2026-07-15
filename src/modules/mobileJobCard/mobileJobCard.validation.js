@@ -118,8 +118,17 @@ const validateCreateJobCardPayload = (req, res, next) => {
     return sendValidationError(res, 'customerInfo must be an object');
   }
 
-  if (billing !== undefined && !isPlainObject(billing)) {
-    return sendValidationError(res, 'billing must be an object');
+  if (billing !== undefined) {
+    if (!isPlainObject(billing)) {
+      return sendValidationError(res, 'billing must be an object');
+    }
+    const discountValue = billing.discountAmount !== undefined ? billing.discountAmount : billing.discount;
+    if (discountValue !== undefined) {
+      const discountNum = Number(discountValue);
+      if (Number.isNaN(discountNum) || discountNum <= 0) {
+        return sendValidationError(res, 'Discount amount must be greater than zero');
+      }
+    }
   }
 
   if (photoCategories !== undefined && !Array.isArray(photoCategories)) {

@@ -6,6 +6,7 @@ const authRepository = require('./auth.repository');
 const userRepository = require('../users/user.repository');
 const { signToken, verifyToken } = require('../../utils/jwt');
 const { sendPasswordResetEmail } = require('../../utils/email');
+const platformModules = require('../../config/platformModules');
 
 const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 const ADMIN_ROLE_SLUGS = new Set(['admin', 'super_admin']);
@@ -185,8 +186,7 @@ const getFirstReadableMenuPath = (modules = []) => {
   return '/profile';
 };
 
-const buildAuthResponse = async (user, includeToken = false) => {
-  const menus = await getAllowedMenus(user.roleId, user.role.slug);
+const buildAuthResponse = async (user, menus, includeToken = false) => {
   const authData = {
     user: toPublicUser(user),
     redirectPath: getFirstReadableMenuPath(menus),
@@ -203,7 +203,7 @@ const buildAuthResponse = async (user, includeToken = false) => {
   return authData;
 };
 
-const login = async ({ emailId, password }) => {
+const login = async ({ emailId, password }, platform = 'web') => {
   const normalizedEmailId = emailId.trim();
   const user = await authRepository.findUserByEmailId(normalizedEmailId);
 
@@ -222,13 +222,28 @@ const login = async ({ emailId, password }) => {
     throw createHttpError(401, 'Incorrect password');
   }
 
+  const menus = await getAllowedMenus(user.roleId, user.role.slug);
+  const userModules = menus.map(m => m.module);
+  
+  if (platform === 'web') {
+    const hasWebModule = userModules.some(mod => platformModules.web.includes(mod));
+    if (!hasWebModule) {
+      throw createHttpError(403, 'This account is not permitted to access the Web application.');
+    }
+  } else if (platform === 'mobile') {
+    const hasMobileModule = userModules.some(mod => platformModules.mobile.includes(mod));
+    if (!hasMobileModule) {
+      throw createHttpError(403, 'This account is not permitted to access the Mobile application.');
+    }
+  }
+
   if (roleRequiresLocation(user.role.slug) && !user.locationId) {
     throw createHttpError(403, 'Location is required for this role');
   }
 
   await authRepository.updateLastLoginAt(user.id);
 
-  return buildAuthResponse(user, true);
+  return buildAuthResponse(user, menus, true);
 };
 
 const getCurrentUser = async (userId) => {
@@ -240,7 +255,8 @@ const getCurrentUser = async (userId) => {
     throw createHttpError(403, 'Location is required for this role');
   }
 
-  return buildAuthResponse(user, false);
+  const menus = await getAllowedMenus(user.roleId, user.role.slug);
+  return buildAuthResponse(user, menus, false);
 };
 
 const updateProfile = async (userId, data) => {
@@ -260,7 +276,8 @@ const updateProfile = async (userId, data) => {
     mobileNo: data.mobileNo
   });
 
-  return buildAuthResponse(updatedUser, false);
+  const menus = await getAllowedMenus(updatedUser.roleId, updatedUser.role.slug);
+  return buildAuthResponse(updatedUser, menus, false);
 };
 
 const forgotPassword = async (emailId) => {

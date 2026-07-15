@@ -242,14 +242,38 @@ const ROLE_JOB_CARD_DEPARTMENTS = {
   water_wash: 'water-wash'
 };
 
-const getUserServiceStatusDepartment = (user) => {
-  const roleSlug = normalizeRoleSlug(user && user.roleSlug);
+const MODULE_DEPARTMENTS = {
+  'floor-supervisor': 'mechanical',
+  'body-shop-supervisor': 'body-shop',
+  'water-wash-team': 'water-wash'
+};
+const PRIVILEGED_MODULES = new Set(['admin', 'manager', 'managing-director']);
 
-  if (PRIVILEGED_SERVICE_STATUS_ROLES.has(roleSlug)) {
-    return 'all';
+const getAllowedDepartments = (user) => {
+  if (!user) return [];
+
+  const allowed = new Set();
+  let isPrivileged = false;
+
+  if (Array.isArray(user.modules)) {
+    for (const mod of user.modules) {
+      if (PRIVILEGED_MODULES.has(mod)) isPrivileged = true;
+      if (MODULE_DEPARTMENTS[mod]) allowed.add(MODULE_DEPARTMENTS[mod]);
+    }
   }
 
-  return ROLE_DEPARTMENTS[roleSlug] || null;
+  const roleSlug = normalizeRoleSlug(user.roleSlug);
+  if (PRIVILEGED_SERVICE_STATUS_ROLES.has(roleSlug)) {
+    isPrivileged = true;
+  }
+
+  const deptFromRole = ROLE_DEPARTMENTS[roleSlug];
+  if (deptFromRole) {
+    allowed.add(deptFromRole);
+  }
+
+  if (isPrivileged) return ['all'];
+  return Array.from(allowed);
 };
 
 const getServiceDepartment = (service) => {
@@ -261,10 +285,13 @@ const getQueryDepartment = (query, user) => {
   const requestedDepartment = normalizeDepartment(query.department || query.category);
 
   if (requestedDepartment) {
-    return requestedDepartment;
+    return [requestedDepartment];
   }
 
-  return ROLE_JOB_CARD_DEPARTMENTS[normalizeRoleSlug(user && user.roleSlug)] || null;
+  const allowed = getAllowedDepartments(user);
+  if (allowed.includes('all')) return [];
+
+  return allowed;
 };
 
 const getStatusCode = (status) => String((status && status.statusCode) || '').trim().toUpperCase();
@@ -339,19 +366,19 @@ const arePreviousDepartmentsCompleted = (jobCard, department) => {
 };
 
 const validateServiceStatusUpdateAccess = (jobCard, service, user) => {
-  const allowedDepartment = getUserServiceStatusDepartment(user);
+  const allowedDepartments = getAllowedDepartments(user);
 
-  if (!allowedDepartment) {
+  if (allowedDepartments.length === 0) {
     throw createHttpError(403, 'You are not allowed to update service status');
   }
 
-  if (allowedDepartment === 'all') {
+  if (allowedDepartments.includes('all')) {
     return;
   }
 
   const serviceDepartment = getServiceDepartment(service);
 
-  if (!serviceDepartment || serviceDepartment !== allowedDepartment) {
+  if (!serviceDepartment || !allowedDepartments.includes(serviceDepartment)) {
     throw createHttpError(403, 'You can update only your department service status');
   }
 
@@ -520,9 +547,10 @@ const toJobCardListResponse = (jobCard, department, bayMap = new Map()) => {
   const allAssignments = (jobCard.workAssignments || []).map((assignment) => toAssignmentSummary(assignment, bayMap));
   const activeAssignments = allAssignments.filter((assignment) => !assignment.completedAt);
   const displayAssignments = allAssignments;
-  const departmentAssignments = department
+  const departmentAssignments = department && department.length > 0
     ? displayAssignments.filter((assignment) => {
-      return normalizeDepartment(assignment.service && assignment.service.category && (assignment.service.category.slug || assignment.service.category.name)) === department;
+      const assignmentDept = normalizeDepartment(assignment.service && assignment.service.category && (assignment.service.category.slug || assignment.service.category.name));
+      return department.includes(assignmentDept);
     })
     : displayAssignments;
   const assignedMechanics = Array.from(
@@ -592,7 +620,7 @@ const listJobCards = async (query, user) => {
       { customer: { fullName: { contains: query.search } } },
       { customer: { mobileNo: { contains: query.search } } }
     ];
-    
+
     if (matchingBayIds.length > 0) {
       where.OR.push({
         workAssignments: {
@@ -625,12 +653,12 @@ const listJobCards = async (query, user) => {
     }
   }
 
-  if (department) {
+  if (department && department.length > 0) {
     where.services = {
       some: {
         serviceItem: {
           category: {
-            slug: department
+            slug: { in: department }
           }
         }
       }
@@ -1116,7 +1144,12 @@ const updateJobCard = async (id, payload, user) => {
     }
 
     const servicesAfterUpdate = await tx.jobCardService.findMany({
-      where: { jobCardId },
+      where: {
+        jobCardId,
+        approvalStatus: {
+          statusCode: { not: 'REJECTED' }
+        }
+      },
       select: {
         price: true,
         quantity: true
@@ -1126,9 +1159,10 @@ const updateJobCard = async (id, payload, user) => {
       return sum + (Number(service.price) * service.quantity);
     }, 0);
     const taxRate = toOptionalNumber(payload.billing?.taxRate);
-    const taxAmount = toOptionalNumber(payload.billing?.taxAmount);
     const discountAmount = toOptionalNumber(payload.billing?.discountAmount) || 0;
-    const finalAmount = toOptionalNumber(payload.billing?.finalAmount ?? payload.estimatedCost) ?? (serviceSubtotal + (taxAmount || 0) - discountAmount);
+    const taxableAmount = Math.max(0, serviceSubtotal - discountAmount);
+    const taxAmount = toOptionalNumber(payload.billing?.taxAmount);
+    const finalAmount = toOptionalNumber(payload.billing?.finalAmount ?? payload.estimatedCost) ?? (taxableAmount + (taxAmount || 0));
     const shouldUpdateFinancials = selectedServices.length > 0 || payload.billing !== undefined || payload.estimatedCost !== undefined;
 
     await tx.jobCard.update({
