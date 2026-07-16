@@ -2,8 +2,9 @@ const prisma = require('../../config/db');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 
 const listVehicles = async (query, user) => {
-  const page = parseInt(query.page, 10) || 1;
-  const limit = parseInt(query.limit, 10) || 10;
+  const isExport = query.export === 'true';
+  const page = isExport ? 1 : parseInt(query.page, 10) || 1;
+  const limit = isExport ? 1000000 : parseInt(query.limit, 10) || 10;
   const skip = (page - 1) * limit;
 
   const where = {};
@@ -23,14 +24,17 @@ const listVehicles = async (query, user) => {
   if (query.status === 'active') where.isActive = true;
   if (query.status === 'inactive') where.isActive = false;
 
-  if (query.fromDate) {
-    const from = new Date(query.fromDate);
+  const fromDateVal = query.fromDate || query.startDate;
+  const toDateVal = query.toDate || query.endDate;
+
+  if (fromDateVal) {
+    const from = new Date(fromDateVal);
     if (!isNaN(from)) {
       where.createdAt = { ...where.createdAt, gte: from };
     }
   }
-  if (query.toDate) {
-    const to = new Date(query.toDate);
+  if (toDateVal) {
+    const to = new Date(toDateVal);
     if (!isNaN(to)) {
       to.setHours(23, 59, 59, 999);
       where.createdAt = { ...where.createdAt, lte: to };
@@ -40,8 +44,7 @@ const listVehicles = async (query, user) => {
   const [vehicles, total] = await Promise.all([
     prisma.vehicle.findMany({
       where,
-      skip,
-      take: limit,
+      ...(isExport ? {} : { skip, take: limit }),
       orderBy: { createdAt: 'desc' },
       include: {
         customer: {

@@ -28,9 +28,35 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+const { exportToExcel } = require('../../common/utils/excel.util');
+
 const listUsers = async (req, res, next) => {
   try {
     const { users, meta } = await userService.listUsers(req.query, req.user);
+
+    if (req.query.export === 'true') {
+      const columns = [
+        { header: 'Full Name', key: 'fullName', width: 25 },
+        { header: 'Employee Code', key: 'employeeCode', width: 18 },
+        { header: 'Email', key: 'email', width: 25 },
+        { header: 'Mobile', key: 'mobile', width: 18 },
+        { header: 'Role', key: 'roleName', width: 18 },
+        { header: 'Location', key: 'locationName', width: 20 },
+        { header: 'Status', key: 'status', width: 15 }
+      ];
+
+      const formattedData = users.map(u => ({
+        fullName: u.fullName,
+        employeeCode: u.employeeCode,
+        email: u.email,
+        mobile: u.mobile,
+        roleName: u.role?.name || '',
+        locationName: u.locationName || '',
+        status: u.isActive ? 'Active' : 'Inactive'
+      }));
+
+      return await exportToExcel(res, 'Users', 'Users', columns, formattedData);
+    }
 
     return apiResponse(res, {
       message: 'Users fetched successfully',

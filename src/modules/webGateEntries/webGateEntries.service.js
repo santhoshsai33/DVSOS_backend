@@ -33,11 +33,27 @@ const list = async (query, user) => {
     where.entryType = query.serviceType;
   }
 
+  if (query.startDate && query.endDate) {
+    where.entryTime = {
+      gte: new Date(query.startDate),
+      lte: new Date(query.endDate + 'T23:59:59.999Z')
+    };
+  } else if (query.startDate) {
+    where.entryTime = {
+      gte: new Date(query.startDate)
+    };
+  } else if (query.endDate) {
+    where.entryTime = {
+      lte: new Date(query.endDate + 'T23:59:59.999Z')
+    };
+  }
+
+  const isExport = query.export === 'true';
+
   const [entries, total] = await Promise.all([
     prisma.gateEntry.findMany({
       where,
-      skip,
-      take: limit,
+      ...(isExport ? {} : { skip, take: limit }),
       orderBy: { entryTime: 'desc' },
       include: {
         vehicle: {

@@ -1,9 +1,43 @@
 const jobCardService = require('./jobCard.service');
 const { apiResponse } = require('../../common/utils/apiResponse');
 
+const { exportToExcel } = require('../../common/utils/excel.util');
+
 const getJobCards = async (req, res, next) => {
   try {
     const result = await jobCardService.listJobCards(req.query, req.user);
+
+    if (req.query.export === 'true') {
+      const columns = [
+        { header: 'Job Card Number', key: 'jobCardNo', width: 22 },
+        { header: 'Vehicle Number', key: 'vehicleNumber', width: 20 },
+        { header: 'Owner Name', key: 'ownerName', width: 25 },
+        { header: 'Owner Mobile', key: 'ownerMobile', width: 18 },
+        { header: 'Technician', key: 'technician', width: 25 },
+        { header: 'Bay', key: 'bayName', width: 18 },
+        { header: 'Estimate Cost', key: 'totalEstimate', width: 18 },
+        { header: 'Status', key: 'status', width: 18 },
+        { header: 'Created At', key: 'createdAt', width: 25 }
+      ];
+
+      // Format response data matching UI rendering
+      const formattedData = result.jobCards.map(item => {
+        const displayItem = jobCardService.toJobCardListResponse(item, req.query.department || req.query.category);
+        return {
+          jobCardNo: displayItem.jobCardNo,
+          vehicleNumber: displayItem.vehicle?.registrationNo || '',
+          ownerName: displayItem.customer?.fullName || '',
+          ownerMobile: displayItem.customer?.mobileNo || '',
+          technician: displayItem.technician || 'Unassigned',
+          bayName: displayItem.bay?.bayName || displayItem.bay?.bayCode || 'Unassigned',
+          totalEstimate: displayItem.totalEstimate || 0,
+          status: displayItem.currentStatus?.statusCode || 'PENDING',
+          createdAt: displayItem.createdAt ? new Date(displayItem.createdAt).toLocaleString() : ''
+        };
+      });
+
+      return await exportToExcel(res, 'Job_Cards', 'Job Cards', columns, formattedData);
+    }
 
     return apiResponse(res, {
       statusCode: 200,

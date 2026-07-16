@@ -587,8 +587,9 @@ const toJobCardListResponse = (jobCard, department, bayMap = new Map()) => {
 };
 
 const listJobCards = async (query, user) => {
-  const page = parseInt(query.page, 10) || 1;
-  const limit = parseInt(query.limit, 10) || 10;
+  const isExport = query.export === 'true';
+  const page = isExport ? 1 : parseInt(query.page, 10) || 1;
+  const limit = isExport ? 1000000 : parseInt(query.limit, 10) || 10;
   const skip = (page - 1) * limit;
   const department = getQueryDepartment(query, user);
 
@@ -1342,5 +1343,6 @@ module.exports = {
   getJobCardById,
   listJobCardStatuses,
   listJobCardServiceStatuses,
-  updateJobCard
+  updateJobCard,
+  toJobCardListResponse
 };

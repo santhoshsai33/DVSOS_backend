@@ -1,9 +1,39 @@
 const vehicleService = require('./vehicle.service');
 const { apiResponse } = require('../../common/utils/apiResponse');
 
+const { exportToExcel } = require('../../common/utils/excel.util');
+
 const getVehicles = async (req, res, next) => {
   try {
     const result = await vehicleService.listVehicles(req.query, req.user);
+
+    if (req.query.export === 'true') {
+      const columns = [
+        { header: 'Registration Number', key: 'registrationNo', width: 20 },
+        { header: 'Chassis Number', key: 'chassisNo', width: 22 },
+        { header: 'Engine Number', key: 'engineNo', width: 20 },
+        { header: 'Owner Name', key: 'ownerName', width: 25 },
+        { header: 'Owner Mobile', key: 'ownerMobile', width: 18 },
+        { header: 'Brand', key: 'brandName', width: 18 },
+        { header: 'Model', key: 'model', width: 18 },
+        { header: 'Location', key: 'locationName', width: 20 },
+        { header: 'Status', key: 'status', width: 15 }
+      ];
+
+      const formattedData = result.vehicles.map(v => ({
+        registrationNo: v.registrationNo,
+        chassisNo: v.chassisNo || '',
+        engineNo: v.engineNo || '',
+        ownerName: v.customer?.fullName || '',
+        ownerMobile: v.customer?.mobileNo || '',
+        brandName: v.brand?.name || '',
+        model: v.model || '',
+        locationName: v.location?.locationName || '',
+        status: v.isActive ? 'Active' : 'Inactive'
+      }));
+
+      return await exportToExcel(res, 'Vehicles', 'Vehicles', columns, formattedData);
+    }
 
     return apiResponse(res, {
       statusCode: 200,
