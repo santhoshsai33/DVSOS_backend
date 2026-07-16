@@ -292,7 +292,7 @@ const listRoles = async (query, actor) => {
     prisma.role.findMany({
       where,
       select: roleSelect,
-      orderBy: { id: 'asc' },
+      orderBy: { createdAt: 'desc' },
       skip,
       take: limit
     }),
