@@ -48,8 +48,9 @@ const buildAuditLogWhere = (query) => {
 };
 
 const listAuditLogs = async (query) => {
-  const page = parsePositiveInt(query.page, 1);
-  const limit = parsePositiveInt(query.limit, 10);
+  const isExport = query.export === 'true';
+  const page = isExport ? 1 : parsePositiveInt(query.page, 1);
+  const limit = isExport ? 1000000 : parsePositiveInt(query.limit, 10);
   const where = buildAuditLogWhere(query);
   const skip = (page - 1) * limit;
 

@@ -539,15 +539,16 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
 };
 
 const listUsers = async (query, actor) => {
-  const page = parsePositiveInt(query.page, 1);
-  const limit = parsePositiveInt(query.limit, 10);
+  const isExport = query.export === 'true';
+  const page = isExport ? 1 : parsePositiveInt(query.page, 1);
+  const limit = isExport ? 1000000 : parsePositiveInt(query.limit, 10);
   const search = query.search ? query.search.trim() : undefined;
   const roleId = query.roleId ? parsePositiveInt(query.roleId, undefined) : undefined;
   const requestedLocationId = query.locationId ? parsePositiveInt(query.locationId, undefined) : undefined;
   const locationId = isManagingDirector(actor) ? Number(actor.locationId) : requestedLocationId;
   const isActive = parseBooleanFilter(query.isActive);
-  const fromDate = query.fromDate ? query.fromDate.trim() : undefined;
-  const toDate = query.toDate ? query.toDate.trim() : undefined;
+  const fromDate = (query.fromDate || query.startDate) ? String(query.fromDate || query.startDate).trim() : undefined;
+  const toDate = (query.toDate || query.endDate) ? String(query.toDate || query.endDate).trim() : undefined;
   const excludedModules = await getRestrictedModulesForActor(actor);
   const excludedUserId = actor && actor.userId ? Number(actor.userId) : undefined;
 
