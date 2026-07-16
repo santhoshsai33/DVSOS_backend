@@ -32,10 +32,6 @@ if (missingRequiredEnv.length > 0) {
 
 const optionalGroups = [
   {
-    name: 'Cloudinary',
-    keys: ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET']
-  },
-  {
     name: 'Azure Blob Storage',
     keys: ['AZURE_STORAGE_CONNECTION_STRING', 'AZURE_STORAGE_CONTAINER']
   },
@@ -72,12 +68,7 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   corsOrigin: process.env.CORS_ORIGIN || '*',
-  storageProvider: process.env.STORAGE_PROVIDER || 'cloudinary',
-  cloudinary: {
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    apiSecret: process.env.CLOUDINARY_API_SECRET
-  },
+  storageProvider: process.env.STORAGE_PROVIDER || 'azure',
   azureBlob: {
     connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
     container: process.env.AZURE_STORAGE_CONTAINER

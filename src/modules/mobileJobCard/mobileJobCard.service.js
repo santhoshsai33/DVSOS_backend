@@ -1,16 +1,12 @@
 const fs = require('fs/promises');
 const prisma = require('../../config/db');
+const env = require('../../config/env');
 const { createAuditLog, ensureAuditModule } = require('../../common/utils/audit.util');
 const { CODE_CONFIG, generateUniqueCode } = require('../../common/utils/code.util');
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { createStorageProvider } = require('../../providers/storage/storage.provider');
-const {
-  STATUS_MODULE_CODES,
-  resolveStatusFromCodes,
-  resolveStatusIdFromCodes,
-  statusModuleFilter
-} = require('../../common/utils/status.util');
+const { STATUS_MODULE_CODES, resolveStatusFromCodes, resolveStatusIdFromCodes, statusModuleFilter } = require('../../common/utils/status.util');
 const { completeStage } = require('../processStageTracking/processStageTracking.service');
 const { startNextAssignmentPendingStage } = require('../processStageTracking/departmentAssignmentStage.service');
 
@@ -438,7 +434,10 @@ const uploadVehiclePhotos = async (files = [], actorUserId, photoCategories = []
     for (const [index, file] of files.entries()) {
       const uploadResult = await storageProvider.upload(file.path, {
         folder: 'dvsos/job-cards/vehicle-photos',
-        resource_type: 'image'
+        resource_type: 'image',
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size
       });
 
       uploadedPhotos.push({
@@ -448,7 +447,7 @@ const uploadVehiclePhotos = async (files = [], actorUserId, photoCategories = []
         fileName: file.originalname || null,
         fileUrl: uploadResult.secure_url || uploadResult.url,
         blobName: uploadResult.public_id || null,
-        containerName: 'cloudinary',
+        containerName: env.azureBlob.container || 'azure',
         mimeType: file.mimetype || uploadResult.format || null,
         fileSizeKb: uploadResult.bytes ? Math.ceil(uploadResult.bytes / 1024) : Math.ceil((file.size || 0) / 1024),
         createdById: actorUserId || null
@@ -1570,7 +1569,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
     const serviceItem = item.serviceItemId
       ? serviceItemMap.get(item.serviceItemId)
       : serviceItemSlugMap.get(String(item.serviceSlug || '').toLowerCase())
-        || serviceItemNameMap.get(String(item.serviceName || '').toLowerCase());
+      || serviceItemNameMap.get(String(item.serviceName || '').toLowerCase());
 
     if (!serviceItem) {
       return null;
