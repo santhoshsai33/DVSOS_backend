@@ -6,11 +6,15 @@ module.exports = {
     'floor-supervisor',
     'body-shop-supervisor',
     'water-wash-team',
-    'gate-security',
-    'crm-team'
   ],
   mobile: [
     'gate-security',
+    'crm-team'
+  ],
+  'mobile-gate': [
+    'gate-security'
+  ],
+  'mobile-crm': [
     'crm-team'
   ]
 };

@@ -235,6 +235,16 @@ const login = async ({ emailId, password }, platform = 'web') => {
     if (!hasMobileModule) {
       throw createHttpError(403, 'This account is not permitted to access the Mobile application.');
     }
+  } else if (platform === 'mobile-gate') {
+    const hasGateModule = userModules.some(mod => platformModules['mobile-gate'].includes(mod));
+    if (!hasGateModule) {
+      throw createHttpError(403, 'This account is not permitted to access the Gate Security application.');
+    }
+  } else if (platform === 'mobile-crm') {
+    const hasCrmModule = userModules.some(mod => platformModules['mobile-crm'].includes(mod));
+    if (!hasCrmModule) {
+      throw createHttpError(403, 'This account is not permitted to access the CRM application.');
+    }
   }
 
   if (roleRequiresLocation(user.role.slug) && !user.locationId) {
