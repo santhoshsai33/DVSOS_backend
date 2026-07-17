@@ -113,7 +113,7 @@ const listServiceItems = async ({ page, limit, search, categoryId, isActive, onl
     prisma.serviceItem.findMany({
       where,
       select: serviceItemSelect,
-      orderBy: { id: 'asc' },
+      orderBy: { id: 'desc' },
       skip,
       take: limit
     }),

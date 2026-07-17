@@ -1161,6 +1161,11 @@ const updateJobCard = async (id, payload, user) => {
     }, 0);
     const taxRate = toOptionalNumber(payload.billing?.taxRate);
     const discountAmount = toOptionalNumber(payload.billing?.discountAmount) || 0;
+    
+    if (discountAmount > 0 && discountAmount >= serviceSubtotal) {
+      throw createHttpError(400, 'Discount amount cannot be equal to or greater than the subtotal');
+    }
+
     const taxableAmount = Math.max(0, serviceSubtotal - discountAmount);
     const taxAmount = toOptionalNumber(payload.billing?.taxAmount);
     const finalAmount = toOptionalNumber(payload.billing?.finalAmount ?? payload.estimatedCost) ?? (taxableAmount + (taxAmount || 0));

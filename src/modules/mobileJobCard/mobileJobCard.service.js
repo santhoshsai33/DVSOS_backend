@@ -312,6 +312,11 @@ const buildCustomerUpdateData = (customerInfo = {}, actorUserId) => {
 
 const buildBillingSummary = (billing = {}, serviceSubtotal, defaultTaxRate = 0) => {
   const discountAmount = Math.max(0, toOptionalNumber(billing.discountAmount ?? billing.discount) || 0);
+
+  if (discountAmount > 0 && discountAmount >= serviceSubtotal) {
+    throw createHttpError(400, 'Discount amount cannot be equal to or greater than the subtotal');
+  }
+
   const providedTaxRate = toOptionalNumber(billing.taxRate);
   const taxRate = Math.max(0, providedTaxRate !== undefined ? providedTaxRate : defaultTaxRate);
   const taxableAmount = Math.max(0, serviceSubtotal - discountAmount);

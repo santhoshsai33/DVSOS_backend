@@ -240,7 +240,7 @@ const listUsers = async ({ page, limit, search, roleId, locationId, isActive, ex
     prisma.user.findMany({
       where,
       select: userSelect,
-      orderBy: { id: 'asc' },
+      orderBy: { id: 'desc' },
       skip,
       take: limit
     }),

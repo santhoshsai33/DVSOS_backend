@@ -111,7 +111,7 @@ const listCategories = async ({ page, limit, search, isActive }) => {
     prisma.serviceCategory.findMany({
       where,
       select: categorySelect,
-      orderBy: { id: 'asc' },
+      orderBy: { id: 'desc' },
       skip,
       take: limit
     }),

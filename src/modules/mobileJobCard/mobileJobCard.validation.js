@@ -125,8 +125,8 @@ const validateCreateJobCardPayload = (req, res, next) => {
     const discountValue = billing.discountAmount !== undefined ? billing.discountAmount : billing.discount;
     if (discountValue !== undefined) {
       const discountNum = Number(discountValue);
-      if (Number.isNaN(discountNum) || discountNum <= 0) {
-        return sendValidationError(res, 'Discount amount must be greater than zero');
+      if (Number.isNaN(discountNum) || discountNum < 0) {
+        return sendValidationError(res, 'Discount amount cannot be less than zero');
       }
     }
   }

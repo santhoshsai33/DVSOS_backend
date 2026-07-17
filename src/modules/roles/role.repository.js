@@ -77,7 +77,7 @@ const listRoles = async ({ page, limit, search, isActive }) => {
     prisma.role.findMany({
       where,
       select: roleSelect,
-      orderBy: { id: 'asc' },
+      orderBy: { id: 'desc' },
       skip,
       take: limit
     }),
