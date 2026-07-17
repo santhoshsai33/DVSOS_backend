@@ -73,7 +73,6 @@ const MENU_SEED_DATA = [
       { name: 'Vehicles', path: '/vehicles', icon: 'Car' },
       { name: 'Job Cards', path: '/job-cards', icon: 'ClipboardList' },
       { name: 'Vehicle Entry', path: '/gate-entry', icon: 'LogIn' },
-      { name: 'Audit Logs', path: '/audit-logs', icon: 'FileText' },
       { name: 'Notifications', path: '/notifications', icon: 'Bell' },
       // { name: 'System Settings', path: '/system-settings', icon: 'Settings' },
       { name: 'TV Display', path: '/kiosk/tv', icon: 'Monitor' },
@@ -101,7 +100,8 @@ const MENU_SEED_DATA = [
       { name: 'Service Centers', path: '/service-centers', icon: 'Building' },
       { name: 'Locations', path: '/locations', icon: 'MapPin' },
       { name: 'Role Management', path: '/roles', icon: 'ShieldCheck' },
-      { name: 'User Management', path: '/users', icon: 'Users' }
+      { name: 'User Management', path: '/users', icon: 'Users' },
+      { name: 'Audit Logs', path: '/audit-logs', icon: 'FileText' }
     ]
   }
 ];
@@ -112,6 +112,7 @@ const REMOVED_MENU_PATHS = [
   { module: 'body-shop-supervisor', path: '/body-shop-queue' },
   { module: 'admin', path: '/master-bays' },
   { module: 'managing-director', path: '/master-bays' },
+  { module: 'managing-director', path: '/audit-logs' },
   { module: 'water-wash-team', path: '/vehicles' }
 ];
 

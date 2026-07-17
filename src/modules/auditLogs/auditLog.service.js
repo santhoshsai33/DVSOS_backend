@@ -23,6 +23,10 @@ const buildAuditLogWhere = (query) => {
     where.performedByUserId = Number.parseInt(query.performedByUserId, 10);
   }
 
+  if (query.locationId) {
+    where.locationId = Number.parseInt(query.locationId, 10);
+  }
+
   if (query.search) {
     const searchStr = query.search.trim();
     where.OR = [

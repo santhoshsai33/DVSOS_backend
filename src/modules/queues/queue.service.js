@@ -681,7 +681,7 @@ const assignWork = async (jobCardId, payload, user) => {
       bay: toBaySummary({ ...bay, currentWorkAssignmentId: assignments[0]?.id || null }, 'BUSY'),
       assignments: assignments.map(toAssignmentResponse)
     };
-  });
+  }, { timeout: 20000 });
 };
 
 const reassignWork = async (jobCardId, payload, user) => {
@@ -871,7 +871,7 @@ const reassignWork = async (jobCardId, payload, user) => {
       bay: toBaySummary({ ...bay, currentWorkAssignmentId: assignments[0]?.id || null }, 'BUSY'),
       assignments: assignments.map(toAssignmentResponse)
     };
-  });
+  }, { timeout: 20000 });
 };
 
 const updateAssignmentStatus = async (assignmentId, payload, user) => {
@@ -1093,7 +1093,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
     return {
       assignment: toAssignmentResponse(updatedAssignment)
     };
-  });
+  }, { timeout: 20000 });
 };
 
 module.exports = {
