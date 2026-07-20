@@ -19,10 +19,11 @@ const parsePositiveInt = (value, fallback) => {
 };
 
 const parseBooleanFilter = (value) => {
-  if (value === undefined || value === '') return undefined;
+  if (value === 'all') return undefined;
+  if (value === undefined || value === '') return true;
   if (value === true || value === 'true') return true;
   if (value === false || value === 'false') return false;
-  return undefined;
+  return true;
 };
 
 

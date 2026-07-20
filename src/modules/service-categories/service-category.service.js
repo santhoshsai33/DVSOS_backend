@@ -198,7 +198,7 @@ const updateCategoryStatus = async (id, { isActive }, query = {}, actorUserId) =
     if (activeServiceItemCount > 0 && force) {
       return prisma.$transaction(async (tx) => {
         const category = await categoryRepository.deactivateCategoryAndItems(categoryId, tx);
-        
+
         await createAuditLog(tx, {
           moduleCode: 'service-categories',
           moduleName: 'Service Categories',
