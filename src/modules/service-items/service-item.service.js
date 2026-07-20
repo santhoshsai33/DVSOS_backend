@@ -22,19 +22,11 @@ const parsePositiveInt = (value, fallback) => {
 };
 
 const parseBooleanFilter = (value) => {
-  if (value === undefined || value === '') {
-    return undefined;
-  }
-
-  if (value === true || value === 'true') {
-    return true;
-  }
-
-  if (value === false || value === 'false') {
-    return false;
-  }
-
-  return undefined;
+  if (value === 'all') return undefined;
+  if (value === undefined || value === '') return true;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return true;
 };
 
 const parseOptionalPositiveInt = (value) => {
@@ -61,10 +53,10 @@ const toServiceItemResource = (serviceItem) => ({
   updatedAt: serviceItem.updatedAt,
   category: serviceItem.category
     ? {
-        id: serviceItem.category.id,
-        name: serviceItem.category.name,
-        slug: serviceItem.category.slug
-      }
+      id: serviceItem.category.id,
+      name: serviceItem.category.name,
+      slug: serviceItem.category.slug
+    }
     : null
 });
 
@@ -162,7 +154,7 @@ const createServiceItem = async (payload, actorUserId) => {
 
   return prisma.$transaction(async (tx) => {
     const serviceItem = await serviceItemRepository.createServiceItem(data, tx);
-    
+
     await createAuditLog(tx, {
       moduleCode: 'service-items',
       moduleName: 'Service Items',
@@ -203,7 +195,7 @@ const updateServiceItem = async (identifier, payload, actorUserId) => {
 
   return prisma.$transaction(async (tx) => {
     const serviceItem = await serviceItemRepository.updateServiceItem(existingServiceItem.id, data, tx);
-    
+
     await createAuditLog(tx, {
       moduleCode: 'service-items',
       moduleName: 'Service Items',
@@ -261,7 +253,7 @@ const updateServiceItemStatus = async (id, { isActive }, actorUserId) => {
 
   return prisma.$transaction(async (tx) => {
     const updatedServiceItem = await serviceItemRepository.updateServiceItem(serviceItemId, { isActive }, tx);
-    
+
     await createAuditLog(tx, {
       moduleCode: 'service-items',
       moduleName: 'Service Items',

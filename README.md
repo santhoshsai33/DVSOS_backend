@@ -9,8 +9,7 @@ Backend foundation for the Digital Vehicle Service Operations System.
 - Prisma ORM
 - Azure SQL Server
 - JWT authentication
-- Cloudinary storage provider for development
-- Future Azure Blob support through a storage provider abstraction
+- Azure Blob Storage
 
 ## Setup
 
@@ -46,7 +45,7 @@ DATABASE_URL="sqlserver://dvsos-sql-server.database.windows.net:1433;database=DV
 
 The app config also accepts the existing `MSSERVER_URI` key as a runtime fallback for `DATABASE_URL`. Prisma CLI commands should use `DATABASE_URL` in `.env`.
 
-Optional Firebase, Twilio, Cloudinary, and Azure settings do not crash the server in development when missing. Missing optional credentials are logged as warnings.
+Optional Firebase, Twilio, and Azure settings do not crash the server in development when missing. Missing optional credentials are logged as warnings.
 
 ## Health Check
 

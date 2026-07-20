@@ -22,19 +22,11 @@ const parsePositiveInt = (value, fallback) => {
 };
 
 const parseBooleanFilter = (value) => {
-  if (value === undefined || value === '') {
-    return undefined;
-  }
-
-  if (value === true || value === 'true') {
-    return true;
-  }
-
-  if (value === false || value === 'false') {
-    return false;
-  }
-
-  return undefined;
+  if (value === 'all') return undefined;
+  if (value === undefined || value === '') return true;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  return true;
 };
 
 const parseForceFlag = (value) => value === true || value === 'true';
@@ -198,7 +190,7 @@ const updateCategoryStatus = async (id, { isActive }, query = {}, actorUserId) =
     if (activeServiceItemCount > 0 && force) {
       return prisma.$transaction(async (tx) => {
         const category = await categoryRepository.deactivateCategoryAndItems(categoryId, tx);
-        
+
         await createAuditLog(tx, {
           moduleCode: 'service-categories',
           moduleName: 'Service Categories',
