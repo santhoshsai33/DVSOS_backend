@@ -2004,7 +2004,7 @@ const updateFromMobile = async (id, payload, user, files = []) => {
   if (files && files.length > 0) {
     const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
     if (uploadedPhotos.length > 0) {
-      await prisma.media.createMany({
+      await prisma.mediaFile.createMany({
         data: buildMediaRows({ uploadedPhotos, vehicleId: existingJobCard.vehicleId })
       });
     }
