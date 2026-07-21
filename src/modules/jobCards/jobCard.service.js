@@ -1340,7 +1340,7 @@ const updateJobCard = async (id, payload, user) => {
     });
 
     return updatedJobCard;
-  });
+  }, { timeout: 20000 });
 };
 
 module.exports = {
