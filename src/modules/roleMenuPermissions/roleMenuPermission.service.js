@@ -145,6 +145,27 @@ const saveRoleMenuPermissions = async (roleId, permissionPayload, actorUserId) =
 
   const menuMap = await ensureMenusExist(menuIds);
 
+  const modules = new Set(Array.from(menuMap.values()).map(menu => menu.module));
+  if (modules.size > 1) {
+    throw createHttpError(400, 'All permissions must belong to a single module');
+  }
+  if (modules.size === 0) {
+    throw createHttpError(400, 'Permissions payload cannot be empty');
+  }
+
+  const moduleName = Array.from(modules)[0];
+  const mobileModules = ['crm-team', 'gate-security'];
+  const isMobile = mobileModules.includes(moduleName);
+
+  if (!isMobile) {
+    const hasPrivilege = permissionPayload.some(
+      (p) => p.canRead || p.canCreate || p.canUpdate || p.canDelete
+    );
+    if (!hasPrivilege) {
+      throw createHttpError(400, 'At least one privilege must be assigned');
+    }
+  }
+
   const existingPermissionMap = await getExistingPermissionMap(parsedRoleId, menuIds);
 
   const permissions = await prisma.$transaction(async (tx) => {

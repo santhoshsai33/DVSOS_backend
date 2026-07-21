@@ -142,6 +142,16 @@ const createServiceItem = async (payload, actorUserId) => {
 
   await ensureActiveCategoryExists(data.categoryId);
 
+  const existingWithSameName = await prisma.serviceItem.findFirst({
+    where: {
+      categoryId: data.categoryId,
+      name: data.name
+    }
+  });
+  if (existingWithSameName) {
+    throw createHttpError(409, 'Service Item Name under this Category Group already exists');
+  }
+
   return prisma.$transaction(async (tx) => {
     const serviceItem = await serviceItemRepository.createServiceItem(data, tx);
 
@@ -171,6 +181,17 @@ const updateServiceItem = async (identifier, payload, actorUserId) => {
   const data = await buildServiceItemData(payload, existingServiceItem.id);
 
   await ensureActiveCategoryExists(data.categoryId);
+
+  const existingWithSameName = await prisma.serviceItem.findFirst({
+    where: {
+      categoryId: data.categoryId,
+      name: data.name,
+      id: { not: existingServiceItem.id }
+    }
+  });
+  if (existingWithSameName) {
+    throw createHttpError(409, 'Service Item Name under this Category Group already exists');
+  }
 
   return prisma.$transaction(async (tx) => {
     const serviceItem = await serviceItemRepository.updateServiceItem(existingServiceItem.id, data, tx);

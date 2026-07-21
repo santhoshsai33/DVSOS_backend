@@ -110,6 +110,18 @@ const validateServiceItemPayload = (req, res, next) => {
     });
   }
 
+  if (basePrice !== undefined && basePrice !== null && basePrice !== '') {
+    if (Number(basePrice) > 99999999.99) {
+      return apiResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: 'basePrice cannot exceed 99999999.99',
+        data: {},
+        meta: {}
+      });
+    }
+  }
+
   if (!isValidNonNegativeInteger(estimatedMinutes)) {
     return apiResponse(res, {
       statusCode: 400,
@@ -118,6 +130,18 @@ const validateServiceItemPayload = (req, res, next) => {
       data: {},
       meta: {}
     });
+  }
+
+  if (estimatedMinutes !== undefined && estimatedMinutes !== null && estimatedMinutes !== '') {
+    if (Number(estimatedMinutes) > 2147483647) {
+      return apiResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: 'estimatedMinutes cannot exceed 2147483647',
+        data: {},
+        meta: {}
+      });
+    }
   }
 
   return next();

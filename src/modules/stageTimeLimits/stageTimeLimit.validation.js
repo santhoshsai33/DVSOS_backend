@@ -2,7 +2,7 @@ const { apiResponse } = require('../../common/utils/apiResponse');
 
 const isPositiveInt = (value) => {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0;
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 2147483647;
 };
 
 const isOptionalPositiveInt = (value) => {

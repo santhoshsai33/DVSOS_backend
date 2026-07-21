@@ -597,9 +597,35 @@ const createValidation = (requiredFields = []) => {
         }
       }
 
-      if (field.type === 'int' || field.type === 'decimal') {
+      if (field.type === 'int' || field.type === 'optionalInt') {
+        if (value === undefined || value === null || value === '') {
+          if (isRequired && field.type === 'int') return sendValidationError(res, `${field.name} is required`);
+        } else {
+          const parsed = Number(value);
+          if (!Number.isInteger(parsed)) {
+            return sendValidationError(res, `${field.name} must be a valid integer`);
+          }
+          const minVal = field.minValue !== undefined ? field.minValue : -2147483648;
+          const maxVal = field.maxValue !== undefined ? field.maxValue : 2147483647;
+          if (parsed < minVal || parsed > maxVal) {
+            return sendValidationError(res, `${field.name} must be between ${minVal} and ${maxVal}`);
+          }
+        }
+      }
+
+      if (field.type === 'decimal') {
         if (value === undefined || value === null || value === '') {
           if (isRequired) return sendValidationError(res, `${field.name} is required`);
+        } else {
+          const parsed = Number(value);
+          if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
+            return sendValidationError(res, `${field.name} must be a valid decimal number`);
+          }
+          const minVal = field.minValue !== undefined ? field.minValue : 0;
+          const maxVal = field.maxValue !== undefined ? field.maxValue : 99999999.99;
+          if (parsed < minVal || parsed > maxVal) {
+            return sendValidationError(res, `${field.name} must be between ${minVal} and ${maxVal}`);
+          }
         }
       }
     }

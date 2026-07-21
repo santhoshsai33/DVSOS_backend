@@ -1,6 +1,7 @@
 const {
   createAdminMasterService,
-  ensureForeignKey
+  ensureForeignKey,
+  ensureUniqueComposite
 } = require('../common');
 
 const serviceItemSelect = {
@@ -48,5 +49,17 @@ module.exports = createAdminMasterService({
   validateRelations: async (data) => {
     await ensureForeignKey({ model: 'serviceCategory', id: data.categoryId, label: 'categoryId' });
   },
+  validateUnique: async (data, excludeId) => {
+    await ensureUniqueComposite({
+      model: 'serviceItem',
+      fields: {
+        categoryId: data.categoryId,
+        name: data.name
+      },
+      label: 'Service Item Name under this Category Group',
+      excludeId
+    });
+  },
   recordName: (serviceItem) => serviceItem.name
 });
+
