@@ -70,10 +70,23 @@ const createFromGateEntry = async (req, res, next) => {
   }
 };
 
+const updateJobCard = async (req, res, next) => {
+  try {
+    const data = await service.updateFromMobile(req.params.id, req.body, req.user, req.files || []);
+    return apiResponse(res, {
+      message: 'Job card updated successfully',
+      data
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   pendingQueue,
   jobCardList,
   queueDetail,
   jobCardDetail,
-  createFromGateEntry
+  createFromGateEntry,
+  updateJobCard
 };

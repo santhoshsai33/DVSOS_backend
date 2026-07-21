@@ -1215,7 +1215,7 @@ const updateJobCard = async (id, payload, user) => {
       const io = getSocket();
       if (io) {
         // We just need to ping the client so it can refetch, or we can send the partial updated data
-        io.emit('jobCardStatusChanged', { jobCardId, newStatus: nextStatus.statusCode });
+        io.emit('jobCardStatusChanged', { jobCardId, newStatus: statusForLog.statusCode });
       }
     }
 
