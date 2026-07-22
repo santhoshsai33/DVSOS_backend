@@ -1,4 +1,9 @@
-const { BlobServiceClient } = require('@azure/storage-blob');
+const { 
+  BlobServiceClient, 
+  generateBlobSASQueryParameters, 
+  BlobSASPermissions, 
+  StorageSharedKeyCredential 
+} = require('@azure/storage-blob');
 const fs = require('fs/promises');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
@@ -15,6 +20,13 @@ class AzureBlobProvider {
 
     this.blobServiceClient = BlobServiceClient.fromConnectionString(config.connectionString);
     this.containerClient = this.blobServiceClient.getContainerClient(config.container);
+
+    // Extract AccountName and AccountKey for offline SAS token generation
+    const connStr = config.connectionString;
+    const accountNameMatch = connStr.match(/AccountName=([^;]+)/);
+    const accountKeyMatch = connStr.match(/AccountKey=([^;]+)/);
+    this.accountName = accountNameMatch ? accountNameMatch[1] : null;
+    this.accountKey = accountKeyMatch ? accountKeyMatch[1] : null;
   }
 
   async upload(filePath, options = {}) {
@@ -57,6 +69,28 @@ class AzureBlobProvider {
     const blockBlobClient = this.containerClient.getBlockBlobClient(publicId);
     await blockBlobClient.deleteIfExists();
     return { result: 'ok' };
+  }
+
+  generateSasUrl(blobName, expiresAfterSeconds = 3600) {
+    if (!this.isConfigured) {
+      throw new Error('Azure Blob storage provider is not configured.');
+    }
+    if (!this.accountName || !this.accountKey) {
+      throw new Error('Azure Storage Account credentials could not be parsed from connection string.');
+    }
+
+    const blockBlobClient = this.containerClient.getBlockBlobClient(blobName);
+    const credential = new StorageSharedKeyCredential(this.accountName, this.accountKey);
+    
+    const sasToken = generateBlobSASQueryParameters({
+      containerName: this.config.container,
+      blobName: blobName,
+      permissions: BlobSASPermissions.parse('r'),
+      startsOn: new Date(new Date().valueOf() - 5 * 60 * 1000), // Subtract 5 minutes for clock skew
+      expiresOn: new Date(new Date().valueOf() + expiresAfterSeconds * 1000)
+    }, credential).toString();
+
+    return `${blockBlobClient.url}?${sasToken}`;
   }
 }
 
