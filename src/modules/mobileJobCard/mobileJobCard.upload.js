@@ -36,7 +36,7 @@ const uploadVehiclePhotos = multer({
     files: 20,
     fileSize: 5 * 1024 * 1024
   }
-}).array('photos', 20);
+}).any();
 
 module.exports = {
   uploadVehiclePhotos
