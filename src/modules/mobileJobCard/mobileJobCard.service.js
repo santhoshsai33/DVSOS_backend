@@ -1328,6 +1328,7 @@ const jobCardDetail = async (id, user) => {
       category: true,
       fileName: true,
       fileUrl: true,
+      blobName: true,
       mimeType: true,
       fileSizeKb: true,
       createdAt: true
