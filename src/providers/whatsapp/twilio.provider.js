@@ -21,7 +21,7 @@ const toTwilioProviderError = (error) => {
 };
 
 class TwilioProvider {
-  async sendWhatsAppMessage({ to, body }) {
+  async sendWhatsAppMessage({ to, body, contentSid, contentVariables }) {
     const client = getTwilioClient();
     const from = normalizeWhatsAppSender(env.twilio.whatsappFrom);
 
@@ -30,11 +30,21 @@ class TwilioProvider {
     }
 
     try {
-      return await client.messages.create({
+      const messagePayload = {
         from,
-        to,
-        body
-      });
+        to
+      };
+
+      if (contentSid) {
+        messagePayload.contentSid = contentSid;
+        if (contentVariables) {
+          messagePayload.contentVariables = contentVariables;
+        }
+      } else {
+        messagePayload.body = body;
+      }
+
+      return await client.messages.create(messagePayload);
     } catch (error) {
       throw toTwilioProviderError(error);
     }

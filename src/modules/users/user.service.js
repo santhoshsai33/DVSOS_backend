@@ -461,7 +461,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
     });
 
     return newUser;
-  });
+  }, { maxWait: 20000, timeout: 50000 });
 
   // if (isRandomPasswordGenerated && normalizedEmail) {
   //   try {
@@ -533,7 +533,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
     });
 
     return updatedUser;
-  });
+  }, { maxWait: 20000, timeout: 50000 });
 
   return toPublicUser(user);
 };
@@ -737,7 +737,7 @@ const updateUserStatus = async (id, { isActive }, actor) => {
     });
 
     return updatedUser;
-  });
+  }, { maxWait: 20000, timeout: 50000 });
 
   return toPublicUser(user);
 };

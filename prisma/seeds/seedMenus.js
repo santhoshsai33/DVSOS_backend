@@ -91,10 +91,11 @@ const MENU_SEED_DATA = [
           { name: 'States', path: '/master-states', icon: 'MapPin' },
           { name: 'Districts', path: '/master-districts', icon: 'Building' },
           { name: 'Brands', path: '/master-brands', icon: 'Car' },
-          { name: 'Service Categories', path: '/master-categories', icon: 'ClipboardList' },
+          // { name: 'Service Categories', path: '/master-categories', icon: 'ClipboardList' },
           { name: 'Service Items', path: '/master-items', icon: 'Wrench' },
           { name: 'Modules', path: '/modules', icon: 'Package' },
-          { name: 'Statuses', path: '/master-statuses', icon: 'CheckSquare' }
+          { name: 'Statuses', path: '/master-statuses', icon: 'CheckSquare' },
+          { name: 'Bays', path: '/md-bays', icon: 'Tool' }
         ]
       },
       { name: 'Service Centers', path: '/service-centers', icon: 'Building' },
@@ -113,7 +114,8 @@ const REMOVED_MENU_PATHS = [
   { module: 'admin', path: '/master-bays' },
   { module: 'managing-director', path: '/master-bays' },
   { module: 'managing-director', path: '/audit-logs' },
-  { module: 'water-wash-team', path: '/vehicles' }
+  { module: 'water-wash-team', path: '/vehicles' },
+  { module: 'admin', path: '/master-categories' }
 ];
 
 const seedMenus = async (prisma) => {

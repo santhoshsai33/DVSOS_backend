@@ -48,12 +48,14 @@ const ensureTwilioConfigured = () => {
   }
 };
 
-const sendWhatsAppMessage = async ({ to, body }) => {
+const sendWhatsAppMessage = async ({ to, body, contentSid, contentVariables }) => {
   ensureTwilioConfigured();
 
   return provider.sendWhatsAppMessage({
     to: normalizeIndianWhatsAppNumber(to),
-    body
+    body,
+    contentSid,
+    contentVariables
   });
 };
 
@@ -84,9 +86,27 @@ const buildAdditionalWorkApprovalMessage = ({ jobCard, approval, services, expla
 const sendAdditionalWorkApproval = async ({ jobCard, approval, services, explanation }) => {
   const body = buildAdditionalWorkApprovalMessage({ jobCard, approval, services, explanation });
 
+  const customerName = jobCard.customer?.fullName || 'Customer';
+  const vehicleNo = jobCard.vehicle?.registrationNo || 'your vehicle';
+  const serviceLines = services.map((service, index) => {
+    const lineTotal = Number(service.price || 0) * Number(service.quantity || 1);
+    return `${index + 1}. ${service.serviceName} x${service.quantity || 1} - ${formatCurrency(lineTotal)}`;
+  });
+
+  const contentVariables = JSON.stringify({
+    '1': customerName,
+    '2': vehicleNo,
+    '3': jobCard.jobCardNo,
+    '4': approval.approvalCode,
+    '5': serviceLines.join('\n'),
+    '6': formatCurrency(approval.totalAmount)
+  });
+
   return sendWhatsAppMessage({
     to: jobCard.customer?.mobileNo,
-    body
+    body,
+    contentSid: 'HX09464b05964a13afc5fc48c7cf92bd7c',
+    contentVariables
   });
 };
 

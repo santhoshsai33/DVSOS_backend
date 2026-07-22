@@ -9,8 +9,8 @@ const createHttpError = (statusCode, message) => {
 
 const permissionFields = ['canRead', 'canCreate', 'canUpdate', 'canDelete'];
 const PERMISSION_TRANSACTION_OPTIONS = {
-  maxWait: 10000,
-  timeout: 30000
+  maxWait: 20000,
+  timeout: 50000
 };
 
 const isReadOnlyMenu = (menu) => {

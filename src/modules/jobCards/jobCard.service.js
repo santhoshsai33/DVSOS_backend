@@ -1362,7 +1362,7 @@ const updateJobCard = async (id, payload, user) => {
     });
 
     return updatedJobCard;
-  }, { timeout: 20000 });
+  }, { maxWait: 20000, timeout: 50000 });
 };
 
 module.exports = {

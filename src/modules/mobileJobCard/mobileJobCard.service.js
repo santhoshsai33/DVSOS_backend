@@ -360,7 +360,7 @@ const normalizeCustomerApproval = (payload = {}) => {
   const rawValue = getPayloadField(payload, 'customer_approval', 'customerApproval');
 
   if (rawValue === undefined || rawValue === null || rawValue === '') {
-    return null;
+    return 'APPROVED';
   }
 
   const normalized = String(rawValue).trim().toUpperCase();
@@ -1988,7 +1988,7 @@ const createFromGateEntry = async (payload, user, files = []) => {
         : null,
       nextAction: customerApprovalDecision ? `CUSTOMER_${customerApprovalDecision}` : 'JOB_CARD_CREATED'
     };
-  }, { timeout: 20000 });
+  }, { maxWait: 20000, timeout: 50000 });
 };
 
 const updateFromMobile = async (id, payload, user, files = []) => {

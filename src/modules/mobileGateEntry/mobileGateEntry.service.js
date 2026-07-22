@@ -612,7 +612,7 @@ const createGateEntry = async (payload, user) => {
       nextAction: 'WAITING_FOR_CRM',
       isCreated: true
     };
-  }, { timeout: 20000 });
+  }, { maxWait: 20000, timeout: 50000 });
 };
 
 const submitExit = async (id, payload, user) => {
@@ -791,7 +791,7 @@ const submitExit = async (id, payload, user) => {
       })),
       nextAction: 'EXIT_SUBMITTED'
     };
-  }, { timeout: 20000 });
+  }, { maxWait: 20000, timeout: 50000 });
 };
 
 const getHistoryDateRange = (query) => {
