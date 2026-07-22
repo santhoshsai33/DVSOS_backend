@@ -6,6 +6,7 @@ const { CODE_CONFIG, generateUniqueCode } = require('../../common/utils/code.uti
 const { generateSlug, generateUniqueSlug } = require('../../common/utils/slug.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { createStorageProvider } = require('../../providers/storage/storage.provider');
+const storageProvider = createStorageProvider();
 const { STATUS_MODULE_CODES, resolveStatusFromCodes, resolveStatusIdFromCodes, statusModuleFilter } = require('../../common/utils/status.util');
 const { completeStage } = require('../processStageTracking/processStageTracking.service');
 const { startNextAssignmentPendingStage } = require('../processStageTracking/departmentAssignmentStage.service');
@@ -854,18 +855,28 @@ const buildJobCardDetailBilling = (jobCard) => {
   };
 };
 
-const toMediaResponse = (mediaFile) => ({
-  id: mediaFile.id,
-  moduleName: mediaFile.moduleName,
-  moduleRecordId: mediaFile.moduleRecordId,
-  category: mediaFile.category,
-  fileType: mediaFile.fileType,
-  fileName: mediaFile.fileName,
-  fileUrl: mediaFile.fileUrl,
-  mimeType: mediaFile.mimeType,
-  fileSizeKb: mediaFile.fileSizeKb,
-  createdAt: mediaFile.createdAt
-});
+const toMediaResponse = (mediaFile) => {
+  let fileUrl = mediaFile.fileUrl;
+  if (storageProvider.isConfigured && mediaFile.blobName) {
+    try {
+      fileUrl = storageProvider.generateSasUrl(mediaFile.blobName, 3600);
+    } catch (e) {
+      console.error('Error signing URL for media response:', e);
+    }
+  }
+  return {
+    id: mediaFile.id,
+    moduleName: mediaFile.moduleName,
+    moduleRecordId: mediaFile.moduleRecordId,
+    category: mediaFile.category,
+    fileType: mediaFile.fileType,
+    fileName: mediaFile.fileName,
+    fileUrl: fileUrl,
+    mimeType: mediaFile.mimeType,
+    fileSizeKb: mediaFile.fileSizeKb,
+    createdAt: mediaFile.createdAt
+  };
+};
 
 const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
   const services = (jobCard.services || []).map((service) => {
@@ -1968,11 +1979,21 @@ const createFromGateEntry = async (payload, user, files = []) => {
       jobCard: toJobCardResponse(createdJobCard),
       billing: billingSummary,
       media: {
-        photos: mediaRows.map((row) => ({
-          category: row.category,
-          fileUrl: row.fileUrl,
-          fileName: row.fileName
-        }))
+        photos: mediaRows.map((row) => {
+          let fileUrl = row.fileUrl;
+          if (storageProvider.isConfigured && row.blobName) {
+            try {
+              fileUrl = storageProvider.generateSasUrl(row.blobName, 3600);
+            } catch (e) {
+              console.error('Error signing URL in createJobCard response:', e);
+            }
+          }
+          return {
+            category: row.category,
+            fileUrl: fileUrl,
+            fileName: row.fileName
+          };
+        })
       },
       approval: approval
         ? {

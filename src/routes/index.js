@@ -29,6 +29,7 @@ const vehicleRoutes = require('../modules/vehicles/vehicle.routes');
 const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
 const queueRoutes = require('../modules/queues/queue.routes');
 const approvalRoutes = require('../modules/approvals/approval.routes');
+const storageRoutes = require('../modules/storage/storage.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 const notificationRoutes = require('../modules/notifications/notification.routes');
@@ -79,6 +80,7 @@ router.use('/brands', brandRoutes);
 router.use('/crm/brands', crmBrandRoutes);
 router.use('/bays', bayRoutes);
 router.use('/crm/bays', crmBayRoutes);
+router.use('/storage', storageRoutes);
 
 // Kiosk routes
 router.get('/kiosk/tv', require('../modules/dashboards/dashboard.controller').getTvKioskDashboard);

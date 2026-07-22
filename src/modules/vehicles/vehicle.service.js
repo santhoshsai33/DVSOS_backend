@@ -1,5 +1,7 @@
 const prisma = require('../../config/db');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
+const { createStorageProvider } = require('../../providers/storage/storage.provider');
+const storageProvider = createStorageProvider();
 
 const listVehicles = async (query, user) => {
   const isExport = query.export === 'true';
@@ -108,9 +110,24 @@ const getVehicleById = async (idOrSlug, user) => {
     orderBy: { createdAt: 'desc' }
   });
 
+  const signedMediaFiles = mediaFiles.map(mediaFile => {
+    let fileUrl = mediaFile.fileUrl;
+    if (storageProvider.isConfigured && mediaFile.blobName) {
+      try {
+        fileUrl = storageProvider.generateSasUrl(mediaFile.blobName, 3600);
+      } catch (e) {
+        console.error('Error signing URL for vehicle image:', e);
+      }
+    }
+    return {
+      ...mediaFile,
+      fileUrl
+    };
+  });
+
   return {
     ...vehicle,
-    images: mediaFiles
+    images: signedMediaFiles
   };
 };
 
