@@ -10,6 +10,7 @@ const storageProvider = createStorageProvider();
 const { STATUS_MODULE_CODES, resolveStatusFromCodes, resolveStatusIdFromCodes, statusModuleFilter } = require('../../common/utils/status.util');
 const { completeStage } = require('../processStageTracking/processStageTracking.service');
 const { startNextAssignmentPendingStage } = require('../processStageTracking/departmentAssignmentStage.service');
+const jobCardService = require('../jobCards/jobCard.service');
 
 const JOB_CARD_CREATED_STATUS_CODES = ['JOB_CARD_CREATED', 'CREATED'];
 const JOB_CARD_APPROVED_STATUS_CODES = ['APPROVED'];
@@ -2011,10 +2012,33 @@ const createFromGateEntry = async (payload, user, files = []) => {
   }, { timeout: 20000 });
 };
 
+const updateFromMobile = async (id, payload, user, files = []) => {
+  const existingJobCard = await prisma.jobCard.findFirst({
+    where: { id: Number(id) },
+    select: { vehicleId: true }
+  });
+
+  if (!existingJobCard) {
+    throw createHttpError(404, 'Job Card not found');
+  }
+
+  if (files && files.length > 0) {
+    const uploadedPhotos = await uploadVehiclePhotos(files, user.userId, payload.photoCategories);
+    if (uploadedPhotos.length > 0) {
+      await prisma.mediaFile.createMany({
+        data: buildMediaRows({ uploadedPhotos, vehicleId: existingJobCard.vehicleId })
+      });
+    }
+  }
+
+  return await jobCardService.updateJobCard(id, payload, user);
+};
+
 module.exports = {
   pendingQueue,
   jobCardList,
   queueDetail,
   jobCardDetail,
-  createFromGateEntry
+  createFromGateEntry,
+  updateFromMobile
 };

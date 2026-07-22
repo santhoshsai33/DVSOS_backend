@@ -925,8 +925,17 @@ const updateJobCard = async (id, payload, user) => {
 
   const customerName = toTrimmedString(payload.ownerName || payload.customerName || payload.customerInfo?.fullName);
   const customerMobile = toTrimmedString(payload.ownerMobile || payload.mobile || payload.customerInfo?.mobileNo);
-  const vehicleNumber = toTrimmedString(payload.vehicleNumber || payload.registrationNumber || payload.vehicleInfo?.registrationNumber);
+  const customerAlternateMobile = toTrimmedString(payload.customerInfo?.alternateMobileNo);
+  const customerEmail = toTrimmedString(payload.customerInfo?.emailId);
+  const customerAddress = toTrimmedString(payload.customerInfo?.address);
+  const vehicleNumber = toTrimmedString(payload.vehicleNumber || payload.registrationNumber || payload.vehicleInfo?.registrationNumber || payload.vehicleInfo?.registrationNo);
   const vehicleModel = toTrimmedString(payload.makeModel || payload.vehicleModel || payload.vehicleInfo?.model);
+  const vehicleVariant = toTrimmedString(payload.vehicleInfo?.variant);
+  const vehicleColor = toTrimmedString(payload.vehicleInfo?.vehicleColor || payload.vehicleInfo?.color);
+  const vehicleFuelType = toTrimmedString(payload.vehicleInfo?.fuelType);
+  const vehicleChassisNo = toTrimmedString(payload.vehicleInfo?.chassisNo);
+  const vehicleEngineNo = toTrimmedString(payload.vehicleInfo?.engineNo);
+  const vehicleBrandId = payload.vehicleInfo?.brandId ? Number(payload.vehicleInfo.brandId) : undefined;
   const notes = toTrimmedString(payload.notes || payload.customerComplaint);
   const additionalNotes = toTrimmedString(payload.additionalNotes);
   const expectedDeliveryAt = parseExpectedDeliveryAt(payload.deliveryDate || payload.expectedDeliveryAt);
@@ -944,20 +953,33 @@ const updateJobCard = async (id, payload, user) => {
     : [];
 
   return prisma.$transaction(async (tx) => {
-    if (customerName !== undefined || customerMobile !== undefined) {
+    if (customerName !== undefined || customerMobile !== undefined || customerAlternateMobile !== undefined || customerEmail !== undefined || customerAddress !== undefined) {
       await tx.customer.update({
         where: { id: existingJobCard.customerId },
         data: {
           ...(customerName !== undefined ? { fullName: customerName } : {}),
           ...(customerMobile !== undefined ? { mobileNo: customerMobile } : {}),
+          ...(customerAlternateMobile !== undefined ? { alternateMobileNo: customerAlternateMobile } : {}),
+          ...(customerEmail !== undefined ? { emailId: customerEmail } : {}),
+          ...(customerAddress !== undefined ? { address: customerAddress } : {}),
           modifiedById: user && user.userId ? user.userId : null
         }
       });
     }
 
-    if (vehicleNumber !== undefined || vehicleModel !== undefined) {
+    if (
+      vehicleNumber !== undefined || vehicleModel !== undefined || vehicleVariant !== undefined ||
+      vehicleColor !== undefined || vehicleFuelType !== undefined || vehicleChassisNo !== undefined ||
+      vehicleEngineNo !== undefined || vehicleBrandId !== undefined
+    ) {
       const vehicleData = {
         ...(vehicleModel !== undefined ? { model: vehicleModel } : {}),
+        ...(vehicleVariant !== undefined ? { variant: vehicleVariant } : {}),
+        ...(vehicleColor !== undefined ? { vehicleColor: vehicleColor } : {}),
+        ...(vehicleFuelType !== undefined ? { fuelType: vehicleFuelType } : {}),
+        ...(vehicleChassisNo !== undefined ? { chassisNo: vehicleChassisNo } : {}),
+        ...(vehicleEngineNo !== undefined ? { engineNo: vehicleEngineNo } : {}),
+        ...(vehicleBrandId !== undefined && !Number.isNaN(vehicleBrandId) ? { brandId: vehicleBrandId } : {}),
         modifiedById: user && user.userId ? user.userId : null
       };
 
@@ -1215,7 +1237,7 @@ const updateJobCard = async (id, payload, user) => {
       const io = getSocket();
       if (io) {
         // We just need to ping the client so it can refetch, or we can send the partial updated data
-        io.emit('jobCardStatusChanged', { jobCardId, newStatus: nextStatus.statusCode });
+        io.emit('jobCardStatusChanged', { jobCardId, newStatus: statusForLog.statusCode });
       }
     }
 
@@ -1340,7 +1362,7 @@ const updateJobCard = async (id, payload, user) => {
     });
 
     return updatedJobCard;
-  });
+  }, { timeout: 20000 });
 };
 
 module.exports = {
