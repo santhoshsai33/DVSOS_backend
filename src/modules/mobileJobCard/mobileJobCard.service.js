@@ -410,6 +410,10 @@ const inferPhotoCategory = (file, index, photoCategories = []) => {
     return 'RIGHT_SIDE';
   }
 
+  if (originalName.includes('sign') || originalName.includes('signature')) {
+    return 'SIGNATURE';
+  }
+
   return 'VEHICLE_PHOTO';
 };
 
@@ -946,7 +950,8 @@ const toJobCardDetailResponse = (jobCard, mediaFiles = []) => {
       serviceSubtotal: services.reduce((sum, service) => sum + service.total, 0),
       billing: buildJobCardDetailBilling(jobCard)
     },
-    digitalConditionPhotos: mediaFiles.map(toMediaResponse),
+    customerSignature: mediaFiles.find((m) => m.category === 'SIGNATURE') ? toMediaResponse(mediaFiles.find((m) => m.category === 'SIGNATURE')) : null,
+    digitalConditionPhotos: mediaFiles.filter((m) => m.category !== 'SIGNATURE').map(toMediaResponse),
     gateEntry: jobCard.gateEntry
       ? {
         id: jobCard.gateEntry.id,
@@ -2016,11 +2021,42 @@ const createFromGateEntry = async (payload, user, files = []) => {
 const updateFromMobile = async (id, payload, user, files = []) => {
   const existingJobCard = await prisma.jobCard.findFirst({
     where: { id: Number(id) },
-    select: { vehicleId: true }
+    select: { id: true, vehicleId: true }
   });
 
   if (!existingJobCard) {
     throw createHttpError(404, 'Job Card not found');
+  }
+
+  if (payload.deletedMediaIds && Array.isArray(payload.deletedMediaIds) && payload.deletedMediaIds.length > 0) {
+    const idsToDelete = payload.deletedMediaIds.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (idsToDelete.length > 0) {
+      const filesToDelete = await prisma.mediaFile.findMany({
+        where: {
+          id: { in: idsToDelete },
+          OR: [
+            { moduleName: 'JOB_CARD', moduleRecordId: existingJobCard.id },
+            { moduleName: 'VEHICLE', moduleRecordId: existingJobCard.vehicleId }
+          ]
+        }
+      });
+
+      for (const f of filesToDelete) {
+        if (f.blobName && storageProvider.isConfigured) {
+          try {
+            await storageProvider.delete(f.blobName);
+          } catch (err) {
+            console.warn(`Failed to delete blob ${f.blobName}`, err);
+          }
+        }
+      }
+
+      if (filesToDelete.length > 0) {
+        await prisma.mediaFile.deleteMany({
+          where: { id: { in: filesToDelete.map((f) => f.id) } }
+        });
+      }
+    }
   }
 
   if (files && files.length > 0) {

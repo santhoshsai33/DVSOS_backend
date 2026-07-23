@@ -50,7 +50,7 @@ const normalizeCreateJobCardPayload = (req, res, next) => {
   try {
     req.body = req.body || {};
 
-    ['serviceItems', 'vehicleInfo', 'customerInfo', 'billing', 'photoCategories'].forEach((fieldName) => {
+    ['serviceItems', 'vehicleInfo', 'customerInfo', 'billing', 'photoCategories', 'deletedMediaIds'].forEach((fieldName) => {
       parseJsonField(req.body, fieldName);
     });
 
@@ -164,7 +164,7 @@ const validateCreateJobCardPayload = (req, res, next) => {
 };
 
 const validateUpdateJobCardPayload = (req, res, next) => {
-  const { expectedDeliveryAt, serviceItems, vehicleInfo, customerInfo, billing, photoCategories } = req.body || {};
+  const { expectedDeliveryAt, serviceItems, vehicleInfo, customerInfo, billing, photoCategories, deletedMediaIds } = req.body || {};
   const billingObject = isPlainObject(billing) ? billing : {};
   const resolvedExpectedDeliveryAt = expectedDeliveryAt ?? billingObject.expectedDeliveryAt;
   const customerApproval = req.body.customer_approval
@@ -223,6 +223,17 @@ const validateUpdateJobCardPayload = (req, res, next) => {
 
   if (photoCategories !== undefined && !Array.isArray(photoCategories)) {
     return sendValidationError(res, 'photoCategories must be an array');
+  }
+
+  if (deletedMediaIds !== undefined) {
+    if (!Array.isArray(deletedMediaIds)) {
+      return sendValidationError(res, 'deletedMediaIds must be an array');
+    }
+    for (const mid of deletedMediaIds) {
+      if (!Number.isInteger(Number(mid)) || Number(mid) <= 0) {
+        return sendValidationError(res, 'Each item in deletedMediaIds must be a positive integer ID');
+      }
+    }
   }
 
   if (customerApproval !== undefined && customerApproval !== null && customerApproval !== '') {
