@@ -136,7 +136,8 @@ const createBay = async (payload, actorUserId) => {
     actionType: 'CREATE',
     performedByUserId: actorUserId,
     recordName: bay.bayName,
-    comments: 'Bay created'
+    comments: 'Bay created',
+    locationId: bay.locationId
   }).catch((err) => console.error('Failed to create audit log:', err));
 
   return bay;
@@ -185,6 +186,7 @@ const updateBay = async (identifier, payload, actorUserId) => {
     performedByUserId: actorUserId,
     recordName: updatedBay.bayName,
     comments: 'Bay updated',
+    locationId: updatedBay.locationId,
     details: buildChangeDetails(existingBay, updatedBay, ['bayName', 'bayType'])
   }).catch((err) => console.error('Failed to create audit log:', err));
 
@@ -198,7 +200,7 @@ const listBays = async (query, user) => {
 
   const search = query.search?.trim();
   const isActive = parseBooleanFilter(query.isActive);
-  const locationId = parsePositiveInt(query.locationId, undefined);
+  const locationId = user && user.locationId ? Number(user.locationId) : parsePositiveInt(query.locationId, undefined);
   const bayType = toTrimmedString(query.bayType || query.type);
 
   const where = {};
@@ -310,6 +312,7 @@ const updateBayStatus = async (id, payload, actorUserId) => {
     performedByUserId: actorUserId,
     recordName: updatedBay.bayName,
     comments: isActive ? 'Bay activated' : 'Bay deactivated',
+    locationId: updatedBay.locationId,
     details: buildChangeDetails({ isActive: existingBay.isActive }, { isActive: updatedBay.isActive }, ['isActive'])
   }).catch((err) => console.error('Failed to create audit log:', err));
 

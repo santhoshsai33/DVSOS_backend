@@ -46,7 +46,7 @@ const getBayDropdown = async (req, res, next) => {
   try {
     const bays = await bayService.getBayDropdown({
       ...req.query,
-      locationId: req.query.locationId || req.user.locationId
+      locationId: req.user.locationId || req.query.locationId
     });
 
     return apiResponse(res, {

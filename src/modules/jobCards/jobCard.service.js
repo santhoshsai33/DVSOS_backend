@@ -83,10 +83,11 @@ const normalizeCustomerApprovalDecision = (payload = {}) => {
   }
 
   if (['NO', 'N', 'REJECT', 'REJECTED', 'FALSE'].includes(normalized)) {
-    return 'REJECTED';
+    // Default to APPROVED since the rejection flow has been replaced by signature
+    return 'APPROVED';
   }
 
-  throw createHttpError(400, 'customer_approval must be yes or no');
+  return 'APPROVED';
 };
 
 const buildJobCardIdentifierWhere = (identifier) => {
@@ -1183,7 +1184,7 @@ const updateJobCard = async (id, payload, user) => {
     }, 0);
     const taxRate = toOptionalNumber(payload.billing?.taxRate);
     const discountAmount = toOptionalNumber(payload.billing?.discountAmount) || 0;
-    
+
     if (discountAmount > 0 && discountAmount >= serviceSubtotal) {
       throw createHttpError(400, 'Discount amount cannot be equal to or greater than the subtotal');
     }
@@ -1358,6 +1359,7 @@ const updateJobCard = async (id, payload, user) => {
       performedByUserId: user && user.userId ? user.userId : null,
       recordName: updatedJobCard.jobCardNo,
       comments: 'Job card updated',
+      locationId: updatedJobCard.locationId,
       details: []
     });
 

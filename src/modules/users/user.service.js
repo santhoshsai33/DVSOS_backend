@@ -452,6 +452,7 @@ const createUser = async ({ fullName, email, mobile, employeeCode, roleId, passw
       performedByUserId: actor.userId,
       recordName: newUser.fullName,
       comments: 'User created',
+      locationId: newUser.locationId,
       details: Object.entries(data).filter(([k]) => k !== 'passwordHash').map(([fieldName, newValue]) => ({
         fieldName,
         oldValue: null,
@@ -529,6 +530,7 @@ const updateUser = async (id, { fullName, email, mobile, employeeCode, roleId, d
       performedByUserId: actor.userId,
       recordName: updatedUser.fullName,
       comments: 'User updated',
+      locationId: updatedUser.locationId,
       details: buildChangeDetails(currentUser, updatedUser, Object.keys(data))
     });
 
@@ -733,6 +735,7 @@ const updateUserStatus = async (id, { isActive }, actor) => {
       performedByUserId: actor.userId,
       recordName: updatedUser.fullName,
       comments: isActive ? 'User activated' : 'User deactivated',
+      locationId: updatedUser.locationId,
       details: buildChangeDetails(currentUser, updatedUser, ['isActive', 'modifiedById'])
     });
 

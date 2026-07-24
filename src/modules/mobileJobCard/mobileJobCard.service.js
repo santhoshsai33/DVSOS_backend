@@ -370,10 +370,11 @@ const normalizeCustomerApproval = (payload = {}) => {
   }
 
   if (['NO', 'N', 'REJECT', 'REJECTED', 'FALSE'].includes(normalized)) {
-    return 'REJECTED';
+    // Default to APPROVED since the rejection flow has been replaced by signature
+    return 'APPROVED';
   }
 
-  throw createHttpError(400, 'customer_approval must be yes or no');
+  return 'APPROVED';
 };
 
 const resolveRequiredStatusId = async (tx, moduleCode, statusCodes, label) => {

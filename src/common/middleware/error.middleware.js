@@ -9,6 +9,7 @@ const errorMiddleware = (err, req, res, next) => {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     statusCode = 400; // Bad Request
     if (err.code === 'P2002') {
+      console.log("err", err.message)
       message = 'This record already exists or conflicts with another record.';
     } else {
       message = 'A database error occurred. Please check your inputs.';

@@ -687,6 +687,7 @@ const assignWork = async (jobCardId, payload, user) => {
       performedByUserId: user && user.userId ? user.userId : null,
       recordName: jobCard.jobCardNo,
       comments: `Work assigned to user ${assignedUserId}`,
+      locationId: jobCard.locationId,
       details: []
     });
 
@@ -877,6 +878,7 @@ const reassignWork = async (jobCardId, payload, user) => {
       performedByUserId: user && user.userId ? user.userId : null,
       recordName: jobCard.jobCardNo,
       comments: `Work reassigned to user ${assignedUserId}`,
+      locationId: jobCard.locationId,
       details: []
     });
 
@@ -1102,6 +1104,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
       performedByUserId: user && user.userId ? user.userId : null,
       recordName: `Assignment ${assignment.id}`,
       comments: `Assignment status updated to ${requestedStatus}`,
+      locationId: assignment.jobCard?.locationId,
       details: buildChangeDetails(assignment, updatedAssignment, ['statusId', 'startedAt', 'completedAt'])
     });
 

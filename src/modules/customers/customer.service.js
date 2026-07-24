@@ -105,6 +105,7 @@ const updateCustomer = async (id, payload, modifiedBy) => {
       performedByUserId: modifiedBy,
       recordName: updatedCustomer.fullName,
       comments: 'Customer details updated',
+      locationId: updatedCustomer.locationId,
       details: buildChangeDetails(customer, updatedCustomer, Object.keys(dataToUpdate))
     });
 
@@ -134,6 +135,7 @@ const updateCustomerStatus = async (id, isActive, modifiedBy) => {
       performedByUserId: modifiedBy,
       recordName: updatedCustomer.fullName,
       comments: isActive ? 'Customer activated' : 'Customer deactivated',
+      locationId: updatedCustomer.locationId,
       details: buildChangeDetails(customer, updatedCustomer, ['isActive', 'modifiedById'])
     });
 
