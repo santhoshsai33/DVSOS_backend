@@ -69,6 +69,7 @@ const validateStatusPayload = (req, res, next) => {
   return next();
 };
 
+
 module.exports = {
   validateJobCardIdParam,
   validateAssignmentIdParam,

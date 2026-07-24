@@ -163,11 +163,68 @@ const getCurrentStageByGateEntry = async (gateEntryId, db = prisma) => {
   });
 };
 
+const skipStage = async ({
+  locationId,
+  gateEntryId = null,
+  jobCardId = null,
+  customerId,
+  vehicleId,
+  moduleId,
+  statusId,
+  modifiedById = null
+}, db = prisma) => {
+  const stage = await db.processStageTracking.findFirst({
+    where: {
+      ...(gateEntryId ? { gateEntryId } : {}),
+      ...(jobCardId ? { OR: [{ jobCardId }, { jobCardId: null }] } : {}),
+      moduleId,
+      statusId,
+      stageStatus: {
+        in: ACTIVE_STAGE_STATUSES
+      }
+    },
+    orderBy: {
+      startedAt: 'desc'
+    }
+  });
+
+  if (stage) {
+    return db.processStageTracking.update({
+      where: { id: stage.id },
+      data: {
+        stageStatus: 'SKIPPED',
+        completedAt: new Date(),
+        ...(jobCardId ? { jobCardId } : {}),
+        modifiedById
+      }
+    });
+  }
+
+  return db.processStageTracking.create({
+    data: {
+      locationId,
+      gateEntryId,
+      jobCardId,
+      customerId,
+      vehicleId,
+      moduleId,
+      statusId,
+      stageStatus: 'SKIPPED',
+      startedAt: new Date(),
+      completedAt: new Date(),
+      isDelayNotified: false,
+      delayNotifiedAt: null,
+      createdById: modifiedById
+    }
+  });
+};
+
 module.exports = {
   findStageTimeLimit,
   startStage,
   completeStage,
   cancelStage,
+  skipStage,
   getCurrentStageByJobCard,
   getCurrentStageByGateEntry
 };

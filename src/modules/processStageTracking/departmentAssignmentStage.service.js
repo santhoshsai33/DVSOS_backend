@@ -1,5 +1,5 @@
 const { STATUS_MODULE_CODES, resolveStatusFromCodes } = require('../../common/utils/status.util');
-const { startStage, completeStage, cancelStage } = require('./processStageTracking.service');
+const { startStage, completeStage, cancelStage, skipStage } = require('./processStageTracking.service');
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
@@ -96,6 +96,15 @@ const areDepartmentServicesCompleted = (jobCard, department) => {
   return services.length === 0 || services.every(isJobCardServiceCompleted);
 };
 
+const isDepartmentSkipped = (jobCard, department) => {
+  if (!jobCard || !jobCard.processStageTrackings) {
+    return false;
+  }
+  const expectedStatusCode = ASSIGNMENT_PENDING_STATUS_CODES[department];
+  const tracking = jobCard.processStageTrackings.find((t) => getStatusCode(t.status) === expectedStatusCode);
+  return tracking && String(tracking.stageStatus).trim().toUpperCase() === 'SKIPPED';
+};
+
 const canStartAssignmentPendingForDepartment = (jobCard, department) => {
   const currentStatusCode = getStatusCode(jobCard && jobCard.currentStatus);
   const approvalStatusCode = getStatusCode(jobCard && jobCard.approvalStatus);
@@ -115,9 +124,17 @@ const canStartAssignmentPendingForDepartment = (jobCard, department) => {
   const departmentIndex = DEPARTMENT_ORDER.indexOf(department);
   const previousDepartments = DEPARTMENT_ORDER.slice(0, departmentIndex);
 
+  if (department === 'water-wash') {
+    return previousDepartments.every((previousDepartment) => {
+      return !hasDepartmentServicesAvailableForWork(jobCard, previousDepartment)
+        || areDepartmentServicesCompleted(jobCard, previousDepartment);
+    });
+  }
+
   return previousDepartments.every((previousDepartment) => {
     return !hasDepartmentServicesAvailableForWork(jobCard, previousDepartment)
-      || areDepartmentServicesCompleted(jobCard, previousDepartment);
+      || areDepartmentServicesCompleted(jobCard, previousDepartment)
+      || isDepartmentSkipped(jobCard, previousDepartment);
   });
 };
 
@@ -194,6 +211,24 @@ const startNextAssignmentPendingStage = async (tx, { jobCard, createdById = null
   });
 };
 
+const skipDepartmentAssignmentPendingStage = async (tx, { jobCard, department, modifiedById = null }) => {
+  const status = await resolveAssignmentPendingStatus(tx, department);
+  if (!status || !jobCard) {
+    return null;
+  }
+
+  return skipStage({
+    locationId: jobCard.locationId,
+    gateEntryId: jobCard.gateEntryId || null,
+    jobCardId: jobCard.id,
+    customerId: jobCard.customerId,
+    vehicleId: jobCard.vehicleId,
+    moduleId: status.moduleId,
+    statusId: status.id,
+    modifiedById
+  }, tx);
+};
+
 const completeDepartmentAssignmentPendingStage = async (tx, { jobCard, department, modifiedById = null }) => {
   const status = await resolveAssignmentPendingStatus(tx, department);
   if (!status || !jobCard) {
@@ -247,5 +282,6 @@ module.exports = {
   getServiceDepartment,
   startNextAssignmentPendingStage,
   completeDepartmentAssignmentPendingStage,
+  skipDepartmentAssignmentPendingStage,
   syncAssignmentPendingStages
 };

@@ -4,6 +4,7 @@ const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit
 const { getSocket } = require('../../config/socket');
 const {
   completeDepartmentAssignmentPendingStage,
+  skipDepartmentAssignmentPendingStage,
   syncAssignmentPendingStages
 } = require('../processStageTracking/departmentAssignmentStage.service');
 
@@ -202,6 +203,7 @@ const canShowInDepartmentQueue = (jobCard, department) => {
     return false;
   }
 
+
   if (areDepartmentServicesAssigned(jobCard, department)) {
     return false;
   }
@@ -333,6 +335,19 @@ const queueJobCardSelect = {
           }
         }
       }
+    }
+  },
+  processStageTrackings: {
+    select: {
+      stageStatus: true,
+      status: {
+        select: {
+          statusCode: true
+        }
+      }
+    },
+    orderBy: {
+      startedAt: 'desc'
     }
   }
 };

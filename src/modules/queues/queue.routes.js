@@ -19,4 +19,5 @@ router.post('/assign/:jobCardId', canUpdateJobCards, validateJobCardIdParam, val
 router.put('/reassign/:jobCardId', canUpdateJobCards, validateJobCardIdParam, validateAssignPayload, controller.reassignWork);
 router.patch('/status/:assignmentId', canUpdateJobCards, validateAssignmentIdParam, validateStatusPayload, controller.updateAssignmentStatus);
 
+
 module.exports = router;
