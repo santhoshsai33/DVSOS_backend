@@ -19,6 +19,11 @@ const sendValidationError = (res, message) => {
   });
 };
 
+const isValidIdArray = (arr) => {
+  if (!Array.isArray(arr)) return false;
+  return arr.every(val => isPositiveInt(val));
+};
+
 const validateIdParam = (req, res, next) => {
   if (!isPositiveInt(req.params.id)) {
     return sendValidationError(res, 'Valid stage time limit id is required');
@@ -34,8 +39,8 @@ const validatePayload = (req, res, next) => {
     statusId,
     stageCode,
     allowedMinutes,
-    notifyRoleId,
-    notifyUserId
+    notifyRoleIds,
+    notifyUserIds
   } = req.body || {};
 
   if (!isPositiveInt(moduleId)) {
@@ -58,23 +63,19 @@ const validatePayload = (req, res, next) => {
     return sendValidationError(res, 'locationId must be a positive integer');
   }
 
-  if (!isOptionalPositiveInt(notifyRoleId)) {
-    return sendValidationError(res, 'notifyRoleId must be a positive integer');
+  const hasRoles = Array.isArray(notifyRoleIds) && notifyRoleIds.length > 0;
+  const hasUsers = Array.isArray(notifyUserIds) && notifyUserIds.length > 0;
+
+  if (hasRoles && !isValidIdArray(notifyRoleIds)) {
+    return sendValidationError(res, 'notifyRoleIds must be an array of positive integers');
   }
 
-  if (!isOptionalPositiveInt(notifyUserId)) {
-    return sendValidationError(res, 'notifyUserId must be a positive integer');
+  if (hasUsers && !isValidIdArray(notifyUserIds)) {
+    return sendValidationError(res, 'notifyUserIds must be an array of positive integers');
   }
 
-  const hasNotifyRole = notifyRoleId !== undefined && notifyRoleId !== null && notifyRoleId !== '';
-  const hasNotifyUser = notifyUserId !== undefined && notifyUserId !== null && notifyUserId !== '';
-
-  if (hasNotifyRole && hasNotifyUser) {
-    return sendValidationError(res, 'Choose either notify role or notify user, not both.');
-  }
-
-  if (!hasNotifyRole && !hasNotifyUser) {
-    return sendValidationError(res, 'Notify role or notify user is required.');
+  if (!hasRoles && !hasUsers) {
+    return sendValidationError(res, 'At least one notify role or notify user is required.');
   }
 
   return next();

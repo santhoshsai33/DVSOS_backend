@@ -33,30 +33,46 @@ const includeDisplayRelations = {
   location: { select: { id: true, locationName: true } },
   module: { select: { id: true, moduleName: true, moduleCode: true } },
   status: { select: { id: true, statusName: true, statusCode: true } },
-  notifyRole: { select: { id: true, name: true, slug: true } },
-  notifyUser: { select: { id: true, fullName: true, emailId: true } }
+  recipients: {
+    include: {
+      role: { select: { id: true, name: true, slug: true } },
+      user: { select: { id: true, fullName: true, emailId: true } }
+    }
+  }
 };
 
-const formatStageTimeLimit = (record) => ({
-  id: record.id,
-  locationId: record.locationId,
-  locationName: record.location ? record.location.locationName : 'All Locations',
-  moduleId: record.moduleId,
-  moduleName: record.module?.moduleName || null,
-  moduleCode: record.module?.moduleCode || null,
-  statusId: record.statusId,
-  statusName: record.status?.statusName || null,
-  statusCode: record.status?.statusCode || null,
-  stageCode: record.stageCode,
-  allowedMinutes: record.allowedMinutes,
-  notifyRoleId: record.notifyRoleId,
-  notifyRoleName: record.notifyRole?.name || null,
-  notifyUserId: record.notifyUserId,
-  notifyUserName: record.notifyUser?.fullName || null,
-  isActive: record.isActive,
-  createdAt: record.createdAt,
-  updatedAt: record.updatedAt
-});
+const formatStageTimeLimit = (record) => {
+  const roles = [];
+  const users = [];
+
+  if (record.recipients && Array.isArray(record.recipients)) {
+    record.recipients.forEach(r => {
+      if (r.role) roles.push(r.role);
+      if (r.user) users.push(r.user);
+    });
+  }
+
+  return {
+    id: record.id,
+    locationId: record.locationId,
+    locationName: record.location ? record.location.locationName : 'All Locations',
+    moduleId: record.moduleId,
+    moduleName: record.module?.moduleName || null,
+    moduleCode: record.module?.moduleCode || null,
+    statusId: record.statusId,
+    statusName: record.status?.statusName || null,
+    statusCode: record.status?.statusCode || null,
+    stageCode: record.stageCode,
+    allowedMinutes: record.allowedMinutes,
+    notifyRoles: roles,
+    notifyRoleIds: roles.map(r => r.id),
+    notifyUsers: users,
+    notifyUserIds: users.map(u => u.id),
+    isActive: record.isActive,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
+};
 
 const buildWhere = ({ search, isActive, moduleId, statusId, locationId }) => {
   const where = {};
@@ -72,16 +88,16 @@ const buildWhere = ({ search, isActive, moduleId, statusId, locationId }) => {
       { module: { moduleName: { contains: search } } },
       { status: { statusName: { contains: search } } },
       { location: { locationName: { contains: search } } },
-      { notifyRole: { name: { contains: search } } },
-      { notifyUser: { fullName: { contains: search } } }
+      { recipients: { some: { role: { name: { contains: search } } } } },
+      { recipients: { some: { user: { fullName: { contains: search } } } } }
     ];
   }
 
   return where;
 };
 
-const ensureForeignKeys = async (data) => {
-  const [module, status, location, role, user] = await Promise.all([
+const ensureForeignKeys = async (data, notifyRoleIds = [], notifyUserIds = []) => {
+  const [module, status, location] = await Promise.all([
     prisma.module.findUnique({ where: { id: data.moduleId }, select: { id: true } }),
     prisma.statusMaster.findFirst({
       where: { id: data.statusId, moduleId: data.moduleId },
@@ -89,20 +105,26 @@ const ensureForeignKeys = async (data) => {
     }),
     data.locationId
       ? prisma.location.findUnique({ where: { id: data.locationId }, select: { id: true } })
-      : Promise.resolve(null),
-    data.notifyRoleId
-      ? prisma.role.findUnique({ where: { id: data.notifyRoleId }, select: { id: true } })
-      : Promise.resolve(null),
-    data.notifyUserId
-      ? prisma.user.findUnique({ where: { id: data.notifyUserId }, select: { id: true } })
       : Promise.resolve(null)
   ]);
 
   if (!module) throw createHttpError(400, 'moduleId must reference an existing module');
   if (!status) throw createHttpError(400, 'statusId must reference a status belonging to selected moduleId');
   if (data.locationId && !location) throw createHttpError(400, 'locationId must reference an existing location');
-  if (data.notifyRoleId && !role) throw createHttpError(400, 'notifyRoleId must reference an existing role');
-  if (data.notifyUserId && !user) throw createHttpError(400, 'notifyUserId must reference an existing user');
+
+  if (notifyRoleIds.length > 0) {
+    const roles = await prisma.role.findMany({ where: { id: { in: notifyRoleIds } } });
+    if (roles.length !== notifyRoleIds.length) {
+      throw createHttpError(400, 'One or more notifyRoleIds are invalid');
+    }
+  }
+
+  if (notifyUserIds.length > 0) {
+    const users = await prisma.user.findMany({ where: { id: { in: notifyUserIds } } });
+    if (users.length !== notifyUserIds.length) {
+      throw createHttpError(400, 'One or more notifyUserIds are invalid');
+    }
+  }
 
   return status;
 };
@@ -124,17 +146,12 @@ const ensureUniqueRule = async (data, excludeId) => {
 };
 
 const normalizePayload = (payload, actor, isUpdate = false) => {
-  const notifyRoleId = toNullableInt(payload.notifyRoleId);
-  const notifyUserId = toNullableInt(payload.notifyUserId);
-
   return {
     locationId: actor && actor.locationId ? Number(actor.locationId) : null,
     moduleId: Number(payload.moduleId),
     statusId: Number(payload.statusId),
     stageCode: String(payload.stageCode || '').trim(),
     allowedMinutes: Number(payload.allowedMinutes),
-    notifyRoleId,
-    notifyUserId,
     isActive: typeof payload.isActive === 'boolean' ? payload.isActive : true,
     ...(isUpdate ? { modifiedById: actor?.userId || null } : { createdById: actor?.userId || null })
   };
@@ -210,7 +227,10 @@ const getStageTimeLimit = async (id, actor) => {
 
 const createStageTimeLimit = async (payload, actor) => {
   const data = normalizePayload(payload, actor);
-  const status = await ensureForeignKeys(data);
+  const notifyRoleIds = Array.isArray(payload.notifyRoleIds) ? payload.notifyRoleIds : [];
+  const notifyUserIds = Array.isArray(payload.notifyUserIds) ? payload.notifyUserIds : [];
+  
+  const status = await ensureForeignKeys(data, notifyRoleIds, notifyUserIds);
 
   if (data.stageCode !== status.statusCode) {
     throw createHttpError(400, 'stageCode must match selected status code');
@@ -219,8 +239,17 @@ const createStageTimeLimit = async (payload, actor) => {
   await ensureUniqueRule(data);
 
   return prisma.$transaction(async (tx) => {
+    const recipientsToCreate = [];
+    notifyRoleIds.forEach(id => recipientsToCreate.push({ roleId: id }));
+    notifyUserIds.forEach(id => recipientsToCreate.push({ userId: id }));
+
     const record = await tx.stageTimeLimit.create({
-      data,
+      data: {
+        ...data,
+        recipients: {
+          create: recipientsToCreate
+        }
+      },
       include: includeDisplayRelations
     });
 
@@ -250,7 +279,10 @@ const updateStageTimeLimit = async (id, payload, actor) => {
   await getStageTimeLimit(recordId, actor);
 
   const data = normalizePayload(payload, actor, true);
-  const status = await ensureForeignKeys(data);
+  const notifyRoleIds = Array.isArray(payload.notifyRoleIds) ? payload.notifyRoleIds : [];
+  const notifyUserIds = Array.isArray(payload.notifyUserIds) ? payload.notifyUserIds : [];
+
+  const status = await ensureForeignKeys(data, notifyRoleIds, notifyUserIds);
 
   if (data.stageCode !== status.statusCode) {
     throw createHttpError(400, 'stageCode must match selected status code');
@@ -263,9 +295,22 @@ const updateStageTimeLimit = async (id, payload, actor) => {
       where: { id: recordId }
     });
 
+    await tx.stageTimeLimitRecipient.deleteMany({
+      where: { stageTimeLimitId: recordId }
+    });
+
+    const recipientsToCreate = [];
+    notifyRoleIds.forEach(id => recipientsToCreate.push({ roleId: id }));
+    notifyUserIds.forEach(id => recipientsToCreate.push({ userId: id }));
+
     const record = await tx.stageTimeLimit.update({
       where: { id: recordId },
-      data,
+      data: {
+        ...data,
+        recipients: {
+          create: recipientsToCreate
+        }
+      },
       include: includeDisplayRelations
     });
 
@@ -279,7 +324,7 @@ const updateStageTimeLimit = async (id, payload, actor) => {
         recordName: `Schedule for ${record.stageCode}`,
         comments: 'Stage schedule updated',
         locationId: record.locationId,
-        details: buildChangeDetails(currentRecord, record, ['locationId', 'moduleId', 'statusId', 'stageCode', 'allowedMinutes', 'notifyRoleId', 'notifyUserId', 'isActive'])
+        details: buildChangeDetails(currentRecord, record, ['locationId', 'moduleId', 'statusId', 'stageCode', 'allowedMinutes', 'isActive'])
       });
     }
 

@@ -17,26 +17,31 @@ const buildDelayMessage = (stage) => {
 };
 
 const resolveRecipients = async (stage, limit) => {
-  if (limit.notifyUserId) {
-    return [limit.notifyUserId];
+  const userIds = new Set();
+  const roleIds = new Set();
+
+  if (limit.recipients && Array.isArray(limit.recipients)) {
+    limit.recipients.forEach(r => {
+      if (r.userId) userIds.add(r.userId);
+      if (r.roleId) roleIds.add(r.roleId);
+    });
   }
 
-  if (!limit.notifyRoleId) {
-    return [];
+  if (roleIds.size > 0) {
+    const users = await prisma.user.findMany({
+      where: {
+        roleId: { in: Array.from(roleIds) },
+        locationId: stage.locationId,
+        isActive: true
+      },
+      select: {
+        id: true
+      }
+    });
+    users.forEach(u => userIds.add(u.id));
   }
 
-  const users = await prisma.user.findMany({
-    where: {
-      roleId: limit.notifyRoleId,
-      locationId: stage.locationId,
-      isActive: true
-    },
-    select: {
-      id: true
-    }
-  });
-
-  return users.map((user) => user.id);
+  return Array.from(userIds);
 };
 
 const shouldNotifyStage = (stage, limit, now) => {
@@ -98,6 +103,14 @@ async function runProcessStageDelayMonitorWorkflow() {
         moduleId: stage.moduleId,
         statusId: stage.statusId
       });
+      // Ensure recipients are fetched
+      if (limit) {
+        const fullLimit = await prisma.stageTimeLimit.findUnique({
+          where: { id: limit.id },
+          include: { recipients: true }
+        });
+        Object.assign(limit, { recipients: fullLimit?.recipients || [] });
+      }
 
       if (!shouldNotifyStage(stage, limit, now)) {
         continue;
