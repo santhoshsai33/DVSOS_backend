@@ -1,12 +1,43 @@
 const prisma = require('../../config/db');
-const { STATUS_MODULE_CODES, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
+const { STATUS_MODULE_CODES, resolveStatusIdFromCodes, resolveStatusById } = require('../../common/utils/status.util');
 const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 const { getSocket } = require('../../config/socket');
+const { startStage, completeStage } = require('../processStageTracking/processStageTracking.service');
 const {
   completeDepartmentAssignmentPendingStage,
   skipDepartmentAssignmentPendingStage,
   syncAssignmentPendingStages
 } = require('../processStageTracking/departmentAssignmentStage.service');
+
+const syncJobCardStageTracking = async (tx, jobCardId, oldStatusId, newStatusId, user) => {
+  if (!newStatusId) return;
+  const jobCard = await tx.jobCard.findUnique({ where: { id: jobCardId } });
+  if (!jobCard) return;
+  if (oldStatusId === newStatusId) return;
+
+  const newStatus = await resolveStatusById(tx, newStatusId);
+  if (!newStatus) return;
+
+  if (oldStatusId) {
+    await completeStage({
+      jobCardId: jobCard.id,
+      moduleId: newStatus.moduleId, 
+      statusId: oldStatusId,
+      modifiedById: user?.userId || null
+    }, tx);
+  }
+
+  await startStage({
+    locationId: jobCard.locationId,
+    gateEntryId: jobCard.gateEntryId,
+    jobCardId: jobCard.id,
+    customerId: jobCard.customerId,
+    vehicleId: jobCard.vehicleId,
+    moduleId: newStatus.moduleId,
+    statusId: newStatus.id,
+    createdById: user?.userId || null
+  }, tx);
+};
 
 const DEPARTMENT_ORDER = ['mechanical', 'body-shop', 'water-wash'];
 
@@ -654,13 +685,16 @@ const assignWork = async (jobCardId, payload, user) => {
       `${department} job card assigned`
     );
 
-    await tx.jobCard.update({
-      where: { id: jobCard.id },
-      data: {
-        currentStatusId: jobCardStatusId,
-        modifiedById: user && user.userId ? user.userId : null
-      }
-    });
+    if (jobCardStatusId && jobCard.currentStatusId !== jobCardStatusId) {
+      await syncJobCardStageTracking(tx, jobCard.id, jobCard.currentStatusId, jobCardStatusId, user);
+      await tx.jobCard.update({
+        where: { id: jobCard.id },
+        data: {
+          currentStatusId: jobCardStatusId,
+          modifiedById: user && user.userId ? user.userId : null
+        }
+      });
+    }
 
     await completeDepartmentAssignmentPendingStage(tx, {
       jobCard,
@@ -1068,25 +1102,31 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
           'Ready for delivery job card'
         );
 
-        await tx.jobCard.update({
-          where: {
-            id: assignment.jobCardId
-          },
-          data: {
-            currentStatusId: readyForDeliveryStatusId,
-            modifiedById: user && user.userId ? user.userId : null
-          }
-        });
+        if (readyForDeliveryStatusId && latestJobCard.currentStatusId !== readyForDeliveryStatusId) {
+          await syncJobCardStageTracking(tx, assignment.jobCardId, latestJobCard.currentStatusId, readyForDeliveryStatusId, user);
+          await tx.jobCard.update({
+            where: {
+              id: assignment.jobCardId
+            },
+            data: {
+              currentStatusId: readyForDeliveryStatusId,
+              modifiedById: user && user.userId ? user.userId : null
+            }
+          });
+        }
       } else if (isDepartmentComplete) {
-        await tx.jobCard.update({
-          where: {
-            id: assignment.jobCardId
-          },
-          data: {
-            currentStatusId: jobCardStatusId,
-            modifiedById: user && user.userId ? user.userId : null
-          }
-        });
+        if (jobCardStatusId && latestJobCard.currentStatusId !== jobCardStatusId) {
+          await syncJobCardStageTracking(tx, assignment.jobCardId, latestJobCard.currentStatusId, jobCardStatusId, user);
+          await tx.jobCard.update({
+            where: {
+              id: assignment.jobCardId
+            },
+            data: {
+              currentStatusId: jobCardStatusId,
+              modifiedById: user && user.userId ? user.userId : null
+            }
+          });
+        }
 
         // AUTO-RESUME LOGIC: Find earlier departments with POSTPONED services and revert them to PENDING
         if (latestJobCard) {
@@ -1151,15 +1191,18 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
         });
       }
     } else {
-      await tx.jobCard.update({
-        where: {
-          id: assignment.jobCardId
-        },
-        data: {
-          currentStatusId: jobCardStatusId,
-          modifiedById: user && user.userId ? user.userId : null
-        }
-      });
+      if (jobCardStatusId && jobCard.currentStatusId !== jobCardStatusId) {
+        await syncJobCardStageTracking(tx, assignment.jobCardId, jobCard.currentStatusId, jobCardStatusId, user);
+        await tx.jobCard.update({
+          where: {
+            id: assignment.jobCardId
+          },
+          data: {
+            currentStatusId: jobCardStatusId,
+            modifiedById: user && user.userId ? user.userId : null
+          }
+        });
+      }
 
       // await tx.jobCardStatusLog.create({
       //   data: {

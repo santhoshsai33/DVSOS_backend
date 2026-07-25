@@ -4,6 +4,32 @@ const { STATUS_MODULE_CODES, statusModuleFilter, resolveStatusById, resolveStatu
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
 const { createAuditLog } = require('../../common/utils/audit.util');
 const { syncAssignmentPendingStages } = require('../processStageTracking/departmentAssignmentStage.service');
+const { startStage, completeStage } = require('../processStageTracking/processStageTracking.service');
+
+const syncJobCardStageTracking = async (tx, jobCardId, oldStatusId, newStatus, user) => {
+  const jobCard = await tx.jobCard.findUnique({ where: { id: jobCardId } });
+  if (!jobCard) return;
+
+  if (oldStatusId) {
+    await completeStage({
+      jobCardId: jobCard.id,
+      moduleId: newStatus.moduleId,
+      statusId: oldStatusId,
+      modifiedById: user?.userId || null
+    }, tx);
+  }
+
+  await startStage({
+    locationId: jobCard.locationId,
+    gateEntryId: jobCard.gateEntryId,
+    jobCardId: jobCard.id,
+    customerId: jobCard.customerId,
+    vehicleId: jobCard.vehicleId,
+    moduleId: newStatus.moduleId,
+    statusId: newStatus.id,
+    createdById: user?.userId || null
+  }, tx);
+};
 
 const normalizeText = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
 
@@ -1266,6 +1292,7 @@ const updateJobCard = async (id, payload, user) => {
     const statusForLog = approvalJobCardStatus || nextStatus;
 
     if (statusForLog && statusForLog.id !== existingJobCard.currentStatusId) {
+      await syncJobCardStageTracking(tx, jobCardId, existingJobCard.currentStatusId, statusForLog, user);
       await tx.jobCardStatusLog.create({
         data: {
           jobCardId,
@@ -1500,6 +1527,7 @@ const postponeJobCardService = async (jobCardId, serviceId, reason, user) => {
 
     const newJobCardStatus = await deriveJobCardStatus(tx, fullJobCard);
     if (newJobCardStatus && newJobCardStatus.id !== fullJobCard.currentStatusId) {
+      await syncJobCardStageTracking(tx, parsedJobCardId, fullJobCard.currentStatusId, newJobCardStatus, user);
       await tx.jobCard.update({
         where: { id: parsedJobCardId },
         data: { currentStatusId: newJobCardStatus.id }
@@ -1595,6 +1623,7 @@ const resumeJobCardService = async (jobCardId, serviceId, bayId, mechanicId, use
 
     const newJobCardStatus = await deriveJobCardStatus(tx, fullJobCard);
     if (newJobCardStatus && newJobCardStatus.id !== fullJobCard.currentStatusId) {
+      await syncJobCardStageTracking(tx, parsedJobCardId, fullJobCard.currentStatusId, newJobCardStatus, user);
       await tx.jobCard.update({
         where: { id: parsedJobCardId },
         data: { currentStatusId: newJobCardStatus.id }
