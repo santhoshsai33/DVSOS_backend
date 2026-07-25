@@ -2072,11 +2072,69 @@ const updateFromMobile = async (id, payload, user, files = []) => {
   return await jobCardService.updateJobCard(id, payload, user);
 };
 
+const lookupVehicleByNumber = async (vehicleNumber, user) => {
+  const normalizedNumber = normalizeVehicleNumber(vehicleNumber);
+
+  if (!normalizedNumber) {
+    throw createHttpError(400, 'Vehicle number is required');
+  }
+
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { registrationNo: normalizedNumber },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          fullName: true,
+          mobileNo: true,
+          alternateMobileNo: true,
+          emailId: true,
+          address: true
+        }
+      },
+      brand: {
+        select: { id: true, name: true }
+      },
+      location: {
+        select: { id: true, locationName: true, locationCode: true }
+      }
+    }
+  });
+
+  if (!vehicle) {
+    return null;
+  }
+
+  return {
+    id: vehicle.id,
+    registrationNumber: vehicle.registrationNo,
+    model: vehicle.model,
+    brand: toBrandResponse(vehicle.brand),
+    variant: vehicle.variant,
+    fuelType: vehicle.fuelType,
+    color: vehicle.vehicleColor,
+    chassisNo: vehicle.chassisNo,
+    engineNo: vehicle.engineNo,
+    customer: vehicle.customer
+      ? {
+        id: vehicle.customer.id,
+        name: vehicle.customer.fullName,
+        mobileNo: vehicle.customer.mobileNo,
+        alternateMobileNo: vehicle.customer.alternateMobileNo,
+        emailId: vehicle.customer.emailId,
+        address: vehicle.customer.address
+      }
+      : null,
+    location: vehicle.location || null
+  };
+};
+
 module.exports = {
   pendingQueue,
   jobCardList,
   queueDetail,
   jobCardDetail,
   createFromGateEntry,
-  updateFromMobile
+  updateFromMobile,
+  lookupVehicleByNumber
 };

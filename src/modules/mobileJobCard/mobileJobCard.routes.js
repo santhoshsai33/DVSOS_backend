@@ -18,4 +18,6 @@ router.get('/queue', canReadJobCards, controller.pendingQueue);
 router.get('/queue/:id', canReadJobCards, validateIdParam, controller.queueDetail);
 router.post( '/create-from-gate-entry', canCreateJobCards, uploadVehiclePhotos, normalizeCreateJobCardPayload, validateCreateJobCardPayload, controller.createFromGateEntry );
 router.put( '/update/:id', canUpdateJobCards, validateIdParam, uploadVehiclePhotos, normalizeCreateJobCardPayload, validateUpdateJobCardPayload, controller.updateJobCard );
+router.get('/lookup-vehicle', canReadJobCards, controller.lookupVehicle);
+
 module.exports = router;

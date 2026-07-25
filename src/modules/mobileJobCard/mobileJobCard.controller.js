@@ -82,11 +82,34 @@ const updateJobCard = async (req, res, next) => {
   }
 };
 
+const lookupVehicle = async (req, res, next) => {
+  try {
+    const { vehicleNumber } = req.query;
+    if (!vehicleNumber) {
+      return apiResponse(res, {
+        statusCode: 400,
+        success: false,
+        message: 'Vehicle number is required'
+      });
+    }
+
+    const data = await service.lookupVehicleByNumber(vehicleNumber, req.user);
+    
+    return apiResponse(res, {
+      message: data ? 'Vehicle data retrieved successfully' : 'Vehicle not found',
+      data
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   pendingQueue,
   jobCardList,
   queueDetail,
   jobCardDetail,
   createFromGateEntry,
-  updateJobCard
+  updateJobCard,
+  lookupVehicle
 };
