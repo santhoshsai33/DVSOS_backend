@@ -1110,6 +1110,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
             },
             data: {
               currentStatusId: readyForDeliveryStatusId,
+              actualDeliveryAt: new Date(),
               modifiedById: user && user.userId ? user.userId : null
             }
           });

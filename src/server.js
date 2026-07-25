@@ -24,6 +24,7 @@ const startServer = async () => {
     // Start background jobs
     startApprovalFollowupJob();
     startProcessStageDelayMonitorJob();
+    
     try {
       startFcmSenderJob();
     } catch (jobErr) {
