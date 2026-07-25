@@ -151,6 +151,9 @@ model StatusMaster {
   modifiedBy              User?                  @relation("StatusMasterModifiedBy", fields: [modifiedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   module                  Module                 @relation(fields: [moduleId], references: [id], onUpdate: NoAction)
   workAssignments         WorkAssignment[]
+  historyActionTypes      JobCardServiceHistory[] @relation("HistoryActionType")
+  historyFromStatuses     JobCardServiceHistory[] @relation("HistoryFromStatus")
+  historyToStatuses       JobCardServiceHistory[] @relation("HistoryToStatus")
 
   @@unique([moduleId, statusCode])
   @@unique([moduleId, slug])
@@ -306,6 +309,7 @@ model User {
   assignedWorkAssignments      WorkAssignment[]          @relation("WorkAssignmentAssignedUser")
   createdWorkAssignments       WorkAssignment[]          @relation("WorkAssignmentCreatedBy")
   modifiedWorkAssignments      WorkAssignment[]          @relation("WorkAssignmentModifiedBy")
+  createdJobCardServiceHistories JobCardServiceHistory[]
 
   @@map("users")
 }
@@ -684,6 +688,7 @@ model JobCardService {
   serviceItem            ServiceItem      @relation(fields: [serviceItemId], references: [id], onUpdate: NoAction)
   serviceStatus          StatusMaster?    @relation("JobCardServiceStatus", fields: [serviceStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   workAssignments        WorkAssignment[]
+  histories              JobCardServiceHistory[]
 
   @@index([parentJobCardServiceId])
   @@map("job_card_services")
@@ -817,4 +822,25 @@ model AuditLogDetail {
   auditLog   AuditLog @relation(fields: [auditLogId], references: [id], onUpdate: NoAction)
 
   @@map("audit_log_details")
+}
+
+model JobCardServiceHistory {
+  id               Int            @id @default(autoincrement())
+  jobCardServiceId Int            @map("job_card_service_id")
+  actionTypeId     Int            @map("action_type_id")
+  fromStatusId     Int?           @map("from_status_id")
+  toStatusId       Int            @map("to_status_id")
+  changedById      Int            @map("changed_by")
+  reason           String?        @db.NVarChar(500)
+  createdAt        DateTime       @default(dbgenerated("sysutcdatetime()")) @map("created_at")
+
+  jobCardService   JobCardService @relation(fields: [jobCardServiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  changedBy        User           @relation(fields: [changedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actionType       StatusMaster   @relation("HistoryActionType", fields: [actionTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  fromStatus       StatusMaster?  @relation("HistoryFromStatus", fields: [fromStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  toStatus         StatusMaster   @relation("HistoryToStatus", fields: [toStatusId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([jobCardServiceId])
+  @@index([actionTypeId])
+  @@map("job_card_service_history")
 }

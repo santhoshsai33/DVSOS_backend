@@ -135,18 +135,38 @@ async function seedStageTimeLimits(prisma) {
       statusId: status.id,
       stageCode: limit.stageCode,
       allowedMinutes: limit.allowedMinutes,
-      notifyRoleId,
-      notifyUserId: null,
       isActive: true
     };
+    
+    const recipientsUpdate = notifyRoleId ? {
+      deleteMany: {},
+      create: [{ roleId: notifyRoleId }]
+    } : { deleteMany: {} };
+
+    const recipientsCreate = notifyRoleId ? {
+      create: [{ roleId: notifyRoleId }]
+    } : undefined;
 
     if (existing) {
       await prisma.stageTimeLimit.update({
         where: { id: existing.id },
-        data
+        data: {
+          stageCode: limit.stageCode,
+          allowedMinutes: limit.allowedMinutes,
+          isActive: true,
+          location: { disconnect: true },
+          module: { connect: { id: status.moduleId } },
+          status: { connect: { id: status.id } },
+          recipients: recipientsUpdate
+        }
       });
     } else {
-      await prisma.stageTimeLimit.create({ data });
+      await prisma.stageTimeLimit.create({ 
+        data: {
+          ...data,
+          recipients: recipientsCreate
+        } 
+      });
     }
   }
 

@@ -198,27 +198,57 @@ const isJobCardActiveForQueue = (jobCard) => {
     && !REJECTED_APPROVAL_STATUS_CODES.includes(approvalStatusCode);
 };
 
-const canShowInDepartmentQueue = (jobCard, department) => {
-  if (!isJobCardActiveForQueue(jobCard) || !hasDepartmentServicesAvailableForWork(jobCard, department)) {
-    return false;
+const isDepartmentPostponed = (jobCard, department) => {
+  const services = getDepartmentServices(jobCard, department).filter((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
+  if (services.length === 0) return false;
+  
+  const hasPostponed = services.some(service => getStatusCode(service.serviceStatus) === 'POSTPONED');
+  const allPostponedOrCompleted = services.every(service => {
+    return getStatusCode(service.serviceStatus) === 'POSTPONED' || isServiceCompleted(service, department);
+  });
+
+  return hasPostponed && allPostponedOrCompleted;
+};
+
+const getActiveQueueDepartment = (jobCard) => {
+  let firstPostponed = null;
+  let activeDepartment = null;
+
+  for (const dept of DEPARTMENT_ORDER) {
+    if (!hasDepartmentServicesAvailableForWork(jobCard, dept)) continue;
+    if (areDepartmentServicesCompleted(jobCard, dept)) continue;
+    
+    if (isDepartmentPostponed(jobCard, dept)) {
+      if (!firstPostponed) firstPostponed = dept;
+      continue;
+    }
+
+    activeDepartment = dept;
+    break;
   }
 
+  // If the active department is water-wash, but there's a postponed department,
+  // we must return to the postponed department because water wash is strictly done last.
+  if (activeDepartment === 'water-wash' && firstPostponed) {
+    return firstPostponed;
+  }
+
+  return activeDepartment || firstPostponed;
+};
+
+const canShowInDepartmentQueue = (jobCard, department) => {
+  if (!isJobCardActiveForQueue(jobCard)) return false;
+  
+  const activeDept = getActiveQueueDepartment(jobCard);
+  if (activeDept !== department) return false;
 
   if (areDepartmentServicesAssigned(jobCard, department)) {
     return false;
   }
 
-  if (areDepartmentServicesCompleted(jobCard, department)) {
-    return false;
-  }
-
-  const departmentIndex = DEPARTMENT_ORDER.indexOf(department);
-  const previousDepartments = DEPARTMENT_ORDER.slice(0, departmentIndex);
-
-  return previousDepartments.every((previousDepartment) => {
-    return !hasDepartmentServices(jobCard, previousDepartment)
-      || areDepartmentServicesCompleted(jobCard, previousDepartment);
-  });
+  return true;
 };
 
 const buildWhere = (query, user) => {
@@ -413,7 +443,7 @@ const listQueue = async (department, query, user) => {
     where,
     select: queueJobCardSelect,
     orderBy: {
-      createdAt: 'asc'
+      createdAt: 'desc'
     }
   });
 
@@ -1058,6 +1088,52 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
           }
         });
 
+        // AUTO-RESUME LOGIC: Find earlier departments with POSTPONED services and revert them to PENDING
+        if (latestJobCard) {
+          const currentDeptIndex = DEPARTMENT_ORDER.indexOf(department);
+          if (currentDeptIndex > 0) {
+            const pendingServiceStatusId = await resolveRequiredStatusId(
+              tx,
+              STATUS_MODULE_CODES.JOB_CARD_SERVICE,
+              ['PENDING'],
+              'Pending job card service'
+            );
+
+            for (let i = 0; i < currentDeptIndex; i++) {
+              const earlierDept = DEPARTMENT_ORDER[i];
+              const earlierServices = getDepartmentServices(latestJobCard, earlierDept);
+              
+              for (const service of earlierServices) {
+                if (getStatusCode(service.serviceStatus) === 'POSTPONED') {
+                  // Revert to PENDING
+                  await tx.jobCardService.update({
+                    where: { id: service.id },
+                    data: { serviceStatusId: pendingServiceStatusId, modifiedById: user && user.userId ? user.userId : null }
+                  });
+
+                  let resumeAction = null;
+                  try {
+                    resumeAction = await resolveRequiredStatusId(tx, 'service-history-actions', ['RESUME'], 'Resume');
+                  } catch (err) {
+                    resumeAction = pendingServiceStatusId;
+                  }
+
+                  await tx.jobCardServiceHistory.create({
+                    data: {
+                      jobCardServiceId: service.id,
+                      actionTypeId: resumeAction,
+                      fromStatusId: service.serviceStatusId,
+                      toStatusId: pendingServiceStatusId,
+                      reason: `Auto-resumed after ${department} completed`,
+                      changedById: user?.userId || 1
+                    }
+                  });
+                }
+              }
+            }
+          }
+        }
+        
         // await tx.jobCardStatusLog.create({
         //   data: {
         //     jobCardId: assignment.jobCardId,

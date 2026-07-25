@@ -16,6 +16,9 @@ router.get('/additional-work/list', canReadAdditionalWork, additionalWorkControl
 router.get('/statuses/list', canReadJobCards, jobCardController.getJobCardStatuses);
 router.get('/service-statuses/list', canReadJobCards, jobCardController.getJobCardServiceStatuses);
 router.get('/detail/:id', canReadJobCards, jobCardController.getJobCard);
+router.post('/:id/services/:serviceId/postpone', canUpdateJobCards, jobCardController.postponeService);
+router.post('/:id/services/:serviceId/resume', canUpdateJobCards, jobCardController.resumeService);
+router.post('/:id/departments/:department/skip', canUpdateJobCards, jobCardController.skipDepartment);
 router.put('/update/:id', canUpdateJobCards, jobCardController.updateJobCard);
 router.use('/:jobCardId/additional-work', additionalWorkRoutes);
 

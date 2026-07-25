@@ -64,7 +64,8 @@ const statusModules = [
       { statusCode: 'BODY_SHOP_COMPLETED', statusName: 'Body Shop Completed', sortOrder: 22, isFinal: true },
       { statusCode: 'WATER_WASH_ASSIGNED', statusName: 'Water Wash Assigned', sortOrder: 30 },
       { statusCode: 'WATER_WASH_IN_PROGRESS', statusName: 'Water Wash In Progress', sortOrder: 31 },
-      { statusCode: 'WATER_WASH_COMPLETED', statusName: 'Water Wash Completed', sortOrder: 32, isFinal: true }
+      { statusCode: 'WATER_WASH_COMPLETED', statusName: 'Water Wash Completed', sortOrder: 32, isFinal: true },
+      { statusCode: 'ON_HOLD', statusName: 'On Hold', sortOrder: 40 }
     ]
   },
   {
@@ -76,7 +77,8 @@ const statusModules = [
       { statusCode: 'ASSIGNED', statusName: 'Assigned', sortOrder: 2 },
       { statusCode: 'IN_PROGRESS', statusName: 'In Progress', sortOrder: 3 },
       { statusCode: 'COMPLETED', statusName: 'Completed', sortOrder: 4, isFinal: true },
-      { statusCode: 'REJECTED', statusName: 'Rejected', sortOrder: 5, isFinal: true }
+      { statusCode: 'REJECTED', statusName: 'Rejected', sortOrder: 5, isFinal: true },
+      { statusCode: 'POSTPONED', statusName: 'Postponed', sortOrder: 6 }
     ]
   },
   {
@@ -86,6 +88,18 @@ const statusModules = [
     statuses: [
       { statusCode: 'ACTIVE', statusName: 'Active', sortOrder: 1 },
       { statusCode: 'INACTIVE', statusName: 'Inactive', sortOrder: 2, isFinal: true }
+    ]
+  },
+  {
+    moduleCode: 'service-history-actions',
+    moduleName: 'Service History Actions',
+    description: 'Actions logged for job card service history',
+    statuses: [
+      { statusCode: 'SWITCH', statusName: 'Switch', sortOrder: 1 },
+      { statusCode: 'RESUME', statusName: 'Resume', sortOrder: 2 },
+      { statusCode: 'START', statusName: 'Start', sortOrder: 3 },
+      { statusCode: 'COMPLETE', statusName: 'Complete', sortOrder: 4 },
+      { statusCode: 'ASSIGN', statusName: 'Assign', sortOrder: 5 }
     ]
   }
 ];

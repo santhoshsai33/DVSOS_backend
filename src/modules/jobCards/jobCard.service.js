@@ -39,19 +39,23 @@ const DEPARTMENT_ALIASES = {
 };
 const ASSIGNMENT_STATUS_CODES = {
   mechanical: {
+    assigned: ['MECHANICAL_ASSIGNED'],
     inProgress: ['MECHANICAL_IN_PROGRESS'],
     completed: ['MECHANICAL_COMPLETED']
   },
   'body-shop': {
+    assigned: ['BODY_SHOP_ASSIGNED'],
     inProgress: ['BODY_SHOP_IN_PROGRESS'],
     completed: ['BODY_SHOP_COMPLETED']
   },
   'water-wash': {
+    assigned: ['WATER_WASH_ASSIGNED'],
     inProgress: ['WATER_WASH_IN_PROGRESS'],
     completed: ['WATER_WASH_COMPLETED']
   }
 };
 const READY_FOR_DELIVERY_STATUS_CODES = ['READY_FOR_DELIVERY'];
+const FINAL_JOB_CARD_STATUS_CODES = ['DELIVERED', 'REJECTED'];
 
 const parseExpectedDeliveryAt = (value) => {
   const trimmed = toTrimmedString(value);
@@ -314,6 +318,11 @@ const isCompletedStatusCode = (statusCode) => {
   return code === 'COMPLETED' || code.endsWith('_COMPLETED');
 };
 
+const isPostponedStatusCode = (statusCode) => {
+  const code = String(statusCode || '').trim().toUpperCase();
+  return code === 'POSTPONED';
+};
+
 const isInProgressStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
   return code === 'IN_PROGRESS' || code.endsWith('_IN_PROGRESS');
@@ -336,6 +345,13 @@ const isJobCardServiceCompleted = (service) => {
   return assignments.length > 0 && assignments.every((assignment) => {
     return assignment.completedAt || isCompletedStatusCode(getStatusCode(assignment.status));
   });
+};
+
+const isJobCardServiceCompletedOrPostponed = (service) => {
+  if (isJobCardServiceCompleted(service)) {
+    return true;
+  }
+  return isPostponedStatusCode(getStatusCode(service.serviceStatus));
 };
 
 const isJobCardServiceInProgress = (service) => {
@@ -362,7 +378,7 @@ const arePreviousDepartmentsCompleted = (jobCard, department) => {
     const services = getDepartmentServices(jobCard, previousDepartment).filter((service) => {
       return isApprovedForWork(service) && !isRejectedAdditionalService(service);
     });
-    return services.length === 0 || services.every(isJobCardServiceCompleted);
+    return services.length === 0 || services.every(isJobCardServiceCompletedOrPostponed);
   });
 };
 
@@ -456,38 +472,65 @@ const deriveJobCardStatus = async (tx, jobCard) => {
     );
   }
 
-  let lastCompletedDepartment = null;
+  let firstPostponed = null;
+  let activeDepartment = null;
 
   for (const department of DEPARTMENT_ORDER) {
-    const services = getDepartmentServices(jobCard, department);
+    const services = getDepartmentServices(jobCard, department).filter(service => isApprovedForWork(service) && !isRejectedAdditionalService(service));
     if (services.length === 0) {
       continue;
     }
 
     if (services.every(isJobCardServiceCompleted)) {
-      lastCompletedDepartment = department;
       continue;
     }
 
-    if (services.some((service) => isJobCardServiceInProgress(service) || isJobCardServiceCompleted(service))) {
-      return resolveRequiredStatus(
-        tx,
-        STATUS_MODULE_CODES.JOB_CARD_STATUS,
-        ASSIGNMENT_STATUS_CODES[department].inProgress,
-        `${department} job card in progress`
-      );
+    const hasPostponed = services.some(service => getStatusCode(service.serviceStatus) === 'POSTPONED');
+    const allPostponedOrCompleted = services.every(service => {
+      return getStatusCode(service.serviceStatus) === 'POSTPONED' || isJobCardServiceCompleted(service);
+    });
+
+    if (hasPostponed && allPostponedOrCompleted) {
+      if (!firstPostponed) firstPostponed = department;
+      continue;
     }
 
+    activeDepartment = department;
     break;
   }
 
-  if (lastCompletedDepartment) {
-    return resolveRequiredStatus(
-      tx,
-      STATUS_MODULE_CODES.JOB_CARD_STATUS,
-      ASSIGNMENT_STATUS_CODES[lastCompletedDepartment].completed,
-      `${lastCompletedDepartment} job card completed`
+  // If the active department is water-wash, but there's a postponed department,
+  // we must return to the postponed department because water wash is strictly done last.
+  let targetDepartment = activeDepartment || firstPostponed;
+  if (activeDepartment === 'water-wash' && firstPostponed) {
+    targetDepartment = firstPostponed;
+  }
+
+  if (targetDepartment) {
+    const services = getDepartmentServices(jobCard, targetDepartment).filter(service => isApprovedForWork(service) && !isRejectedAdditionalService(service));
+    
+    // If it's a postponed department that we auto-returned to, 
+    // it shouldn't show as IN_PROGRESS unless someone actually started working on it.
+    // If all unfinished services are POSTPONED, it should be ASSIGNED.
+    const hasActiveUncompleted = services.some(service => 
+      !isJobCardServiceCompleted(service) && getStatusCode(service.serviceStatus) !== 'POSTPONED'
     );
+
+    if (hasActiveUncompleted) {
+      return resolveRequiredStatus(
+        tx,
+        STATUS_MODULE_CODES.JOB_CARD_STATUS,
+        ASSIGNMENT_STATUS_CODES[targetDepartment].inProgress,
+        `${targetDepartment} job card in progress`
+      );
+    } else {
+      return resolveRequiredStatus(
+        tx,
+        STATUS_MODULE_CODES.JOB_CARD_STATUS,
+        ASSIGNMENT_STATUS_CODES[targetDepartment].assigned,
+        `${targetDepartment} job card assigned`
+      );
+    }
   }
 
   return null;
@@ -1367,11 +1410,363 @@ const updateJobCard = async (id, payload, user) => {
   }, { maxWait: 20000, timeout: 50000 });
 };
 
+const postponeJobCardService = async (jobCardId, serviceId, reason, user) => {
+  const parsedJobCardId = Number(jobCardId);
+  const parsedServiceId = Number(serviceId);
+
+  return prisma.$transaction(async (tx) => {
+    const service = await tx.jobCardService.findUnique({
+      where: { id: parsedServiceId, jobCardId: parsedJobCardId },
+      include: {
+        jobCard: {
+          include: {
+            currentStatus: true,
+            approvalStatus: true
+          }
+        },
+        serviceStatus: true,
+        workAssignments: {
+          where: { completedAt: null },
+          orderBy: { createdAt: 'desc' }
+        },
+        serviceItem: {
+          include: { category: true }
+        }
+      }
+    });
+
+    if (!service) throw createHttpError(404, 'Service not found in Job Card');
+    
+    const currentJobCardStatusCode = getStatusCode(service.jobCard.currentStatus);
+    if (FINAL_JOB_CARD_STATUS_CODES.includes(currentJobCardStatusCode)) {
+      throw createHttpError(400, 'Cannot switch service for a finalized job card');
+    }
+
+    const currentStatusCode = getStatusCode(service.serviceStatus);
+    if (['POSTPONED', 'COMPLETED', 'REJECTED'].includes(currentStatusCode) || isCompletedStatusCode(currentStatusCode)) {
+      throw createHttpError(400, `Cannot switch service in ${currentStatusCode} status`);
+    }
+
+    const postponedStatus = await resolveRequiredStatus(tx, 'job-card-service', ['POSTPONED'], 'Postponed');
+    
+    const activeAssignment = service.workAssignments[0];
+    if (activeAssignment) {
+      const onHoldStatus = await resolveRequiredStatus(tx, 'work-assignment', ['ON_HOLD'], 'On Hold');
+      await tx.workAssignment.update({
+        where: { id: activeAssignment.id },
+        data: { statusId: onHoldStatus.id, modifiedById: user?.userId || null }
+      });
+      
+      await tx.bay.updateMany({
+        where: { currentWorkAssignmentId: activeAssignment.id },
+        data: { currentWorkAssignmentId: null }
+      });
+    }
+
+    await tx.jobCardService.update({
+      where: { id: service.id },
+      data: { serviceStatusId: postponedStatus.id, modifiedById: user?.userId || null }
+    });
+
+    const activeTracker = await tx.processStageTracking.findFirst({
+      where: { jobCardId: parsedJobCardId, completedAt: null }
+    });
+    if (activeTracker) {
+      await tx.processStageTracking.update({
+        where: { id: activeTracker.id },
+        data: { completedAt: new Date() }
+      });
+    }
+
+    const switchAction = await resolveRequiredStatus(tx, 'service-history-actions', ['SWITCH'], 'Switch');
+
+    await tx.jobCardServiceHistory.create({
+      data: {
+        jobCardServiceId: service.id,
+        actionTypeId: switchAction.id,
+        fromStatusId: service.serviceStatusId,
+        toStatusId: postponedStatus.id,
+        changedById: user?.userId || 1,
+        reason: reason
+      }
+    });
+
+    const fullJobCard = await tx.jobCard.findUnique({
+      where: { id: parsedJobCardId },
+      include: {
+        services: { include: { serviceStatus: true, workAssignments: { include: { status: true } }, approvalStatus: true, serviceItem: { include: { category: true } } } }
+      }
+    });
+
+    const newJobCardStatus = await deriveJobCardStatus(tx, fullJobCard);
+    if (newJobCardStatus && newJobCardStatus.id !== fullJobCard.currentStatusId) {
+      await tx.jobCard.update({
+        where: { id: parsedJobCardId },
+        data: { currentStatusId: newJobCardStatus.id }
+      });
+    }
+    
+    getSocket()?.emit('jobCardQueueUpdate', { locationId: fullJobCard.locationId });
+
+    return fullJobCard;
+  }, { maxWait: 20000, timeout: 50000 });
+};
+
+const resumeJobCardService = async (jobCardId, serviceId, bayId, mechanicId, user) => {
+  const parsedJobCardId = Number(jobCardId);
+  const parsedServiceId = Number(serviceId);
+
+  return prisma.$transaction(async (tx) => {
+    const service = await tx.jobCardService.findUnique({
+      where: { id: parsedServiceId, jobCardId: parsedJobCardId },
+      include: {
+        jobCard: { include: { currentStatus: true } },
+        serviceStatus: true,
+        workAssignments: { where: { completedAt: null }, orderBy: { createdAt: 'desc' } },
+        serviceItem: { include: { category: true } }
+      }
+    });
+
+    if (!service) throw createHttpError(404, 'Service not found in Job Card');
+
+    if (getStatusCode(service.serviceStatus) !== 'POSTPONED') {
+      throw createHttpError(400, 'Only POSTPONED services can be resumed');
+    }
+
+    const bay = await tx.bay.findUnique({ where: { id: Number(bayId) } });
+    if (!bay || bay.currentWorkAssignmentId) {
+      throw createHttpError(400, 'Selected bay is not available');
+    }
+
+    const oldAssignment = service.workAssignments[0];
+    if (oldAssignment) {
+      const completedStatus = await resolveRequiredStatus(tx, 'work-assignment', ASSIGNMENT_STATUS_CODES[getServiceDepartment(service)]?.completed || [], 'Completed');
+      await tx.workAssignment.update({
+        where: { id: oldAssignment.id },
+        data: { completedAt: new Date(), statusId: completedStatus.id, modifiedById: user?.userId || null }
+      });
+    }
+
+    const assignedServiceStatus = await resolveRequiredStatus(tx, 'job-card-service', ['ASSIGNED'], 'Assigned');
+    const deptPrefix = String(getServiceDepartment(service) || '').replace(/-/g, '_').toUpperCase();
+    const assignedAssignmentStatus = await resolveRequiredStatus(tx, 'work-assignment', [`${deptPrefix}_ASSIGNED`], 'Assigned');
+
+    await tx.jobCardService.update({
+      where: { id: service.id },
+      data: { serviceStatusId: assignedServiceStatus.id, modifiedById: user?.userId || null }
+    });
+
+    const newAssignment = await tx.workAssignment.create({
+      data: {
+        jobCardId: parsedJobCardId,
+        jobCardServiceId: service.id,
+        assignedUserId: Number(mechanicId),
+        assignedById: user?.userId || 1,
+        bayId: Number(bayId),
+        statusId: assignedAssignmentStatus.id,
+        locationId: service.jobCard.locationId || user?.locationId || 1
+      }
+    });
+
+    await tx.bay.update({
+      where: { id: Number(bayId) },
+      data: { currentWorkAssignmentId: newAssignment.id }
+    });
+
+    const resumeAction = await resolveRequiredStatus(tx, 'service-history-actions', ['RESUME'], 'Resume');
+    
+    await tx.jobCardServiceHistory.create({
+      data: {
+        jobCardServiceId: service.id,
+        actionTypeId: resumeAction.id,
+        fromStatusId: service.serviceStatusId,
+        toStatusId: assignedServiceStatus.id,
+        changedById: user?.userId || 1,
+        reason: 'Resumed'
+      }
+    });
+
+    const fullJobCard = await tx.jobCard.findUnique({
+      where: { id: parsedJobCardId },
+      include: {
+        services: { include: { serviceStatus: true, workAssignments: { include: { status: true } }, approvalStatus: true, serviceItem: { include: { category: true } } } }
+      }
+    });
+
+    const newJobCardStatus = await deriveJobCardStatus(tx, fullJobCard);
+    if (newJobCardStatus && newJobCardStatus.id !== fullJobCard.currentStatusId) {
+      await tx.jobCard.update({
+        where: { id: parsedJobCardId },
+        data: { currentStatusId: newJobCardStatus.id }
+      });
+    }
+
+    getSocket()?.emit('jobCardQueueUpdate', { locationId: fullJobCard.locationId });
+
+    return fullJobCard;
+  }, { maxWait: 20000, timeout: 50000 });
+};
+
+const skipJobCardDepartment = async (jobCardId, departmentSlug, reason, user) => {
+  const parsedJobCardId = Number(jobCardId);
+
+  return prisma.$transaction(async (tx) => {
+    // 1. Get job card with services
+    const jobCard = await tx.jobCard.findUnique({
+      where: { id: parsedJobCardId },
+      include: {
+        currentStatus: true,
+        services: {
+          include: {
+            serviceItem: { include: { category: true } },
+            serviceStatus: true,
+            workAssignments: {
+              where: { completedAt: null },
+              orderBy: { createdAt: 'desc' }
+            }
+          }
+        }
+      }
+    });
+
+    if (!jobCard) throw createHttpError(404, 'Job Card not found');
+
+    const currentJobCardStatusCode = getStatusCode(jobCard.currentStatus);
+    if (FINAL_JOB_CARD_STATUS_CODES.includes(currentJobCardStatusCode)) {
+      throw createHttpError(400, 'Cannot skip department for a finalized job card');
+    }
+
+    // 2. Normalize and check if there are downstream departments
+    let targetDepartment = null;
+    const normalizedValue = normalizeText(departmentSlug);
+    for (const dept of DEPARTMENT_ORDER) {
+      if (DEPARTMENT_ALIASES[dept].some((alias) => normalizeText(alias) === normalizedValue)) {
+        targetDepartment = dept;
+        break;
+      }
+    }
+
+    if (!targetDepartment) {
+      throw createHttpError(400, 'Invalid department provided');
+    }
+
+    const currentDeptIndex = DEPARTMENT_ORDER.indexOf(targetDepartment);
+    
+    // Check if there are services in downstream departments
+    let hasDownstreamServices = false;
+    for (let i = currentDeptIndex + 1; i < DEPARTMENT_ORDER.length; i++) {
+      const downstreamDept = DEPARTMENT_ORDER[i];
+      const hasServices = jobCard.services.some(s => {
+        let sDept = null;
+        const sNormalizedValue = normalizeText(s.serviceItem?.category?.slug || s.serviceItem?.category?.name);
+        for (const dept of DEPARTMENT_ORDER) {
+          if (DEPARTMENT_ALIASES[dept].some((alias) => normalizeText(alias) === sNormalizedValue)) {
+            sDept = dept;
+            break;
+          }
+        }
+        return sDept === downstreamDept;
+      });
+      if (hasServices) {
+        hasDownstreamServices = true;
+        break;
+      }
+    }
+
+    if (!hasDownstreamServices) {
+      throw createHttpError(400, 'Cannot skip this department because there are no downstream services required for this job card.');
+    }
+
+    // 3. Find all services for the TARGET department that are NOT completed/cancelled
+    const targetServices = jobCard.services.filter(s => {
+      let sDept = null;
+      const sNormalizedValue = normalizeText(s.serviceItem?.category?.slug || s.serviceItem?.category?.name);
+      for (const dept of DEPARTMENT_ORDER) {
+        if (DEPARTMENT_ALIASES[dept].some((alias) => normalizeText(alias) === sNormalizedValue)) {
+          sDept = dept;
+          break;
+        }
+      }
+      const sStatus = getStatusCode(s.serviceStatus);
+      return sDept === targetDepartment && !['COMPLETED', 'DELIVERED', 'POSTPONED', 'REJECTED', 'CANCELLED'].includes(sStatus);
+    });
+
+    if (targetServices.length === 0) {
+      throw createHttpError(400, 'No active services found in this department to skip');
+    }
+
+    // 4. Update them to POSTPONED
+    const postponedStatus = await resolveRequiredStatus(tx, 'job-card-service', ['POSTPONED'], 'Postponed');
+    
+    // Release active assignments
+    let onHoldStatus = null;
+    try {
+      onHoldStatus = await resolveRequiredStatus(tx, 'assignment', ['ON_HOLD'], 'On Hold');
+    } catch(err) {
+      // If assignment ON_HOLD doesn't exist, we fallback to PENDING or ignore assignment update?
+      // Wait, we need it. Let's just clear the assignment.
+    }
+
+    for (const service of targetServices) {
+      // Update assignments
+      if (service.workAssignments.length > 0) {
+        const activeAssignment = service.workAssignments[0];
+        if (onHoldStatus) {
+           await tx.workAssignment.update({
+             where: { id: activeAssignment.id },
+             data: { statusId: onHoldStatus.id, bayId: null }
+           });
+        }
+        await syncAssignmentPendingStages(tx, activeAssignment.id, user);
+      }
+
+      // Update service status
+      await tx.jobCardService.update({
+        where: { id: service.id },
+        data: { serviceStatusId: postponedStatus.id, modifiedById: user?.userId || null }
+      });
+
+      // Log history
+      let switchAction = null;
+      try {
+        switchAction = await resolveRequiredStatus(tx, 'service-history-actions', ['SWITCH'], 'Switch');
+      } catch (err) {
+        switchAction = postponedStatus; // fallback
+      }
+
+      await tx.jobCardServiceHistory.create({
+        data: {
+          jobCardServiceId: service.id,
+          actionTypeId: switchAction.id, 
+          fromStatusId: service.serviceStatusId,
+          toStatusId: postponedStatus.id,
+          reason: reason || 'Department skipped',
+          changedById: user?.userId || 1
+        }
+      });
+    }
+
+    const socket = getSocket();
+    if (socket) {
+      socket.to(`location_${jobCard.locationId}`).emit('queueUpdate', {
+        type: 'DEPARTMENT_SKIPPED',
+        jobCardId: parsedJobCardId,
+        department: targetDepartment
+      });
+    }
+
+    return { message: 'Department successfully skipped' };
+  }, { maxWait: 20000, timeout: 50000 });
+};
+
 module.exports = {
   listJobCards,
   getJobCardById,
   listJobCardStatuses,
   listJobCardServiceStatuses,
   updateJobCard,
-  toJobCardListResponse
+  toJobCardListResponse,
+  postponeJobCardService,
+  resumeJobCardService,
+  skipJobCardDepartment
 };

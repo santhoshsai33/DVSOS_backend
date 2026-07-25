@@ -127,10 +127,83 @@ const updateJobCard = async (req, res, next) => {
   }
 };
 
+const postponeService = async (req, res, next) => {
+  try {
+    const { id, serviceId } = req.params;
+    const { reason } = req.body;
+    
+    if (!reason) {
+      return apiResponse(res, { statusCode: 400, success: false, message: 'Reason is required for postponing' });
+    }
+
+    const jobCard = await jobCardService.postponeJobCardService(id, serviceId, reason, req.user);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Service postponed successfully',
+      data: jobCard
+    });
+  } catch (error) {
+    if (error.message.includes('not found') || error.message.includes('Invalid')) {
+      return apiResponse(res, { statusCode: 400, success: false, message: error.message });
+    }
+    return next(error);
+  }
+};
+
+const resumeService = async (req, res, next) => {
+  try {
+    const { id, serviceId } = req.params;
+    const { bayId, mechanicId } = req.body;
+
+    if (!bayId || !mechanicId) {
+      return apiResponse(res, { statusCode: 400, success: false, message: 'bayId and mechanicId are required to resume a service' });
+    }
+
+    const jobCard = await jobCardService.resumeJobCardService(id, serviceId, bayId, mechanicId, req.user);
+
+    return apiResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Service resumed and reassigned successfully',
+      data: jobCard
+    });
+  } catch (error) {
+    if (error.message.includes('not found') || error.message.includes('Invalid')) {
+      return apiResponse(res, { statusCode: 400, success: false, message: error.message });
+    }
+    return next(error);
+  }
+};
+
+const skipDepartment = async (req, res, next) => {
+  try {
+    const { id, department } = req.params;
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ success: false, message: 'Reason is required to skip a department' });
+    }
+
+    const result = await jobCardService.skipJobCardDepartment(id, department, reason, req.user);
+
+    return res.status(200).json({
+      success: true,
+      message: result.message
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getJobCards,
   getJobCard,
   getJobCardStatuses,
   getJobCardServiceStatuses,
-  updateJobCard
+  updateJobCard,
+  postponeService,
+  resumeService,
+  skipDepartment
 };
