@@ -46,7 +46,7 @@ const startStage = async ({
     return null;
   }
 
-  return db.processStageTracking.create({
+  const newStage = await db.processStageTracking.create({
     data: {
       locationId,
       gateEntryId,
@@ -61,8 +61,65 @@ const startStage = async ({
       isDelayNotified: false,
       delayNotifiedAt: null,
       createdById
+    },
+    include: {
+      status: true,
+      jobCard: { select: { jobCardNo: true } },
+      gateEntry: { select: { gateEntryNo: true } },
+      vehicle: { select: { registrationNo: true } }
     }
   });
+
+  const fullLimit = await db.stageTimeLimit.findUnique({
+    where: { id: limit.id },
+    include: { recipients: true }
+  });
+
+  if (fullLimit && fullLimit.recipients && fullLimit.recipients.length > 0) {
+    const userIds = new Set();
+    const roleIds = new Set();
+
+    fullLimit.recipients.forEach(r => {
+      if (r.userId) userIds.add(r.userId);
+      if (r.roleId) roleIds.add(r.roleId);
+    });
+
+    if (roleIds.size > 0) {
+      const users = await db.user.findMany({
+        where: {
+          roleId: { in: Array.from(roleIds) },
+          locationId: newStage.locationId,
+          isActive: true
+        },
+        select: { id: true }
+      });
+      users.forEach(u => userIds.add(u.id));
+    }
+
+    const recipientsList = Array.from(userIds);
+    if (recipientsList.length > 0) {
+      const statusName = newStage.status?.statusName || newStage.status?.statusCode || 'Process stage';
+      const vehicleNo = newStage.vehicle?.registrationNo ? ` for ${newStage.vehicle.registrationNo}` : '';
+      const reference = newStage.jobCard?.jobCardNo || newStage.gateEntry?.gateEntryNo || `stage #${newStage.id}`;
+
+      await db.notification.createMany({
+        data: recipientsList.map((userId) => ({
+          userId,
+          title: `${statusName}`,
+          message: `${statusName}${vehicleNo} has been started. Reference: ${reference}.`,
+          type: 'START_ALERT',
+          locationId: newStage.locationId,
+          gateEntryId: newStage.gateEntryId,
+          jobCardId: newStage.jobCardId,
+          processStageTrackingId: newStage.id,
+          sentAt: null,
+          retryCount: 0
+        }))
+      });
+    }
+  }
+
+  return newStage;
 };
 
 const completeStage = async ({
@@ -91,15 +148,81 @@ const completeStage = async ({
     return null;
   }
 
-  return db.processStageTracking.update({
+  const updatedStage = await db.processStageTracking.update({
     where: { id: stage.id },
     data: {
       stageStatus: 'COMPLETED',
       completedAt: new Date(),
       ...(jobCardId ? { jobCardId } : {}),
       modifiedById
+    },
+    include: {
+      status: true,
+      jobCard: { select: { jobCardNo: true } },
+      gateEntry: { select: { gateEntryNo: true } },
+      vehicle: { select: { registrationNo: true } }
     }
   });
+
+  // Stage Schedules logic for completion notifications
+  const limit = await findStageTimeLimit(db, {
+    locationId: updatedStage.locationId,
+    moduleId: updatedStage.moduleId,
+    statusId: updatedStage.statusId
+  });
+
+  if (limit) {
+    const fullLimit = await db.stageTimeLimit.findUnique({
+      where: { id: limit.id },
+      include: { recipients: true }
+    });
+
+    if (fullLimit && fullLimit.recipients && fullLimit.recipients.length > 0) {
+      const userIds = new Set();
+      const roleIds = new Set();
+
+      fullLimit.recipients.forEach(r => {
+        if (r.userId) userIds.add(r.userId);
+        if (r.roleId) roleIds.add(r.roleId);
+      });
+
+      if (roleIds.size > 0) {
+        const users = await db.user.findMany({
+          where: {
+            roleId: { in: Array.from(roleIds) },
+            locationId: updatedStage.locationId,
+            isActive: true
+          },
+          select: { id: true }
+        });
+        users.forEach(u => userIds.add(u.id));
+      }
+
+      const recipientsList = Array.from(userIds);
+      if (recipientsList.length > 0) {
+        const statusName = updatedStage.status?.statusName || updatedStage.status?.statusCode || 'Process stage';
+        const vehicleNo = updatedStage.vehicle?.registrationNo ? ` for ${updatedStage.vehicle.registrationNo}` : '';
+        const reference = updatedStage.jobCard?.jobCardNo || updatedStage.gateEntry?.gateEntryNo || `stage #${updatedStage.id}`;
+
+        await db.notification.createMany({
+          data: recipientsList.map((userId) => ({
+            userId,
+            title: `${statusName} Completed`,
+            message: `${statusName}${vehicleNo} has been marked as completed. Reference: ${reference}.`,
+            type: 'COMPLETION_ALERT',
+            locationId: updatedStage.locationId,
+            gateEntryId: updatedStage.gateEntryId,
+            jobCardId: updatedStage.jobCardId,
+            processStageTrackingId: updatedStage.id,
+            sentAt: null,
+            retryCount: 0
+          }))
+        });
+      }
+    }
+  }
+
+  return updatedStage;
 };
 
 const cancelStage = async ({

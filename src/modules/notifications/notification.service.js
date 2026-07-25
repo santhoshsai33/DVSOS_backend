@@ -41,6 +41,11 @@ async function getUserNotifications(userId, limit = 20, offset = 0, unreadOnly =
           select: {
             slug: true,
             jobCardNo: true,
+            vehicle: {
+              select: {
+                registrationNo: true
+              }
+            },
             customer: {
               select: {
                 mobileNo: true,
@@ -54,6 +59,11 @@ async function getUserNotifications(userId, limit = 20, offset = 0, unreadOnly =
             slug: true,
             gateEntryNo: true,
             entryType: true,
+            vehicle: {
+              select: {
+                registrationNo: true
+              }
+            },
             customer: {
               select: {
                 mobileNo: true,
