@@ -860,69 +860,143 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
   };
 };
 
-const parseApprovalReply = (body) => {
-  const text = String(body || '').trim().toUpperCase();
-  const match = text.match(/\b(YES|Y|APPROVE|APPROVED|NO|N|REJECT|REJECTED)\b[\s:#-]*([A-Z]{2}\d{6})\b/);
+const parseApprovalReply = (reqOrBody) => {
+  const bodyObj = typeof reqOrBody === 'object' && reqOrBody !== null ? (reqOrBody.body || reqOrBody) : {};
+  const textFields = [
+    bodyObj.Body,
+    bodyObj.ButtonText,
+    bodyObj.ButtonPayload,
+    bodyObj.Text,
+    typeof reqOrBody === 'string' ? reqOrBody : ''
+  ];
+  const rawText = textFields.filter(Boolean).join(' ').trim().toUpperCase();
 
-  if (!match) {
+  const isApproved = /\b(YES|Y|APPROVE|APPROVED|OK|1|CONFIRM|PROCEED|AGREE)\b/i.test(rawText);
+  const isRejected = /\b(NO|N|REJECT|REJECTED|CANCEL|2|STOP|DECLINE|DISAGREE)\b/i.test(rawText);
+
+  if (!isApproved && !isRejected) {
     throw createHttpError(400, 'Could not parse approval response');
   }
 
-  const responseWord = match[1];
+  const decision = isApproved ? 'APPROVED' : 'REJECTED';
+  const codeMatch = rawText.match(/\b([A-Z]{2}\d{6})\b/i);
+  const approvalCode = codeMatch ? codeMatch[1].toUpperCase() : null;
+
   return {
-    decision: ['YES', 'Y', 'APPROVE', 'APPROVED'].includes(responseWord) ? 'APPROVED' : 'REJECTED',
-    approvalCode: match[2]
+    decision,
+    approvalCode,
+    responseText: rawText || decision
   };
 };
 
 const handleTwilioWebhook = async (req) => {
   await ensureAdditionalWorkSchema();
 
+  // Ignore Twilio message delivery status callbacks (e.g. sent, delivered, read)
+  if (req.body && req.body.MessageStatus && !req.body.Body && !req.body.ButtonPayload && !req.body.ButtonText) {
+    return {
+      alreadyResponded: false,
+      message: 'Status callback ignored'
+    };
+  }
+
   // if (!validateTwilioRequest(req)) {
   //   throw createHttpError(403, 'Invalid Twilio signature');
   // }
 
-  const { decision, approvalCode } = parseApprovalReply(req.body && req.body.Body);
+  const { decision, approvalCode, responseText } = parseApprovalReply(req);
 
   return prisma.$transaction(async (tx) => {
-    const approval = await tx.jobCardApproval.findFirst({
-      where: {
-        approvalCode,
-        approvalType: APPROVAL_TYPE_ADDITIONAL_WORK
-      },
-      include: {
-        jobCard: {
-          include: {
-            workAssignments: {
-              where: { completedAt: null },
-              include: {
-                jobCardService: {
-                  include: {
-                    serviceItem: {
-                      include: {
-                        category: true
-                      }
+    let approval = null;
+
+    const includeOptions = {
+      jobCard: {
+        include: {
+          workAssignments: {
+            where: { completedAt: null },
+            orderBy: { id: 'desc' },
+            include: {
+              jobCardService: {
+                include: {
+                  serviceItem: {
+                    include: {
+                      category: true
                     }
                   }
                 }
               }
             }
           }
-        },
-        status: true,
-        services: {
-          include: {
-            approvalStatus: true,
-            serviceStatus: true,
-            serviceItem: {
-              include: {
-                category: true
-              }
+        }
+      },
+      status: true,
+      services: {
+        include: {
+          approvalStatus: true,
+          serviceStatus: true,
+          serviceItem: {
+            include: {
+              category: true
             }
           }
         }
       }
-    });
+    };
+
+    if (approvalCode) {
+      approval = await tx.jobCardApproval.findFirst({
+        where: {
+          approvalCode: approvalCode.toUpperCase(),
+          approvalType: APPROVAL_TYPE_ADDITIONAL_WORK
+        },
+        include: includeOptions
+      });
+    } else {
+      const fromNumber = String(req.body?.From || '').replace(/\D/g, '');
+      const mobileDigits = fromNumber.length >= 10 ? fromNumber.slice(-10) : null;
+
+      if (mobileDigits) {
+        approval = await tx.jobCardApproval.findFirst({
+          where: {
+            approvalType: APPROVAL_TYPE_ADDITIONAL_WORK,
+            status: {
+              is: {
+                statusCode: 'PENDING'
+              }
+            },
+            jobCard: {
+              is: {
+                customer: {
+                  is: {
+                    OR: [
+                      { mobileNo: { contains: mobileDigits } },
+                      { alternateMobileNo: { contains: mobileDigits } }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          include: includeOptions
+        });
+      }
+
+      if (!approval) {
+        approval = await tx.jobCardApproval.findFirst({
+          where: {
+            approvalType: APPROVAL_TYPE_ADDITIONAL_WORK,
+            status: {
+              is: {
+                statusCode: 'PENDING'
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          include: includeOptions
+        });
+      }
+    }
 
     if (!approval) {
       throw createHttpError(404, 'Approval request not found');
@@ -945,7 +1019,7 @@ const handleTwilioWebhook = async (req) => {
       where: { id: approval.id },
       data: {
         statusId: approvalStatus.id,
-        customerResponse: String(req.body.Body || '').trim(),
+        customerResponse: responseText || String(req.body?.Body || '').trim(),
         respondedAt: now,
         modifiedById: null
       }
@@ -1041,7 +1115,7 @@ const handleTwilioWebhook = async (req) => {
       approval: toApprovalResource(updatedApproval),
       alreadyResponded: false
     };
-  });
+  }, { maxWait: 20000, timeout: 50000 });
 };
 
 module.exports = {
