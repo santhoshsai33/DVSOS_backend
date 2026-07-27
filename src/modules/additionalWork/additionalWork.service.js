@@ -867,14 +867,18 @@ const parseApprovalReply = (reqOrBody) => {
     bodyObj.ButtonText,
     bodyObj.ButtonPayload,
     bodyObj.Text,
+    bodyObj.ListResponse,
+    bodyObj.Title,
+    bodyObj.Payload,
     typeof reqOrBody === 'string' ? reqOrBody : ''
   ];
   const rawText = textFields.filter(Boolean).join(' ').trim().toUpperCase();
 
-  const isApproved = /\b(YES|Y|APPROVE|APPROVED|OK|1|CONFIRM|PROCEED|AGREE)\b/i.test(rawText);
-  const isRejected = /\b(NO|N|REJECT|REJECTED|CANCEL|2|STOP|DECLINE|DISAGREE)\b/i.test(rawText);
+  const isApproved = /\b(YES|Y|OK|1|CONFIRM|PROCEED|AGREE)\b/i.test(rawText) || /APPROV/i.test(rawText);
+  const isRejected = /\b(NO|N|CANCEL|2|STOP|DECLINE|DISAGREE)\b/i.test(rawText) || /REJECT/i.test(rawText);
 
   if (!isApproved && !isRejected) {
+    console.warn('Twilio approval parsing failed. Received payload:', JSON.stringify(bodyObj));
     throw createHttpError(400, 'Could not parse approval response');
   }
 
