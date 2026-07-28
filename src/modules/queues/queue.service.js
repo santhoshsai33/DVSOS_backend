@@ -21,7 +21,7 @@ const syncJobCardStageTracking = async (tx, jobCardId, oldStatusId, newStatusId,
   if (oldStatusId) {
     await completeStage({
       jobCardId: jobCard.id,
-      moduleId: newStatus.moduleId, 
+      moduleId: newStatus.moduleId,
       statusId: oldStatusId,
       modifiedById: user?.userId || null
     }, tx);
@@ -147,7 +147,14 @@ const isRejectedAdditionalService = (service) => {
 
 const isCompletedStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
-  return code === 'COMPLETED' || code.endsWith('_COMPLETED');
+  return (
+    code === 'COMPLETED' ||
+    code.endsWith('_COMPLETED') ||
+    code === 'REJECTED' ||
+    code.endsWith('_REJECTED') ||
+    code === 'CANCELLED' ||
+    code.endsWith('_CANCELLED')
+  );
 };
 
 const getDepartmentServices = (jobCard, department) => {
@@ -193,7 +200,9 @@ const isJobCardServiceCompleted = (service) => {
 };
 
 const areAllJobCardServicesCompleted = (jobCard) => {
-  const services = jobCard.services || [];
+  const services = (jobCard.services || []).filter((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
   return services.length > 0 && services.every(isJobCardServiceCompleted);
 };
 
@@ -234,7 +243,7 @@ const isDepartmentPostponed = (jobCard, department) => {
     return isApprovedForWork(service) && !isRejectedAdditionalService(service);
   });
   if (services.length === 0) return false;
-  
+
   const hasPostponed = services.some(service => getStatusCode(service.serviceStatus) === 'POSTPONED');
   const allPostponedOrCompleted = services.every(service => {
     return getStatusCode(service.serviceStatus) === 'POSTPONED' || isServiceCompleted(service, department);
@@ -250,7 +259,7 @@ const getActiveQueueDepartment = (jobCard) => {
   for (const dept of DEPARTMENT_ORDER) {
     if (!hasDepartmentServicesAvailableForWork(jobCard, dept)) continue;
     if (areDepartmentServicesCompleted(jobCard, dept)) continue;
-    
+
     if (isDepartmentPostponed(jobCard, dept)) {
       if (!firstPostponed) firstPostponed = dept;
       continue;
@@ -271,7 +280,7 @@ const getActiveQueueDepartment = (jobCard) => {
 
 const canShowInDepartmentQueue = (jobCard, department) => {
   if (!isJobCardActiveForQueue(jobCard)) return false;
-  
+
   const activeDept = getActiveQueueDepartment(jobCard);
   if (activeDept !== department) return false;
 
@@ -1143,7 +1152,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
             for (let i = 0; i < currentDeptIndex; i++) {
               const earlierDept = DEPARTMENT_ORDER[i];
               const earlierServices = getDepartmentServices(latestJobCard, earlierDept);
-              
+
               for (const service of earlierServices) {
                 if (getStatusCode(service.serviceStatus) === 'POSTPONED') {
                   // Revert to PENDING
@@ -1174,7 +1183,7 @@ const updateAssignmentStatus = async (assignmentId, payload, user) => {
             }
           }
         }
-        
+
         // await tx.jobCardStatusLog.create({
         //   data: {
         //     jobCardId: assignment.jobCardId,

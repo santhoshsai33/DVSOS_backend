@@ -101,16 +101,32 @@ const getVehicleById = async (idOrSlug, user) => {
     throw new Error('Unauthorized to view this Vehicle');
   }
 
-  // Fetch media files (images) associated with this vehicle
+  // Fetch media files (images) associated with this vehicle, excluding customer signatures
   const mediaFiles = await prisma.mediaFile.findMany({
     where: {
       moduleName: 'Vehicle',
-      moduleRecordId: vehicle.id
+      moduleRecordId: vehicle.id,
+      category: {
+        notIn: ['SIGNATURE', 'signature', 'Signature']
+      }
     },
     orderBy: { createdAt: 'desc' }
   });
 
-  const signedMediaFiles = mediaFiles.map(mediaFile => {
+  const vehiclePhotoFiles = mediaFiles.filter((m) => {
+    const cat = String(m.category || '').toUpperCase();
+    const fname = String(m.fileName || '').toLowerCase();
+    const url = String(m.fileUrl || '').toLowerCase();
+    return (
+      cat !== 'SIGNATURE' &&
+      !fname.includes('signature') &&
+      !fname.includes('sign_') &&
+      !fname.includes('sign-') &&
+      !url.includes('signature')
+    );
+  });
+
+  const signedMediaFiles = vehiclePhotoFiles.map(mediaFile => {
     let fileUrl = mediaFile.fileUrl;
     if (storageProvider.isConfigured && mediaFile.blobName) {
       try {

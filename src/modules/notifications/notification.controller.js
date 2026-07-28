@@ -29,14 +29,14 @@ async function registerDeviceToken(req, res, next) {
 
 async function removeDeviceToken(req, res, next) {
   try {
-    const { token } = req.body;
-    if (!token) {
-      const error = new Error('Device token is required');
+    const { token, deviceId } = req.body;
+    if (!token && !deviceId) {
+      const error = new Error('Device token or deviceId is required');
       error.statusCode = 400;
       throw error;
     }
 
-    await notificationService.deactivateDeviceToken(token);
+    await notificationService.deactivateDeviceToken(token, deviceId);
 
     return apiResponse(res, {
       statusCode: 200,

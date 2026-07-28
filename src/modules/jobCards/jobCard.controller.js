@@ -22,17 +22,16 @@ const getJobCards = async (req, res, next) => {
 
       // Format response data matching UI rendering
       const formattedData = result.jobCards.map(item => {
-        const displayItem = jobCardService.toJobCardListResponse(item, req.query.department || req.query.category);
         return {
-          jobCardNo: displayItem.jobCardNo,
-          vehicleNumber: displayItem.vehicle?.registrationNo || '',
-          ownerName: displayItem.customer?.fullName || '',
-          ownerMobile: displayItem.customer?.mobileNo || '',
-          technician: displayItem.technician || 'Unassigned',
-          bayName: displayItem.bay?.bayName || displayItem.bay?.bayCode || 'Unassigned',
-          totalEstimate: displayItem.totalEstimate || 0,
-          status: displayItem.currentStatus?.statusCode || 'PENDING',
-          createdAt: displayItem.createdAt ? new Date(displayItem.createdAt).toLocaleString() : ''
+          jobCardNo: item.jobCardNo,
+          vehicleNumber: item.vehicle?.registrationNo || '',
+          ownerName: item.customer?.fullName || '',
+          ownerMobile: item.customer?.mobileNo || '',
+          technician: item.technician || (item.assignedMechanics?.length > 0 ? item.assignedMechanics.map(m => m.fullName).join(', ') : 'Unassigned'),
+          bayName: item.bay?.bayName || item.bay?.bayCode || item.assignedBay?.bayName || item.assignedBay?.bayCode || 'Unassigned',
+          totalEstimate: item.totalEstimate || 0,
+          status: item.currentStatus?.statusCode || 'PENDING',
+          createdAt: item.createdAt ? new Date(item.createdAt).toLocaleString() : ''
         };
       });
 

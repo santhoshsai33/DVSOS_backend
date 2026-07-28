@@ -1,15 +1,30 @@
 const prisma = require('../../config/db');
 
-/**
- * Upsert a device token for a user.
- */
 async function upsertDeviceToken(userId, { token, platform = null, deviceId = null }) {
+  const normalizedDeviceId = String(deviceId || '').trim();
+
+  if (normalizedDeviceId) {
+    await prisma.userDeviceToken.updateMany({
+      where: {
+        deviceId: normalizedDeviceId,
+        token: {
+          not: token
+        },
+        isActive: true
+      },
+      data: {
+        isActive: false,
+        lastUsedAt: new Date()
+      }
+    });
+  }
+
   return prisma.userDeviceToken.upsert({
     where: { token },
     update: {
       userId,
       platform,
-      deviceId,
+      deviceId: normalizedDeviceId || null,
       isActive: true,
       lastUsedAt: new Date()
     },
@@ -17,7 +32,7 @@ async function upsertDeviceToken(userId, { token, platform = null, deviceId = nu
       userId,
       token,
       platform,
-      deviceId,
+      deviceId: normalizedDeviceId || null,
       isActive: true,
       lastUsedAt: new Date()
     }
@@ -152,10 +167,16 @@ async function getManagersWithTokens() {
 
 /**
  * Deactivate a device token (e.g. if invalid or client logged out).
+ * Supports deactivating by token or by deviceId.
  */
-async function deactivateDeviceToken(token) {
+async function deactivateDeviceToken(token, deviceId = null) {
+  const normalizedDeviceId = String(deviceId || '').trim();
+  const where = normalizedDeviceId && !token
+    ? { deviceId: normalizedDeviceId, isActive: true }
+    : { token };
+
   return prisma.userDeviceToken.updateMany({
-    where: { token },
+    where,
     data: {
       isActive: false,
       lastUsedAt: new Date()

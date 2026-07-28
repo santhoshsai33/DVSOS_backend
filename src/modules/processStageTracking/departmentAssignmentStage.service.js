@@ -48,7 +48,14 @@ const isApprovedForWork = (service) => {
 
 const isCompletedStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
-  return code === 'COMPLETED' || code.endsWith('_COMPLETED');
+  return (
+    code === 'COMPLETED' ||
+    code.endsWith('_COMPLETED') ||
+    code === 'REJECTED' ||
+    code.endsWith('_REJECTED') ||
+    code === 'CANCELLED' ||
+    code.endsWith('_CANCELLED')
+  );
 };
 
 const getDepartmentServices = (jobCard, department) => {
@@ -105,6 +112,20 @@ const isDepartmentSkipped = (jobCard, department) => {
   return tracking && String(tracking.stageStatus).trim().toUpperCase() === 'SKIPPED';
 };
 
+const isDepartmentPostponed = (jobCard, department) => {
+  const services = getDepartmentServices(jobCard, department).filter((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
+  if (services.length === 0) return false;
+
+  const hasPostponed = services.some(service => getStatusCode(service.serviceStatus) === 'POSTPONED');
+  const allPostponedOrCompleted = services.every(service => {
+    return getStatusCode(service.serviceStatus) === 'POSTPONED' || isJobCardServiceCompleted(service);
+  });
+
+  return hasPostponed && allPostponedOrCompleted;
+};
+
 const canStartAssignmentPendingForDepartment = (jobCard, department) => {
   const currentStatusCode = getStatusCode(jobCard && jobCard.currentStatus);
   const approvalStatusCode = getStatusCode(jobCard && jobCard.approvalStatus);
@@ -134,6 +155,7 @@ const canStartAssignmentPendingForDepartment = (jobCard, department) => {
   return previousDepartments.every((previousDepartment) => {
     return !hasDepartmentServicesAvailableForWork(jobCard, previousDepartment)
       || areDepartmentServicesCompleted(jobCard, previousDepartment)
+      || isDepartmentPostponed(jobCard, previousDepartment)
       || isDepartmentSkipped(jobCard, previousDepartment);
   });
 };

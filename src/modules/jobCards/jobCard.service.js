@@ -341,7 +341,14 @@ const isApprovedForWork = (service) => {
 
 const isCompletedStatusCode = (statusCode) => {
   const code = String(statusCode || '').trim().toUpperCase();
-  return code === 'COMPLETED' || code.endsWith('_COMPLETED');
+  return (
+    code === 'COMPLETED' ||
+    code.endsWith('_COMPLETED') ||
+    code === 'REJECTED' ||
+    code.endsWith('_REJECTED') ||
+    code === 'CANCELLED' ||
+    code.endsWith('_CANCELLED')
+  );
 };
 
 const isPostponedStatusCode = (statusCode) => {
@@ -392,7 +399,9 @@ const isJobCardServiceInProgress = (service) => {
 };
 
 const areAllJobCardServicesCompleted = (jobCard) => {
-  const services = jobCard.services || [];
+  const services = (jobCard.services || []).filter((service) => {
+    return isApprovedForWork(service) && !isRejectedAdditionalService(service);
+  });
   return services.length > 0 && services.every(isJobCardServiceCompleted);
 };
 
@@ -459,6 +468,9 @@ const syncAssignmentsForServiceStatus = async (tx, service, serviceStatus, user)
 
   const assignments = service.workAssignments || [];
   if (assignments.length === 0) {
+    if (['REJECTED', 'CANCELLED', 'POSTPONED'].some((status) => serviceStatusCode.includes(status))) {
+      return;
+    }
     throw createHttpError(400, 'Service must be assigned before work status can be updated');
   }
 
@@ -1241,6 +1253,9 @@ const updateJobCard = async (id, payload, user) => {
         jobCardId,
         approvalStatus: {
           statusCode: { not: 'REJECTED' }
+        },
+        serviceStatus: {
+          statusCode: { notIn: ['REJECTED', 'CANCELLED'] }
         }
       },
       select: {
