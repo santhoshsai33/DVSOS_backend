@@ -430,8 +430,23 @@ const toQueueResponse = (jobCard, department) => {
   const services = getDepartmentServices(jobCard, department)
     .filter((service) => isApprovedForWork(service) && !isRejectedAdditionalService(service));
 
+  const currentDeptIndex = DEPARTMENT_ORDER.indexOf(department);
+  let canSkip = false;
+  if (currentDeptIndex >= 0) {
+    for (let i = currentDeptIndex + 1; i < DEPARTMENT_ORDER.length; i++) {
+      const downstreamDept = DEPARTMENT_ORDER[i];
+      if (downstreamDept === 'water-wash') continue;
+      const hasServices = (jobCard.services || []).some((s) => getServiceDepartment(s) === downstreamDept);
+      if (hasServices) {
+        canSkip = true;
+        break;
+      }
+    }
+  }
+
   return {
     jobCardId: jobCard.id,
+    canSkip,
     jobCardNo: jobCard.jobCardNo,
     vehicleNo: jobCard.vehicle ? jobCard.vehicle.registrationNo : null,
     customerName: jobCard.customer ? jobCard.customer.fullName : null,

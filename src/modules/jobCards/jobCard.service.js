@@ -1696,10 +1696,11 @@ const skipJobCardDepartment = async (jobCardId, departmentSlug, reason, user) =>
 
     const currentDeptIndex = DEPARTMENT_ORDER.indexOf(targetDepartment);
     
-    // Check if there are services in downstream departments
+    // Check if there are services in downstream departments (excluding water-wash)
     let hasDownstreamServices = false;
     for (let i = currentDeptIndex + 1; i < DEPARTMENT_ORDER.length; i++) {
       const downstreamDept = DEPARTMENT_ORDER[i];
+      if (downstreamDept === 'water-wash') continue;
       const hasServices = jobCard.services.some(s => {
         let sDept = null;
         const sNormalizedValue = normalizeText(s.serviceItem?.category?.slug || s.serviceItem?.category?.name);
@@ -1718,7 +1719,7 @@ const skipJobCardDepartment = async (jobCardId, departmentSlug, reason, user) =>
     }
 
     if (!hasDownstreamServices) {
-      throw createHttpError(400, 'Cannot skip this department because there are no downstream services required for this job card.');
+      throw createHttpError(400, 'Cannot skip this department because Water Wash is the only remaining stage, or no downstream services exist.');
     }
 
     // 3. Find all services for the TARGET department that are NOT completed/cancelled
