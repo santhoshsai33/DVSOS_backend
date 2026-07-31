@@ -1,6 +1,5 @@
 const jobCardService = require('./jobCard.service');
 const { apiResponse } = require('../../common/utils/apiResponse');
-
 const { exportToExcel } = require('../../common/utils/excel.util');
 
 const getJobCards = async (req, res, next) => {
@@ -130,7 +129,7 @@ const postponeService = async (req, res, next) => {
   try {
     const { id, serviceId } = req.params;
     const { reason } = req.body;
-    
+
     if (!reason) {
       return apiResponse(res, { statusCode: 400, success: false, message: 'Reason is required for postponing' });
     }

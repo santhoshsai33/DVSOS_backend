@@ -92,7 +92,7 @@ const getAdminDashboard = async ({ recentUserLimit = 5 } = {}) => {
 const getDateRange = (timeframe) => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
+
   let startDate = today;
   let endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
@@ -105,7 +105,7 @@ const getDateRange = (timeframe) => {
   } else if (timeframe === 'all_time') {
     startDate = new Date(2000, 0, 1); // Way in the past
   }
-  
+
   return { startDate, endDate };
 };
 
@@ -129,7 +129,7 @@ const getMdDashboard = async ({ timeframe = 'today', locationId } = {}) => {
     where: dateFilter
   });
   const totalRevenue = revenueResult._sum.finalAmount || 0;
-  
+
   const userWhere = locationId ? { locationId } : {};
   const totalUsers = await prisma.user.count({ where: userWhere });
 
@@ -169,7 +169,7 @@ const getMdDashboard = async ({ timeframe = 'today', locationId } = {}) => {
       dayData.count++;
     }
   });
-  
+
   const todayDate = new Date().toLocaleDateString('en-CA');
   dailyThroughput.forEach(d => {
     if (d.fullDate === todayDate) {
@@ -181,7 +181,7 @@ const getMdDashboard = async ({ timeframe = 'today', locationId } = {}) => {
   const allStatuses = await prisma.statusMaster.findMany({
     where: { module: { moduleCode: 'job-card' } }
   });
-  
+
   const statusCounts = await prisma.jobCard.groupBy({
     by: ['currentStatusId'],
     _count: true,
@@ -219,7 +219,7 @@ const getMdDashboard = async ({ timeframe = 'today', locationId } = {}) => {
     if (!deptMap[catName]) {
       deptMap[catName] = { department: catName, active: 0, queue: 0, done: 0, totalTime: 0, doneCount: 0 };
     }
-    
+
     const statusCode = wa.status?.statusCode || '';
     if (statusCode.includes('ASSIGNED')) {
       deptMap[catName].queue++;
@@ -227,7 +227,7 @@ const getMdDashboard = async ({ timeframe = 'today', locationId } = {}) => {
       deptMap[catName].active++;
     } else if (statusCode.includes('COMPLETED')) {
       deptMap[catName].done++;
-      
+
       if (wa.startedAt && wa.completedAt) {
         const timeDiff = new Date(wa.completedAt).getTime() - new Date(wa.startedAt).getTime();
         deptMap[catName].totalTime += timeDiff;
@@ -274,13 +274,13 @@ const getMdDashboard = async ({ timeframe = 'today', locationId } = {}) => {
       }
     }
   });
-  
+
   departmentPerformance.push({
     department: 'Job Card',
     active: jcActive,
     queue: jcQueue,
     done: jcDone,
-    avgTime: '-' 
+    avgTime: '-'
   });
 
   // 5. Revenue Breakdown
@@ -512,7 +512,7 @@ const getManagerDashboard = async ({ locationId, page = 1, limit = 5 } = {}) => 
     } else if (statusCode.includes('COMPLETED') || statusCode === 'READY_FOR_DELIVERY' || statusCode === 'DELIVERED') {
       completedPipelineCount++;
     }
-    
+
     let stageTone = 'info';
     let displayStage = statusName;
 
@@ -573,10 +573,10 @@ const getManagerDashboard = async ({ locationId, page = 1, limit = 5 } = {}) => 
 
   return {
     kpis: [
-      { label: 'Total Today', value: totalTodayCount, color: '#12343B', iconBg: '#E9EEF1' },
-      { label: 'Completed', value: completedTodayCount, color: '#22C7B8', iconBg: '#E8FAF8' },
+      { label: 'Total JC Today', value: totalTodayCount, color: '#12343B', iconBg: '#E9EEF1' },
+      { label: 'JC Completed', value: completedTodayCount, color: '#22C7B8', iconBg: '#E8FAF8' },
       { label: 'JC Pending', value: jcPendingCount, color: '#D97706', iconBg: '#FFF4E5' },
-      { label: 'Delayed', value: delayedCount, color: '#0EA5E9', iconBg: '#EAF8FF' },
+      { label: 'JC Delayed', value: delayedCount, color: '#0EA5E9', iconBg: '#EAF8FF' },
     ],
     pipeline: [
       { label: 'Gate / JC Pending', value: gatePendingCount, meta: 'Awaiting job card', color: '#D97706', bg: '#FFF7ED' },
@@ -639,7 +639,7 @@ const getBodyShopDashboard = async ({ locationId } = {}) => {
   };
 
   // Filter for only job cards that have at least one body shop service
-  const bodyShopJobCards = allJobCards.filter(jc => 
+  const bodyShopJobCards = allJobCards.filter(jc =>
     jc.services?.some(isBodyShopService)
   );
 
@@ -771,7 +771,7 @@ const getWaterWashDashboard = async ({ locationId } = {}) => {
     return aliases.some(alias => catName.includes(alias));
   };
 
-  const waterWashJobCards = allJobCards.filter(jc => 
+  const waterWashJobCards = allJobCards.filter(jc =>
     jc.services?.some(isWaterWashService)
   );
 
@@ -864,7 +864,7 @@ const getTvKioskDashboard = async ({ locationId } = {}) => {
     where: {
       ...dateFilter,
       currentStatus: {
-        statusCode: { 
+        statusCode: {
           notIn: [
             'DELIVERED',
             'GATE_ENTRY_CREATED',
@@ -891,7 +891,7 @@ const getTvKioskDashboard = async ({ locationId } = {}) => {
 
   const queue = allJobCards.map(jc => {
     const statusCode = jc.currentStatus?.statusCode || '';
-    
+
     let column = 'MECHANICAL';
     if (statusCode === 'READY_FOR_DELIVERY' || statusCode.includes('DELIVERY')) {
       column = 'READY_FOR_DELIVERY';

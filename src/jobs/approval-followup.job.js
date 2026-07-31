@@ -5,9 +5,6 @@ const prisma = require('../config/db');
 let isRegistered = false;
 let isProcessing = false;
 
-/**
- * Resolve CRM Team recipients at the location.
- */
 async function resolveCrmRecipients(locationId, jobCard) {
   const recipients = new Set();
 
@@ -101,7 +98,7 @@ async function runApprovalFollowupWorkflow() {
         // Determine allowed minutes based on approval type
         let limitMinutes = DEFAULT_APPROVAL_LIMIT_MINUTES;
         const approvalType = String(approval.approvalType || '').toUpperCase();
-        
+
         // Find limit matching approvalType as stageCode or statusId
         if (approval.statusId && limitsByStatusId[approval.statusId]) {
           limitMinutes = limitsByStatusId[approval.statusId].allowedMinutes;
@@ -123,7 +120,7 @@ async function runApprovalFollowupWorkflow() {
             // Check if notification already exists to avoid spamming
             const isAdditional = approvalType.includes('ADDITIONAL') || approvalType.includes('ADD_WORK');
             const notificationType = isAdditional ? 'ADDITIONAL_WORK_TIMEOUT' : 'APPROVAL_TIMEOUT';
-            
+
             const existingNotification = await prisma.notification.findFirst({
               where: {
                 userId: recipientId,
