@@ -16,6 +16,7 @@ const locationSelect = {
   longitude: true,
   contactPhone: true,
   contactEmail: true,
+  kioskKey: true,
   isActive: true,
   createdById: true,
   modifiedById: true,
@@ -102,6 +103,7 @@ const baseService = createAdminMasterService({
     { name: 'longitude', type: 'decimal' },
     { name: 'contactPhone', type: 'string' },
     { name: 'contactEmail', type: 'string' },
+    { name: 'kioskKey', type: 'string' },
     { name: 'isActive', type: 'boolean' }
   ],
   hasIsActive: true,

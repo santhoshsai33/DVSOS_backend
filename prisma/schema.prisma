@@ -76,6 +76,7 @@ model Location {
   longitude             Decimal?               @db.Decimal(11, 8)
   contactPhone          String?                @map("contact_phone") @db.NVarChar(20)
   contactEmail          String?                @map("contact_email") @db.NVarChar(150)
+  kioskKey              String?                @map("kiosk_key") @db.NVarChar(100)
   isActive              Boolean                @default(true) @map("is_active")
   createdById           Int?                   @map("created_by")
   modifiedById          Int?                   @map("modified_by")

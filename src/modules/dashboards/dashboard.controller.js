@@ -89,7 +89,7 @@ const getWaterWashDashboard = async (req, res, next) => {
 
 const getTvKioskDashboard = async (req, res, next) => {
   try {
-    const locationId = req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null);
+    const locationId = req.kioskLocationId || (req.query.locationId ? parseInt(req.query.locationId) : (req.user?.locationId || null));
     const dashboard = await dashboardService.getTvKioskDashboard(locationId);
 
     return apiResponse(res, {

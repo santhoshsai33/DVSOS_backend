@@ -83,6 +83,7 @@ router.use('/crm/bays', crmBayRoutes);
 router.use('/storage', storageRoutes);
 
 // Kiosk routes
-router.get('/kiosk/tv', require('../modules/dashboards/dashboard.controller').getTvKioskDashboard);
+const { validateKioskKey } = require('../common/middleware/kioskAuth.middleware');
+router.get('/kiosk/tv', validateKioskKey, require('../modules/dashboards/dashboard.controller').getTvKioskDashboard);
 
 module.exports = router;
