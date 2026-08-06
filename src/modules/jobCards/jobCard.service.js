@@ -748,12 +748,14 @@ const listJobCards = async (query, user) => {
     };
   }
 
+  const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
+
   const [jobCards, total] = await Promise.all([
     prisma.jobCard.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: sortOrder },
       include: {
         customer: {
           select: { id: true, fullName: true, mobileNo: true }

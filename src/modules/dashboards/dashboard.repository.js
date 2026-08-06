@@ -405,6 +405,7 @@ const getFloorSupervisorDashboard = async ({ locationId } = {}) => {
     return {
       id: jc.id,
       slug: jc.slug || jc.jobCardNo,
+      jobCardNo: jc.jobCardNo,
       vehicleNo: jc.vehicle?.registrationNo || 'N/A',
       customer: {
         name: jc.customer?.fullName || 'Unknown',
@@ -556,6 +557,7 @@ const getManagerDashboard = async ({ locationId, page = 1, limit = 5 } = {}) => 
       id: jc.jobCardNo || jc.id, // Prefer jobCardNo if available
       rawId: jc.id,
       slug: jc.slug || jc.jobCardNo,
+      jobCardNo: jc.jobCardNo,
       vehicleNumber: jc.vehicle?.registrationNo || 'N/A',
       ownerName: jc.customer?.fullName || 'Unknown',
       ownerMobile: jc.customer?.mobileNo || 'N/A',
@@ -692,6 +694,7 @@ const getBodyShopDashboard = async ({ locationId } = {}) => {
       id: jc.jobCardNo || jc.id,
       rawId: jc.id,
       slug: jc.slug || jc.jobCardNo,
+      jobCardNo: jc.jobCardNo,
       vehicleNumber: jc.vehicle?.registrationNo || 'N/A',
       customerName: jc.customer?.fullName || 'Unknown',
       phone: jc.customer?.mobileNo || 'N/A',
@@ -827,6 +830,7 @@ const getWaterWashDashboard = async ({ locationId } = {}) => {
       id: jc.jobCardNo || jc.id,
       rawId: jc.id,
       slug: jc.slug || jc.jobCardNo,
+      jobCardNo: jc.jobCardNo,
       vehicleNumber: jc.vehicle?.registrationNo || 'N/A',
       customer: jc.customer?.fullName || 'Unknown',
       mobile: jc.customer?.mobileNo || 'N/A',
@@ -911,6 +915,7 @@ const getTvKioskDashboard = async ({ locationId } = {}) => {
     return {
       id: jc.jobCardNo || jc.id,
       rawId: jc.id,
+      jobCardNo: jc.jobCardNo,
       vehicleNumber: jc.vehicle?.registrationNo || 'N/A',
       customerName: jc.customer?.fullName || 'Unknown',
       vehicleInfo: `${jc.vehicle?.brand?.name || ''} ${jc.vehicle?.model || ''}`.trim() || 'Unknown',
