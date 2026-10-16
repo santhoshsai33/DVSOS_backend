@@ -70,6 +70,137 @@ const resolveJobCard = async (identifier) => {
   });
 };
 
+const syncExistingApprovalsToChat = async (jobCard, existingRow, currentMessages) => {
+  try {
+    const approvals = await prisma.jobCardApproval.findMany({
+      where: {
+        jobCardId: jobCard.id,
+        approvalType: 'ADDITIONAL_WORK'
+      },
+      include: {
+        services: {
+          include: {
+            serviceItem: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (!approvals || approvals.length === 0) return currentMessages;
+
+    let updated = false;
+    let mergedMessages = [...currentMessages];
+
+    for (const approval of approvals) {
+      if (!approval.approvalCode) continue;
+
+      const hasRequest = mergedMessages.some(m => m.text && m.text.includes(approval.approvalCode));
+      if (!hasRequest) {
+        const customerName = jobCard.customer?.fullName || 'Customer';
+        const vehicleNo = jobCard.vehicle?.registrationNo || 'your vehicle';
+        const serviceLines = (approval.services || []).map((service, index) => {
+          const lineTotal = Number(service.price || 0) * Number(service.quantity || 1);
+          const serviceName = service.serviceItem?.name || service.serviceName || service.name || 'Service';
+          return `${index + 1}. ${serviceName} x${service.quantity || 1} - Rs. ${lineTotal.toLocaleString('en-IN')}`;
+        });
+
+        const approvalMessageText = [
+          'Additional Work Approval Required 🔧',
+          `Hello ${customerName}, your vehicle ${vehicleNo} needs approval for additional work.`,
+          '',
+          `Job Card: ${jobCard.jobCardNo}`,
+          `Approval Code: ${approval.approvalCode}`,
+          '',
+          'Services Required:',
+          ...serviceLines,
+          '',
+          approval.mechanicExplanation ? `Mechanic Note: ${approval.mechanicExplanation}` : null,
+          `Total Amount: Rs. ${Number(approval.totalAmount || 0).toLocaleString('en-IN')}`
+        ].filter(Boolean).join('\n');
+
+        const requestMessage = {
+          id: `aw-${approval.id}-${approval.approvalCode}`,
+          sender: 'ADVISOR',
+          senderName: 'Service Advisor',
+          text: approvalMessageText,
+          mediaUrl: approval.voice_note_url || null,
+          time: (approval.sentAt || approval.createdAt || new Date()).toISOString()
+        };
+
+        mergedMessages.push(requestMessage);
+        updated = true;
+      }
+
+      if (approval.customerResponse && approval.respondedAt) {
+        const hasResponse = mergedMessages.some(m =>
+          m.sender === 'CUSTOMER' &&
+          (m.text === approval.customerResponse || (approval.approvalCode && m.text && m.text.includes(approval.approvalCode)))
+        );
+        if (!hasResponse) {
+          const responseMessage = {
+            id: `aw-res-${approval.id}`,
+            sender: 'CUSTOMER',
+            senderName: jobCard.customer?.fullName || 'Customer',
+            text: approval.customerResponse,
+            time: approval.respondedAt.toISOString()
+          };
+          mergedMessages.push(responseMessage);
+          updated = true;
+        }
+      }
+    }
+
+    if (updated) {
+      mergedMessages.sort((a, b) => new Date(a.time || 0) - new Date(b.time || 0));
+      const lastMsg = mergedMessages[mergedMessages.length - 1];
+      const updatedJson = JSON.stringify(mergedMessages);
+      const now = new Date();
+
+      if (existingRow) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE dbo.job_card_chats
+           SET messages_json = @P1,
+               last_message_text = @P2,
+               last_sender_type = @P3,
+               last_message_at = @P4,
+               updated_at = @P5
+           WHERE job_card_id = @P6`,
+          updatedJson,
+          String(lastMsg?.text || '').substring(0, 490),
+          lastMsg?.sender || 'SYSTEM',
+          lastMsg?.time ? new Date(lastMsg.time) : now,
+          now,
+          jobCard.id
+        );
+      } else {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO dbo.job_card_chats (
+             job_card_id, customer_id, customer_mobile, unread_count,
+             last_message_text, last_sender_type, last_message_at,
+             messages_json, created_at, updated_at
+           ) VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9, @P10)`,
+          jobCard.id,
+          jobCard.customerId || 0,
+          jobCard.customer?.mobileNo || '',
+          0,
+          String(lastMsg?.text || '').substring(0, 490),
+          lastMsg?.sender || 'SYSTEM',
+          lastMsg?.time ? new Date(lastMsg.time) : now,
+          updatedJson,
+          now,
+          now
+        );
+      }
+    }
+
+    return mergedMessages;
+  } catch (err) {
+    console.warn('[Chat] Failed to sync approvals to chat:', err.message);
+    return currentMessages;
+  }
+};
+
 const getChatByJobCard = async (identifier) => {
   await ensureChatSchema();
   const jobCard = await resolveJobCard(identifier);
@@ -95,6 +226,9 @@ const getChatByJobCard = async (identifier) => {
     }
   }
 
+  messages = await syncExistingApprovalsToChat(jobCard, row, Array.isArray(messages) ? messages : []);
+  const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+
   return {
     jobCardId: jobCard.id,
     jobCardNo: jobCard.jobCardNo,
@@ -104,9 +238,9 @@ const getChatByJobCard = async (identifier) => {
     customerMobile: jobCard.customer?.mobileNo || row?.customer_mobile || '',
     vehicleNo: jobCard.vehicle?.registrationNo || '',
     unreadCount: row?.unread_count || 0,
-    lastMessageText: row?.last_message_text || null,
-    lastSenderType: row?.last_sender_type || null,
-    lastMessageAt: row?.last_message_at || null,
+    lastMessageText: lastMsg ? lastMsg.text : (row?.last_message_text || null),
+    lastSenderType: lastMsg ? lastMsg.sender : (row?.last_sender_type || null),
+    lastMessageAt: lastMsg?.time ? new Date(lastMsg.time) : (row?.last_message_at || null),
     messages: Array.isArray(messages) ? messages : []
   };
 };

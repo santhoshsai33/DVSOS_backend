@@ -952,18 +952,40 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
       explanation: result.explanation,
       voiceNoteUrl: result.voiceNoteUrl
     });
-    const maskedMobile = customerMobile ? `${customerMobile.slice(0, 3)}****${customerMobile.slice(-4)}` : 'N/A';
+    const maskedMobile = realCustomerMobile ? `${realCustomerMobile.slice(0, 3)}****${realCustomerMobile.slice(-4)}` : 'N/A';
     console.log('[WhatsApp Success] Sent message to:', maskedMobile, '| SID:', twilioRes?.sid || 'N/A');
 
     try {
-      const serviceNames = (result.services || []).map(s => s.serviceItem?.name || s.serviceName || 'Service').join(', ');
+      const customerName = result.jobCard.customer?.fullName || 'Customer';
+      const vehicleNo = result.jobCard.vehicle?.registrationNo || 'your vehicle';
+      const serviceLines = (result.services || []).map((service, index) => {
+        const lineTotal = Number(service.price || 0) * Number(service.quantity || 1);
+        const serviceName = service.serviceItem?.name || service.serviceName || service.name || 'Service';
+        return `${index + 1}. ${serviceName} x${service.quantity || 1} - Rs. ${lineTotal.toLocaleString('en-IN')}`;
+      });
+
+      const approvalMessageText = [
+        'Additional Work Approval Required 🔧',
+        `Hello ${customerName}, your vehicle ${vehicleNo} needs approval for additional work.`,
+        '',
+        `Job Card: ${result.jobCard.jobCardNo}`,
+        `Approval Code: ${result.approval.approvalCode}`,
+        '',
+        'Services Required:',
+        ...serviceLines,
+        '',
+        result.explanation ? `Mechanic Note: ${result.explanation}` : null,
+        `Total Amount: Rs. ${Number(result.approval.totalAmount || 0).toLocaleString('en-IN')}`
+      ].filter(Boolean).join('\n');
+
       await chatService.addMessageToChat({
         jobCardId: result.jobCard.id,
         customerId: result.jobCard.customerId,
-        customerMobile: customerMobile || result.jobCard.customer?.mobileNo,
-        senderType: 'SYSTEM',
-        senderName: 'Susee System',
-        text: `Additional work estimate requested: ${serviceNames} (Total: Rs. ${Number(result.approval.totalAmount || 0).toLocaleString('en-IN')}) - Approval Code: ${result.approval.approvalCode}`
+        customerMobile: realCustomerMobile,
+        senderType: 'ADVISOR',
+        senderName: 'Service Advisor',
+        text: approvalMessageText,
+        mediaUrl: result.voiceNoteUrl || null
       });
     } catch (chatErr) {
       console.warn('[Chat] Failed to sync request to chat history:', chatErr.message);
