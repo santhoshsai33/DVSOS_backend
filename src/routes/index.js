@@ -19,6 +19,8 @@ const {
   crmGateEntryRoutes
 } = require('../modules/mobileGateEntry/mobileGateEntry.routes');
 const mobileJobCardRoutes = require('../modules/mobileJobCard/mobileJobCard.routes');
+const mobileAdditionalWorkRoutes = require('../modules/mobileAdditionalWork/mobileAdditionalWork.routes');
+const mobileAssignMechanicRoutes = require('../modules/mobileAssignMechanic/mobileAssignMechanic.routes');
 const roleMenuPermissionRoutes = require('../modules/roleMenuPermissions/roleMenuPermission.routes');
 const roleRoutes = require('../modules/roles/role.routes');
 const { serviceCategoryRoutes, crmServiceCategoryRoutes } = require('../modules/service-categories/service-category.routes');
@@ -30,6 +32,7 @@ const jobCardRoutes = require('../modules/jobCards/jobCard.routes');
 const queueRoutes = require('../modules/queues/queue.routes');
 const approvalRoutes = require('../modules/approvals/approval.routes');
 const storageRoutes = require('../modules/storage/storage.routes');
+const chatRoutes = require('../modules/chat/chat.routes');
 
 const webGateEntryRoutes = require('../modules/webGateEntries/webGateEntries.routes');
 const notificationRoutes = require('../modules/notifications/notification.routes');
@@ -59,6 +62,8 @@ router.use('/health', healthRoutes);
 router.use('/menus', menuRoutes);
 router.use('/mobile/gate-entry', mobileGateEntryRoutes);
 router.use('/mobile/job-cards', mobileJobCardRoutes);
+router.use('/mobile/additional-work', mobileAdditionalWorkRoutes);
+router.use('/mobile/assign-mechanic', mobileAssignMechanicRoutes);
 router.use('/crm/gate-entries', crmGateEntryRoutes);
 router.use('/gate-entries', webGateEntryRoutes);
 router.use('/roles', roleRoutes);
@@ -81,6 +86,7 @@ router.use('/crm/brands', crmBrandRoutes);
 router.use('/bays', bayRoutes);
 router.use('/crm/bays', crmBayRoutes);
 router.use('/storage', storageRoutes);
+router.use('/chat', chatRoutes);
 
 // Kiosk routes
 const { validateKioskKey } = require('../common/middleware/kioskAuth.middleware');
