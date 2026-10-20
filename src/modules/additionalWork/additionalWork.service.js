@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../../config/db');
+const env = require('../../config/env');
 const { STATUS_MODULE_CODES, resolveStatusFromCodes, resolveStatusIdFromCodes } = require('../../common/utils/status.util');
 const { validateTwilioRequest, sendAdditionalWorkApproval } = require('../../providers/whatsapp/whatsapp.service');
 const { createStorageProvider } = require('../../providers/storage/storage.provider');
@@ -1028,28 +1029,104 @@ const parseApprovalReply = (reqOrBody) => {
   };
 };
 
+const fetchAndStoreIncomingMedia = async (mediaUrl, contentType) => {
+  if (!mediaUrl) return null;
+  try {
+    const authHeader = 'Basic ' + Buffer.from(`${env.twilio.accountSid}:${env.twilio.authToken}`).toString('base64');
+    const response = await fetch(mediaUrl, {
+      headers: {
+        Authorization: authHeader
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`[Twilio Webhook] Failed to download media (${response.status}):`, response.statusText);
+      return mediaUrl;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    let mimeType = contentType || 'audio/ogg';
+    let extension = '.ogg';
+    if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+      mimeType = 'audio/mp4';
+      extension = '.m4a';
+    } else if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
+      mimeType = 'audio/mpeg';
+      extension = '.mp3';
+    } else if (mimeType.includes('wav')) {
+      mimeType = 'audio/wav';
+      extension = '.wav';
+    } else if (mimeType.includes('amr')) {
+      mimeType = 'audio/amr';
+      extension = '.amr';
+    } else if (mimeType.includes('ogg')) {
+      mimeType = 'audio/ogg';
+      extension = '.ogg';
+    } else if (mimeType.includes('image/jpeg')) {
+      mimeType = 'image/jpeg';
+      extension = '.jpg';
+    } else if (mimeType.includes('image/png')) {
+      mimeType = 'image/png';
+      extension = '.png';
+    }
+
+    if (storageProvider && typeof storageProvider.uploadBuffer === 'function' && storageProvider.isConfigured) {
+      const uploadRes = await storageProvider.uploadBuffer(buffer, {
+        folder: 'chat-audio',
+        mimeType,
+        extension
+      });
+
+      if (uploadRes?.public_id) {
+        try {
+          return storageProvider.generateSasUrl(uploadRes.public_id, 86400 * 30);
+        } catch (sasErr) {
+          return uploadRes.url;
+        }
+      }
+      return uploadRes?.url || mediaUrl;
+    }
+
+    return mediaUrl;
+  } catch (err) {
+    console.error('[Twilio Webhook] Error caching incoming media to storage:', err?.message || err);
+    return mediaUrl;
+  }
+};
+
 const handleTwilioWebhook = async (req) => {
   await ensureAdditionalWorkSchema();
 
+  const numMedia = parseInt(req.body?.NumMedia || '0', 10);
+  const mediaUrl0 = req.body?.MediaUrl0 || null;
+  const mediaContentType0 = req.body?.MediaContentType0 || '';
+
   // Ignore Twilio message delivery status callbacks (e.g. sent, delivered, read)
-  if (req.body && req.body.MessageStatus && !req.body.Body && !req.body.ButtonPayload && !req.body.ButtonText) {
+  if (req.body && req.body.MessageStatus && !req.body.Body && !req.body.ButtonPayload && !req.body.ButtonText && numMedia === 0) {
     return {
       alreadyResponded: false,
       message: 'Status callback ignored'
     };
   }
 
-  // if (!validateTwilioRequest(req)) {
-  //   throw createHttpError(403, 'Invalid Twilio signature');
-  // }
+  // Pre-fetch incoming media if customer sent voice note or media attachment
+  let incomingMediaUrl = null;
+  if (numMedia > 0 && mediaUrl0) {
+    incomingMediaUrl = await fetchAndStoreIncomingMedia(mediaUrl0, mediaContentType0);
+  }
 
   const { decision, approvalCode, responseText } = parseApprovalReply(req);
 
-  // If customer sent a message that is not YES/NO (e.g. "Hello", "What about service", questions)
+  // If customer sent a message that is not YES/NO (e.g. "Hello", "What about service", voice note, questions)
   if (!decision) {
     const fromNumber = String(req.body?.From || '').replace(/\D/g, '');
     const mobileDigits = fromNumber.length >= 10 ? fromNumber.slice(-10) : null;
-    const incomingText = req.body?.Body || responseText || '';
+    let incomingText = req.body?.Body || responseText || '';
+    if (!incomingText && incomingMediaUrl) {
+      incomingText = mediaContentType0.startsWith('audio/') ? '🎤 Voice message' : '📎 Attachment';
+    }
 
     // Find active job card for this customer phone
     const activeJobCard = mobileDigits ? await chatService.findActiveJobCardByMobile(mobileDigits) : null;
@@ -1061,12 +1138,13 @@ const handleTwilioWebhook = async (req) => {
         customerMobile: mobileDigits || activeJobCard.customer?.mobileNo,
         senderType: 'CUSTOMER',
         senderName: req.body?.ProfileName || activeJobCard.customer?.fullName || 'Customer',
-        text: incomingText
+        text: incomingText,
+        mediaUrl: incomingMediaUrl
       });
     }
 
     // Check if the user is asking specifically about how to approve or first greeting
-    const isGreeting = /^(HI|HELLO|HEY|HELP)\b/i.test(incomingText.trim());
+    const isGreeting = /^(HI|HELLO|HEY|HELP)\b/i.test((incomingText || '').trim());
 
     // Only send automated approval instructions if it's an initial greeting / help query
     // Otherwise, allow natural two-way chat so advisor can reply without bot spamming customer
@@ -1319,7 +1397,8 @@ const handleTwilioWebhook = async (req) => {
         customerMobile: approval.jobCard.customer?.mobileNo,
         senderType: 'CUSTOMER',
         senderName: req.body?.ProfileName || 'Customer',
-        text: responseText || decision
+        text: responseText || decision || (incomingMediaUrl ? '🎤 Voice message' : ''),
+        mediaUrl: incomingMediaUrl
       });
       await chatService.addMessageToChat({
         jobCardId: approval.jobCardId,

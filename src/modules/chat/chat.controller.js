@@ -20,13 +20,15 @@ const getChat = async (req, res, next) => {
 const sendReply = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { text } = req.body;
+    const { text, audioData, mediaUrl } = req.body;
     const userId = req.user?.id;
     const userName = req.user?.fullName || req.user?.name || 'Service Advisor';
 
     const result = await chatService.sendAdvisorReply({
       jobCardId: id,
       text,
+      audioData,
+      mediaUrl,
       userId,
       userName
     });

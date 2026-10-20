@@ -264,6 +264,7 @@ const addMessageToChat = async ({
   const numericJobCardId = Number(jobCardId);
   const numericCustomerId = Number(customerId || 0);
   const cleanMobile = String(customerMobile || '').trim();
+  const summaryText = cleanText || (mediaUrl ? '🎤 Voice message' : '');
 
   const newMessage = {
     id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -309,7 +310,7 @@ const addMessageToChat = async ({
            updated_at = @P6
        WHERE job_card_id = @P7`,
       updatedJson,
-      cleanText.substring(0, 490),
+      summaryText.substring(0, 490),
       senderType,
       now,
       newUnreadCount,
@@ -327,7 +328,7 @@ const addMessageToChat = async ({
       numericCustomerId,
       cleanMobile,
       isCustomer ? 1 : 0,
-      cleanText.substring(0, 490),
+      summaryText.substring(0, 490),
       senderType,
       now,
       updatedJson,
@@ -356,7 +357,7 @@ const addMessageToChat = async ({
   };
 };
 
-const sendAdvisorReply = async ({ jobCardId, text, userId, userName }) => {
+const sendAdvisorReply = async ({ jobCardId, text, audioData, mediaUrl, userId, userName }) => {
   const jobCard = await resolveJobCard(jobCardId);
   if (!jobCard) {
     const error = new Error('Job Card not found');
@@ -371,9 +372,20 @@ const sendAdvisorReply = async ({ jobCardId, text, userId, userName }) => {
     throw error;
   }
 
+  let resolvedMediaUrl = mediaUrl || null;
+  if (audioData && typeof audioData === 'string' && audioData.startsWith('data:')) {
+    try {
+      const { createStorageProvider } = require('../../providers/storage/storage.provider');
+      const storageProvider = createStorageProvider();
+      resolvedMediaUrl = await storageProvider.uploadDataUrl(audioData, 'chat-audio');
+    } catch (uploadErr) {
+      console.error('[Chat Voice Note] Upload to storage failed:', uploadErr);
+    }
+  }
+
   const cleanText = String(text || '').trim();
-  if (!cleanText) {
-    const error = new Error('Message text cannot be empty');
+  if (!cleanText && !resolvedMediaUrl) {
+    const error = new Error('Message text or voice note is required');
     error.statusCode = 400;
     throw error;
   }
@@ -386,7 +398,8 @@ const sendAdvisorReply = async ({ jobCardId, text, userId, userName }) => {
   // 1. Send to WhatsApp via Twilio (routed to sandbox registered test phone in trial mode)
   await sendWhatsAppMessage({
     to: targetMobile,
-    body: cleanText
+    body: cleanText || (resolvedMediaUrl ? 'Voice message' : ''),
+    mediaUrl: resolvedMediaUrl ? [resolvedMediaUrl] : undefined
   });
 
   // 2. Persist in Chat History with the REAL customer's mobile and details for display
@@ -396,7 +409,8 @@ const sendAdvisorReply = async ({ jobCardId, text, userId, userName }) => {
     customerMobile: customerMobile,
     senderType: 'ADVISOR',
     senderName: userName || 'Service Advisor',
-    text: cleanText
+    text: cleanText || (resolvedMediaUrl ? 'Voice message' : ''),
+    mediaUrl: resolvedMediaUrl
   });
 
   return result;

@@ -24,7 +24,7 @@ const startServer = async () => {
     // Start background jobs
     // startApprovalFollowupJob(); // Disabled: Additional Work / Approval Timeout notifications
     startProcessStageDelayMonitorJob();
-    
+
     try {
       startFcmSenderJob();
     } catch (jobErr) {
@@ -39,6 +39,12 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+console.log("DB URL loaded:", !!process.env.DATABASE_URL);
+console.log(
+  "DB host:",
+  process.env.DATABASE_URL?.match(/^sqlserver:\/\/([^:;]+)/)?.[1]
+);
 
 const shutdown = async (signal) => {
   console.info(`${signal} received. Shutting down server.`);
