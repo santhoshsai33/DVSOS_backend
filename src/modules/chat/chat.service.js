@@ -472,11 +472,114 @@ const findActiveJobCardByMobile = async (rawMobile) => {
   return jobCard;
 };
 
+const listRecentChats = async ({ locationId, search, unreadOnly, limit = 50 } = {}) => {
+  await ensureChatSchema();
+
+  const conditions = [];
+  const params = [];
+  let paramIndex = 1;
+
+  if (locationId) {
+    conditions.push(`j.location_id = @P${paramIndex++}`);
+    params.push(Number(locationId));
+  }
+
+  if (unreadOnly) {
+    conditions.push(`c.unread_count > 0`);
+  }
+
+  if (search && search.trim()) {
+    const s = `%${search.trim()}%`;
+    const p1 = paramIndex++;
+    const p2 = paramIndex++;
+    const p3 = paramIndex++;
+    const p4 = paramIndex++;
+    conditions.push(`(
+      cust.full_name LIKE @P${p1} OR
+      c.customer_mobile LIKE @P${p2} OR
+      v.registration_no LIKE @P${p3} OR
+      j.job_card_no LIKE @P${p4}
+    )`);
+    params.push(s, s, s, s);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const sql = `
+    SELECT TOP (${Number(limit) || 50})
+      c.id,
+      c.job_card_id AS jobCardId,
+      c.customer_id AS customerId,
+      c.customer_mobile AS customerMobile,
+      c.unread_count AS unreadCount,
+      c.last_message_text AS lastMessageText,
+      c.last_sender_type AS lastSenderType,
+      c.last_message_at AS lastMessageAt,
+      j.job_card_no AS jobCardNo,
+      j.location_id AS locationId,
+      cust.full_name AS customerName,
+      v.registration_no AS vehicleNo,
+      b.name AS vehicleBrand
+    FROM dbo.job_card_chats c
+    INNER JOIN dbo.job_cards j ON c.job_card_id = j.id
+    LEFT JOIN dbo.customers cust ON c.customer_id = cust.id
+    LEFT JOIN dbo.vehicles v ON j.vehicle_id = v.id
+    LEFT JOIN dbo.vehicle_brands b ON v.brand_id = b.id
+    ${whereClause}
+    ORDER BY c.last_message_at DESC
+  `;
+
+  let rows = [];
+  try {
+    rows = await prisma.$queryRawUnsafe(sql, ...params);
+  } catch (err) {
+    console.error('[Chat] Failed to list recent chats:', err);
+    rows = [];
+  }
+
+  let totalUnreadCount = 0;
+  try {
+    let unreadCountSql = `
+      SELECT COALESCE(SUM(c.unread_count), 0) AS totalUnread
+      FROM dbo.job_card_chats c
+      INNER JOIN dbo.job_cards j ON c.job_card_id = j.id
+    `;
+    const unreadParams = [];
+    if (locationId) {
+      unreadCountSql += ` WHERE j.location_id = @P1`;
+      unreadParams.push(Number(locationId));
+    }
+    const unreadRows = await prisma.$queryRawUnsafe(unreadCountSql, ...unreadParams);
+    totalUnreadCount = unreadRows?.[0]?.totalUnread ? Number(unreadRows[0].totalUnread) : 0;
+  } catch (unreadErr) {
+    console.warn('[Chat] Failed to count total unread:', unreadErr);
+  }
+
+  return {
+    totalUnreadCount,
+    chats: (rows || []).map((r) => ({
+      id: r.id,
+      jobCardId: r.jobCardId,
+      jobCardNo: r.jobCardNo || '',
+      customerId: r.customerId,
+      customerName: r.customerName || 'Customer',
+      customerMobile: r.customerMobile || '',
+      vehicleNo: r.vehicleNo || 'N/A',
+      vehicleBrand: r.vehicleBrand || '',
+      unreadCount: Number(r.unreadCount || 0),
+      lastMessageText: r.lastMessageText || '',
+      lastSenderType: r.lastSenderType || 'SYSTEM',
+      lastMessageAt: r.lastMessageAt
+    }))
+  };
+};
+
 module.exports = {
   ensureChatSchema,
   getChatByJobCard,
   addMessageToChat,
   sendAdvisorReply,
   markChatAsRead,
-  findActiveJobCardByMobile
+  findActiveJobCardByMobile,
+  listRecentChats
 };

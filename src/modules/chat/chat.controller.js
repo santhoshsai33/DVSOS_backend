@@ -60,8 +60,32 @@ const markRead = async (req, res, next) => {
   }
 };
 
+const getRecentChats = async (req, res, next) => {
+  try {
+    const { locationId, search, unreadOnly, limit } = req.query;
+    const effectiveLocationId = req.user?.locationId || locationId;
+
+    const data = await chatService.listRecentChats({
+      locationId: effectiveLocationId,
+      search,
+      unreadOnly: unreadOnly === 'true',
+      limit
+    });
+
+    return apiResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Recent chats retrieved successfully',
+      data
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   getChat,
   sendReply,
-  markRead
+  markRead,
+  getRecentChats
 };
