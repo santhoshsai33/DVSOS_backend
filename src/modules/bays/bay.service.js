@@ -177,7 +177,13 @@ const createBay = async (payload, actorUserId) => {
     performedByUserId: actorUserId,
     recordName: bay.bayName,
     comments: 'Bay created',
-    locationId: bay.locationId
+    locationId: bay.locationId,
+    details: [
+      { fieldName: 'bayName', oldValue: null, newValue: bay.bayName, dataType: 'string' },
+      { fieldName: 'bayType', oldValue: null, newValue: bay.bayType, dataType: 'string' },
+      { fieldName: 'bayCode', oldValue: null, newValue: bay.bayCode, dataType: 'string' },
+      { fieldName: 'locationId', oldValue: null, newValue: bay.locationId, dataType: 'number' }
+    ]
   }).catch((err) => console.error('Failed to create audit log:', err));
 
   return bay;

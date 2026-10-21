@@ -60,7 +60,12 @@ const createBrand = async (payload, actorUserId) => {
     recordId: brand.id,
     actionType: 'CREATE',
     performedByUserId: actorUserId,
-    recordName: brand.name
+    recordName: brand.name,
+    comments: 'Brand created',
+    details: [
+      { fieldName: 'name', oldValue: null, newValue: brand.name, dataType: 'string' },
+      { fieldName: 'slug', oldValue: null, newValue: brand.slug, dataType: 'string' }
+    ]
   }).catch((err) => console.error('Failed to create audit log:', err));
 
   return brand;

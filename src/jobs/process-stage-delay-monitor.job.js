@@ -43,7 +43,23 @@ const resolveRecipients = async (stage, limit) => {
     users.forEach(u => userIds.add(u.id));
   }
 
-  return Array.from(userIds);
+  if (userIds.size === 0) {
+    return [];
+  }
+
+  // Filter out Admin / Super Admin users so operational delay alerts are not sent to administrators
+  const eligibleUsers = await prisma.user.findMany({
+    where: {
+      id: { in: Array.from(userIds) },
+      isActive: true,
+      role: {
+        slug: { notIn: ['admin', 'superadmin', 'super_admin'] }
+      }
+    },
+    select: { id: true }
+  });
+
+  return eligibleUsers.map(u => u.id);
 };
 
 const shouldNotifyStage = (stage, limit, now) => {

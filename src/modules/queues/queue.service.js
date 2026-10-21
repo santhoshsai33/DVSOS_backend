@@ -635,7 +635,8 @@ const assignWork = async (jobCardId, payload, user) => {
         ...(jobCard.locationId ? { locationId: jobCard.locationId } : {})
       },
       select: {
-        id: true
+        id: true,
+        fullName: true
       }
     });
 
@@ -808,11 +809,16 @@ const assignWork = async (jobCardId, payload, user) => {
       tableName: 'work_assignments',
       recordId: jobCard.id,
       actionType: 'CREATE',
-      performedByUserId: user && user.userId ? user.userId : null,
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
       recordName: jobCard.jobCardNo,
-      comments: `Work assigned to user ${assignedUserId}`,
+      comments: `Work assigned to ${assignedUser.fullName || assignedUserId}`,
       locationId: jobCard.locationId,
-      details: []
+      details: [
+        { fieldName: 'mechanic', oldValue: null, newValue: assignedUser.fullName || String(assignedUserId), dataType: 'string' },
+        { fieldName: 'bay', oldValue: null, newValue: bay.bayName, dataType: 'string' },
+        { fieldName: 'department', oldValue: null, newValue: department, dataType: 'string' },
+        { fieldName: 'status', oldValue: null, newValue: 'ASSIGNED', dataType: 'string' }
+      ]
     });
 
     return {
@@ -850,7 +856,8 @@ const reassignWork = async (jobCardId, payload, user) => {
         ...(jobCard.locationId ? { locationId: jobCard.locationId } : {})
       },
       select: {
-        id: true
+        id: true,
+        fullName: true
       }
     });
 
@@ -933,6 +940,30 @@ const reassignWork = async (jobCardId, payload, user) => {
         .map((assignment) => assignment.bayId)
     ));
 
+    const previousAssignment = departmentServices
+      .flatMap((service) => service.workAssignments || [])
+      .find((assignment) => !assignment.completedAt && assignment.assignedUserId);
+
+    let oldUserName = null;
+    let oldBayName = null;
+
+    if (previousAssignment) {
+      if (previousAssignment.assignedUserId) {
+        const oldUser = await tx.user.findUnique({
+          where: { id: previousAssignment.assignedUserId },
+          select: { fullName: true }
+        });
+        oldUserName = oldUser?.fullName || String(previousAssignment.assignedUserId);
+      }
+      if (previousAssignment.bayId) {
+        const oldBayRecord = await tx.bay.findUnique({
+          where: { id: previousAssignment.bayId },
+          select: { bayName: true }
+        });
+        oldBayName = oldBayRecord?.bayName || String(previousAssignment.bayId);
+      }
+    }
+
     await tx.workAssignment.updateMany({
       where: {
         id: {
@@ -999,11 +1030,30 @@ const reassignWork = async (jobCardId, payload, user) => {
       tableName: 'work_assignments',
       recordId: jobCard.id,
       actionType: 'UPDATE',
-      performedByUserId: user && user.userId ? user.userId : null,
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
       recordName: jobCard.jobCardNo,
-      comments: `Work reassigned to user ${assignedUserId}`,
+      comments: `Work reassigned from ${oldUserName || 'previous mechanic'} to ${assignedUser.fullName || assignedUserId}`,
       locationId: jobCard.locationId,
-      details: []
+      details: [
+        {
+          fieldName: 'mechanic',
+          oldValue: oldUserName,
+          newValue: assignedUser.fullName || String(assignedUserId),
+          dataType: 'string'
+        },
+        {
+          fieldName: 'bay',
+          oldValue: oldBayName,
+          newValue: bay.bayName,
+          dataType: 'string'
+        },
+        {
+          fieldName: 'department',
+          oldValue: department,
+          newValue: department,
+          dataType: 'string'
+        }
+      ]
     });
 
     return {
@@ -1416,6 +1466,22 @@ const completeWaterWashWork = async (jobCardId, user) => {
       modifiedById: user?.userId || null
     });
 
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'job_cards',
+      recordId: jobCard.id,
+      actionType: 'WATER_WASH_COMPLETE',
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
+      recordName: jobCard.jobCardNo,
+      comments: 'Water wash completed',
+      locationId: jobCard.locationId,
+      details: [
+        { fieldName: 'department', oldValue: 'water-wash', newValue: 'water-wash', dataType: 'string' },
+        { fieldName: 'status', oldValue: 'In Progress', newValue: 'Completed', dataType: 'string' }
+      ]
+    });
+
     const io = getSocket();
     if (io) {
       io.to(`location_${jobCard.locationId}`).emit('queueUpdate', {
@@ -1528,6 +1594,22 @@ const startWaterWashWork = async (jobCardId, user) => {
         }
       });
     }
+
+    await createAuditLog(tx, {
+      moduleCode: 'work-assignments',
+      moduleName: 'Work Assignments',
+      tableName: 'job_cards',
+      recordId: jobCard.id,
+      actionType: 'WATER_WASH_START',
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
+      recordName: jobCard.jobCardNo,
+      comments: 'Water wash started',
+      locationId: jobCard.locationId,
+      details: [
+        { fieldName: 'department', oldValue: 'water-wash', newValue: 'water-wash', dataType: 'string' },
+        { fieldName: 'status', oldValue: 'Pending', newValue: 'In Progress', dataType: 'string' }
+      ]
+    });
 
     const io = getSocket();
     if (io) {

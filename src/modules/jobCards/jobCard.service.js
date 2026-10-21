@@ -2,7 +2,7 @@ const prisma = require('../../config/db');
 const { getSocket } = require('../../config/socket');
 const { STATUS_MODULE_CODES, statusModuleFilter, resolveStatusById, resolveStatusFromCodes, resolveStatusIdFromCodes, resolveOrEnsureStatus } = require('../../common/utils/status.util');
 const { normalizeVehicleNumber } = require('../../utils/normalizeVehicleNumber');
-const { createAuditLog } = require('../../common/utils/audit.util');
+const { createAuditLog, buildChangeDetails } = require('../../common/utils/audit.util');
 const { DEPARTMENT_ORDER, DEPARTMENT_ALIASES, normalizeDepartment, getServiceDepartment } = require('../../common/utils/department.util');
 const { syncAssignmentPendingStages, skipDepartmentAssignmentPendingStage } = require('../processStageTracking/departmentAssignmentStage.service');
 const { startStage, completeStage } = require('../processStageTracking/processStageTracking.service');
@@ -1732,6 +1732,9 @@ const updateJobCard = async (id, payload, user) => {
       currentStatus: {
         select: { id: true, statusCode: true, statusName: true }
       },
+      approvalStatus: {
+        select: { id: true, statusCode: true, statusName: true }
+      },
       services: {
         include: {
           workAssignments: {
@@ -1759,6 +1762,9 @@ const updateJobCard = async (id, payload, user) => {
         customer: true,
         vehicle: true,
         currentStatus: {
+          select: { id: true, statusCode: true, statusName: true }
+        },
+        approvalStatus: {
           select: { id: true, statusCode: true, statusName: true }
         },
         services: {
@@ -2295,17 +2301,80 @@ const updateJobCard = async (id, payload, user) => {
       }
     });
 
+    const fieldsToTrack = [
+      'customerComplaint',
+      'additionalNotes',
+      'expectedDeliveryAt',
+      'serviceSubtotal',
+      'taxRate',
+      'taxAmount',
+      'discountAmount',
+      'finalAmount',
+      'totalEstimate'
+    ];
+    const details = buildChangeDetails(existingJobCard, updatedJobCard, fieldsToTrack);
+
+    if (existingJobCard.currentStatus?.statusName !== updatedJobCard.currentStatus?.statusName) {
+      details.push({
+        fieldName: 'status',
+        oldValue: existingJobCard.currentStatus?.statusName || null,
+        newValue: updatedJobCard.currentStatus?.statusName || null,
+        dataType: 'string'
+      });
+    }
+
+    if (existingJobCard.approvalStatus?.statusName !== updatedJobCard.approvalStatus?.statusName) {
+      details.push({
+        fieldName: 'approvalStatus',
+        oldValue: existingJobCard.approvalStatus?.statusName || null,
+        newValue: updatedJobCard.approvalStatus?.statusName || null,
+        dataType: 'string'
+      });
+    }
+
+    if (existingJobCard.customer && updatedJobCard.customer) {
+      const customerDiff = buildChangeDetails(
+        existingJobCard.customer,
+        updatedJobCard.customer,
+        ['fullName', 'mobileNo', 'alternateMobileNo', 'emailId', 'address']
+      );
+      customerDiff.forEach((d) => {
+        details.push({
+          fieldName: `customer_${d.fieldName}`,
+          oldValue: d.oldValue,
+          newValue: d.newValue,
+          dataType: d.dataType
+        });
+      });
+    }
+
+    if (existingJobCard.vehicle && updatedJobCard.vehicle) {
+      const vehicleDiff = buildChangeDetails(
+        existingJobCard.vehicle,
+        updatedJobCard.vehicle,
+        ['registrationNo', 'model', 'variant', 'fuelType', 'vehicleColor']
+      );
+      vehicleDiff.forEach((d) => {
+        details.push({
+          fieldName: `vehicle_${d.fieldName}`,
+          oldValue: d.oldValue,
+          newValue: d.newValue,
+          dataType: d.dataType
+        });
+      });
+    }
+
     await createAuditLog(tx, {
       moduleCode: 'job-cards',
       moduleName: 'Job Cards',
       tableName: 'job_cards',
       recordId: updatedJobCard.id,
       actionType: 'UPDATE',
-      performedByUserId: user && user.userId ? user.userId : null,
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
       recordName: updatedJobCard.jobCardNo,
       comments: 'Job card updated',
       locationId: updatedJobCard.locationId,
-      details: []
+      details
     });
 
     return updatedJobCard;
@@ -2415,6 +2484,32 @@ const postponeJobCardService = async (jobCardId, serviceId, reason, user) => {
       });
     }
 
+    await createAuditLog(tx, {
+      moduleCode: 'job-cards',
+      moduleName: 'Job Cards',
+      tableName: 'job_card_services',
+      recordId: service.id,
+      actionType: 'POSTPONE',
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
+      recordName: `${service.jobCard?.jobCardNo || ''} - ${service.serviceName}`,
+      comments: `Service postponed: ${reason}`,
+      locationId: fullJobCard.locationId,
+      details: [
+        {
+          fieldName: 'status',
+          oldValue: service.serviceStatus?.statusName || 'Active',
+          newValue: 'Postponed',
+          dataType: 'string'
+        },
+        {
+          fieldName: 'reason',
+          oldValue: null,
+          newValue: reason,
+          dataType: 'string'
+        }
+      ]
+    });
+
     getSocket()?.emit('jobCardQueueUpdate', { locationId: fullJobCard.locationId });
 
     return fullJobCard;
@@ -2510,6 +2605,43 @@ const resumeJobCardService = async (jobCardId, serviceId, bayId, mechanicId, use
         data: { currentStatusId: newJobCardStatus.id }
       });
     }
+
+    const mechanic = await tx.user.findUnique({
+      where: { id: Number(mechanicId) },
+      select: { fullName: true }
+    });
+
+    await createAuditLog(tx, {
+      moduleCode: 'job-cards',
+      moduleName: 'Job Cards',
+      tableName: 'job_card_services',
+      recordId: service.id,
+      actionType: 'RESUME',
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
+      recordName: `${service.jobCard?.jobCardNo || ''} - ${service.serviceName}`,
+      comments: `Service resumed and assigned to ${mechanic?.fullName || mechanicId} in bay ${bay.bayName}`,
+      locationId: fullJobCard.locationId,
+      details: [
+        {
+          fieldName: 'status',
+          oldValue: 'Postponed',
+          newValue: 'Assigned',
+          dataType: 'string'
+        },
+        {
+          fieldName: 'mechanic',
+          oldValue: null,
+          newValue: mechanic?.fullName || String(mechanicId),
+          dataType: 'string'
+        },
+        {
+          fieldName: 'bay',
+          oldValue: null,
+          newValue: bay.bayName,
+          dataType: 'string'
+        }
+      ]
+    });
 
     getSocket()?.emit('jobCardQueueUpdate', { locationId: fullJobCard.locationId });
 
@@ -2699,6 +2831,32 @@ const skipJobCardDepartment = async (jobCardId, departmentSlug, reason, user) =>
 
       await syncAssignmentPendingStages(tx, { jobCard: updatedJobCard, actorUserId: user?.userId || null });
     }
+
+    await createAuditLog(tx, {
+      moduleCode: 'job-cards',
+      moduleName: 'Job Cards',
+      tableName: 'job_cards',
+      recordId: parsedJobCardId,
+      actionType: 'SKIP_DEPARTMENT',
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
+      recordName: jobCard.jobCardNo,
+      comments: `Department ${targetDepartment} skipped: ${reason}`,
+      locationId: jobCard.locationId,
+      details: [
+        {
+          fieldName: 'skippedDepartment',
+          oldValue: null,
+          newValue: targetDepartment,
+          dataType: 'string'
+        },
+        {
+          fieldName: 'reason',
+          oldValue: null,
+          newValue: reason,
+          dataType: 'string'
+        }
+      ]
+    });
 
     const socket = getSocket();
     if (socket) {

@@ -6,6 +6,7 @@ const { validateTwilioRequest, sendAdditionalWorkApproval } = require('../../pro
 const { createStorageProvider } = require('../../providers/storage/storage.provider');
 const { refreshJobCardStatus } = require('../jobCards/jobCard.service');
 const { DEPARTMENT_ORDER, DEPARTMENT_ALIASES, normalizeDepartment } = require('../../common/utils/department.util');
+const { createAuditLog } = require('../../common/utils/audit.util');
 const chatService = require('../chat/chat.service');
 
 const storageProvider = createStorageProvider();
@@ -927,6 +928,24 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
       }
     });
 
+    await createAuditLog(tx, {
+      moduleCode: 'additional-work',
+      moduleName: 'Additional Work',
+      tableName: 'job_card_approvals',
+      recordId: approval.id,
+      actionType: 'CREATE',
+      performedByUserId: user && (user.userId || user.id) ? (user.userId || user.id) : 1,
+      recordName: `${jobCard.jobCardNo} - ${approvalCode}`,
+      comments: `Additional work requested: ${createdServices.map((s) => s.serviceName).join(', ')}`,
+      locationId: jobCard.locationId,
+      details: [
+        { fieldName: 'approvalCode', oldValue: null, newValue: approvalCode, dataType: 'string' },
+        { fieldName: 'totalAmount', oldValue: null, newValue: totalAmount, dataType: 'number' },
+        { fieldName: 'services', oldValue: null, newValue: createdServices.map((s) => s.serviceName).join(', '), dataType: 'string' },
+        { fieldName: 'explanation', oldValue: null, newValue: explanation, dataType: 'string' }
+      ]
+    });
+
     return {
       jobCard,
       approval: updatedApproval,
@@ -1436,6 +1455,38 @@ const handleTwilioWebhook = async (req) => {
           }
         }
       }
+    });
+
+    await createAuditLog(tx, {
+      moduleCode: 'additional-work',
+      moduleName: 'Additional Work',
+      tableName: 'job_card_approvals',
+      recordId: approval.id,
+      actionType: decision === 'APPROVED' ? 'APPROVE' : 'REJECT',
+      performedByUserId: approval.createdById || approval.jobCard?.createdById || 1,
+      recordName: `${approval.jobCard?.jobCardNo || ''} - ${approval.approvalCode}`,
+      comments: `Additional work ${decision.toLowerCase()} by customer via WhatsApp`,
+      locationId: approval.jobCard?.locationId || null,
+      details: [
+        {
+          fieldName: 'status',
+          oldValue: 'PENDING',
+          newValue: decision,
+          dataType: 'string'
+        },
+        {
+          fieldName: 'customerResponse',
+          oldValue: null,
+          newValue: responseText || String(req.body?.Body || '').trim(),
+          dataType: 'string'
+        },
+        {
+          fieldName: 'finalAmount',
+          oldValue: approval.jobCard?.finalAmount,
+          newValue: finalAmount,
+          dataType: 'number'
+        }
+      ]
     });
 
     const actionText = decision === 'APPROVED' ? 'approved' : 'declined';
