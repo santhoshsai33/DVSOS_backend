@@ -102,6 +102,12 @@ const ensureChatSchema = async () => {
     schemaPromise = (async () => {
       try {
         await prisma.$executeRawUnsafe(CHAT_SCHEMA_SQL);
+        await prisma.$executeRawUnsafe(`
+          IF COL_LENGTH('dbo.job_card_chats', 'last_message_status') IS NULL
+          BEGIN
+            ALTER TABLE dbo.job_card_chats ADD last_message_status NVARCHAR(20) NULL;
+          END
+        `);
       } catch (err) {
         console.warn('[Chat] Schema ensure notice:', err.message);
       }
@@ -321,6 +327,7 @@ const getChatByJobCard = async (identifier) => {
     unreadCount: row?.unread_count || 0,
     lastMessageText: lastMsg ? lastMsg.text : (row?.last_message_text || null),
     lastSenderType: lastMsg ? lastMsg.sender : (row?.last_sender_type || null),
+    lastMessageStatus: lastMsg ? lastMsg.status : (row?.last_message_status || null),
     lastMessageAt: lastMsg?.time ? new Date(lastMsg.time) : (row?.last_message_at || null),
     messages: signedMessages
   };
@@ -335,7 +342,9 @@ const addMessageToChat = async ({
   text,
   mediaUrl,
   mediaType,
-  fileName
+  fileName,
+  twilioSid,
+  status
 }) => {
   await ensureChatSchema();
 
@@ -373,6 +382,8 @@ const addMessageToChat = async ({
   const provider = getStorageProvider();
   const extractedBlobName = extractBlobNameFromUrl(mediaUrl, provider?.config?.container);
 
+  const initialStatus = status || (senderType === 'ADVISOR' ? 'sent' : 'delivered');
+
   const newMessage = {
     id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     sender: senderType, // 'CUSTOMER' | 'ADVISOR' | 'SYSTEM'
@@ -382,7 +393,9 @@ const addMessageToChat = async ({
     mediaType: detectedMediaType || null,
     fileName: fileName || null,
     blobName: extractedBlobName || null,
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
+    twilioSid: twilioSid || null,
+    status: initialStatus
   };
 
   const rows = await prisma.$queryRawUnsafe(
@@ -417,14 +430,16 @@ const addMessageToChat = async ({
            last_sender_type = @P3,
            last_message_at = @P4,
            unread_count = @P5,
-           updated_at = @P6
-       WHERE job_card_id = @P7`,
+           updated_at = @P6,
+           last_message_status = @P7
+       WHERE job_card_id = @P8`,
       updatedJson,
       summaryText.substring(0, 490),
       senderType,
       now,
       newUnreadCount,
       now,
+      newMessage.status,
       numericJobCardId
     );
   } else {
@@ -432,8 +447,8 @@ const addMessageToChat = async ({
       `INSERT INTO dbo.job_card_chats (
          job_card_id, customer_id, customer_mobile, unread_count,
          last_message_text, last_sender_type, last_message_at,
-         messages_json, created_at, updated_at
-       ) VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9, @P10)`,
+         messages_json, created_at, updated_at, last_message_status
+       ) VALUES (@P1, @P2, @P3, @P4, @P5, @P6, @P7, @P8, @P9, @P10, @P11)`,
       numericJobCardId,
       numericCustomerId,
       cleanMobile,
@@ -443,7 +458,8 @@ const addMessageToChat = async ({
       now,
       updatedJson,
       now,
-      now
+      now,
+      newMessage.status
     );
   }
 
@@ -557,8 +573,9 @@ const sendAdvisorReply = async ({
   }
 
   // 1. Send to WhatsApp via Twilio
+  let twilioRes = null;
   try {
-    await sendWhatsAppMessage({
+    twilioRes = await sendWhatsAppMessage({
       to: targetMobile,
       body: fallbackBody,
       mediaUrl: resolvedMediaUrl ? [resolvedMediaUrl] : undefined
@@ -577,10 +594,122 @@ const sendAdvisorReply = async ({
     text: cleanText,
     mediaUrl: resolvedMediaUrl,
     mediaType: resolvedMediaType,
-    fileName: resolvedFileName
+    fileName: resolvedFileName,
+    twilioSid: twilioRes?.sid || null,
+    status: twilioRes?.status === 'delivered' ? 'delivered' : 'sent'
   });
 
   return result;
+};
+
+const updateMessageStatusByTwilioSid = async (twilioSid, incomingStatus) => {
+  if (!twilioSid) return false;
+  await ensureChatSchema();
+
+  const cleanSid = String(twilioSid).trim();
+  const rawStatus = String(incomingStatus || '').toLowerCase().trim();
+
+  // Normalize status to 'sent' | 'delivered' | 'read' | 'failed'
+  let normalizedStatus = 'sent';
+  if (rawStatus === 'read') {
+    normalizedStatus = 'read';
+  } else if (rawStatus === 'delivered') {
+    normalizedStatus = 'delivered';
+  } else if (rawStatus === 'sent' || rawStatus === 'queued' || rawStatus === 'sending') {
+    normalizedStatus = 'sent';
+  } else if (rawStatus === 'failed' || rawStatus === 'undelivered') {
+    normalizedStatus = 'failed';
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe(
+      `SELECT id, job_card_id, messages_json FROM dbo.job_card_chats WHERE messages_json LIKE @P1`,
+      `%${cleanSid}%`
+    );
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return false;
+    }
+
+    const row = rows[0];
+    let messages = [];
+    try {
+      messages = typeof row.messages_json === 'string'
+        ? JSON.parse(row.messages_json)
+        : row.messages_json;
+    } catch {
+      return false;
+    }
+
+    let updated = false;
+    let targetMessageId = null;
+    let isLastMsg = false;
+
+    // Priority ranking so we never regress status (e.g. delivered after read)
+    const statusPriority = {
+      failed: 0,
+      sent: 1,
+      delivered: 2,
+      read: 3
+    };
+
+    messages = messages.map((msg, idx) => {
+      if (msg && msg.twilioSid === cleanSid) {
+        targetMessageId = msg.id;
+        if (idx === messages.length - 1) {
+          isLastMsg = true;
+        }
+        const currentRank = statusPriority[msg.status] || 1;
+        const newRank = statusPriority[normalizedStatus] || 1;
+
+        if (newRank >= currentRank) {
+          updated = true;
+          return {
+            ...msg,
+            status: normalizedStatus
+          };
+        }
+      }
+      return msg;
+    });
+
+    if (updated) {
+      const updatedJson = JSON.stringify(messages);
+      if (isLastMsg) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE dbo.job_card_chats SET messages_json = @P1, last_message_status = @P2, updated_at = SYSUTCDATETIME() WHERE id = @P3`,
+          updatedJson,
+          normalizedStatus,
+          row.id
+        );
+      } else {
+        await prisma.$executeRawUnsafe(
+          `UPDATE dbo.job_card_chats SET messages_json = @P1, updated_at = SYSUTCDATETIME() WHERE id = @P2`,
+          updatedJson,
+          row.id
+        );
+      }
+
+      // Emit real-time status update to frontend
+      const io = getSocket();
+      if (io) {
+        const payload = {
+          jobCardId: row.job_card_id,
+          messageId: targetMessageId,
+          twilioSid: cleanSid,
+          status: normalizedStatus
+        };
+        io.to(`chat:job_card_${row.job_card_id}`).emit('chat:message_status_updated', payload);
+        io.emit('chat:message_status_updated', payload);
+        io.emit('chat:updated', payload);
+      }
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Chat] Failed to update message status by Twilio SID:', err.message);
+  }
+
+  return false;
 };
 
 const markChatAsRead = async (identifier) => {
@@ -681,6 +810,7 @@ const listRecentChats = async ({ locationId, search, unreadOnly, limit = 50 } = 
       c.unread_count AS unreadCount,
       c.last_message_text AS lastMessageText,
       c.last_sender_type AS lastSenderType,
+      c.last_message_status AS lastMessageStatus,
       c.last_message_at AS lastMessageAt,
       j.job_card_no AS jobCardNo,
       j.location_id AS locationId,
@@ -736,6 +866,7 @@ const listRecentChats = async ({ locationId, search, unreadOnly, limit = 50 } = 
       unreadCount: Number(r.unreadCount || 0),
       lastMessageText: r.lastMessageText || '',
       lastSenderType: r.lastSenderType || 'SYSTEM',
+      lastMessageStatus: r.lastMessageStatus || null,
       lastMessageAt: r.lastMessageAt
     }))
   };
@@ -746,6 +877,7 @@ module.exports = {
   getChatByJobCard,
   addMessageToChat,
   sendAdvisorReply,
+  updateMessageStatusByTwilioSid,
   markChatAsRead,
   findActiveJobCardByMobile,
   listRecentChats

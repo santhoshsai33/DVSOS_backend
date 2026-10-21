@@ -986,7 +986,9 @@ const createRequest = async (jobCardIdentifier, payload, user) => {
         senderType: 'ADVISOR',
         senderName: 'Service Advisor',
         text: approvalMessageText,
-        mediaUrl: result.voiceNoteUrl || null
+        mediaUrl: result.voiceNoteUrl || null,
+        twilioSid: twilioRes?.sid || null,
+        status: 'sent'
       });
     } catch (chatErr) {
       console.warn('[Chat] Failed to sync request to chat history:', chatErr.message);
@@ -1118,11 +1120,16 @@ const handleTwilioWebhook = async (req) => {
   const mediaUrl0 = req.body?.MediaUrl0 || null;
   const mediaContentType0 = req.body?.MediaContentType0 || '';
 
-  // Ignore Twilio message delivery status callbacks (e.g. sent, delivered, read)
+  // Handle Twilio message delivery status callbacks (e.g. sent, delivered, read)
   if (req.body && req.body.MessageStatus && !req.body.Body && !req.body.ButtonPayload && !req.body.ButtonText && numMedia === 0) {
+    const messageSid = req.body.MessageSid || req.body.SmsSid;
+    const messageStatus = req.body.MessageStatus || req.body.SmsStatus;
+    if (messageSid && messageStatus) {
+      await chatService.updateMessageStatusByTwilioSid(messageSid, messageStatus);
+    }
     return {
       alreadyResponded: false,
-      message: 'Status callback ignored'
+      message: `Status callback processed: ${messageStatus}`
     };
   }
 

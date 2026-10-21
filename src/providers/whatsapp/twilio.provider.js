@@ -21,7 +21,7 @@ const toTwilioProviderError = (error) => {
 };
 
 class TwilioProvider {
-  async sendWhatsAppMessage({ to, body, contentSid, contentVariables, mediaUrl }) {
+  async sendWhatsAppMessage({ to, body, contentSid, contentVariables, mediaUrl, statusCallback }) {
     const client = getTwilioClient();
     const from = normalizeWhatsAppSender(env.twilio.whatsappFrom);
 
@@ -34,6 +34,11 @@ class TwilioProvider {
         from,
         to
       };
+
+      const resolvedStatusCallback = statusCallback || env.twilio.statusCallbackUrl || null;
+      if (resolvedStatusCallback) {
+        messagePayload.statusCallback = resolvedStatusCallback;
+      }
 
       if (mediaUrl) {
         const urls = Array.isArray(mediaUrl) ? mediaUrl : [mediaUrl];

@@ -83,7 +83,8 @@ module.exports = {
     authToken: twilioAuthToken,
     whatsappFrom: twilioWhatsappFrom,
     whatsappContentSid: toTrimmedEnv(process.env.TWILIO_WHATSAPP_CONTENT_SID) || null,
-    testMobile: toTrimmedEnv(process.env.TWILIO_TEST_MOBILE) || '9952656498'
+    testMobile: toTrimmedEnv(process.env.TWILIO_TEST_MOBILE) || '9952656498',
+    statusCallbackUrl: toTrimmedEnv(process.env.TWILIO_STATUS_CALLBACK_URL) || null
   },
   smtp: {
     host: process.env.SMTP_HOST,

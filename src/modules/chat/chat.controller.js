@@ -99,9 +99,23 @@ const getRecentChats = async (req, res, next) => {
   }
 };
 
+const twilioStatusWebhook = async (req, res, next) => {
+  try {
+    const messageSid = req.body?.MessageSid || req.body?.SmsSid;
+    const messageStatus = req.body?.MessageStatus || req.body?.SmsStatus;
+    if (messageSid && messageStatus) {
+      await chatService.updateMessageStatusByTwilioSid(messageSid, messageStatus);
+    }
+    return res.status(200).send('OK');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 module.exports = {
   getChat,
   sendReply,
   markRead,
-  getRecentChats
+  getRecentChats,
+  twilioStatusWebhook
 };

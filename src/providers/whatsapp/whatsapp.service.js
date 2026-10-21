@@ -48,7 +48,7 @@ const ensureTwilioConfigured = () => {
   }
 };
 
-const sendWhatsAppMessage = async ({ to, body, contentSid, contentVariables, mediaUrl }) => {
+const sendWhatsAppMessage = async ({ to, body, contentSid, contentVariables, mediaUrl, statusCallback }) => {
   ensureTwilioConfigured();
 
   return provider.sendWhatsAppMessage({
@@ -56,7 +56,8 @@ const sendWhatsAppMessage = async ({ to, body, contentSid, contentVariables, med
     body,
     contentSid,
     contentVariables,
-    mediaUrl
+    mediaUrl,
+    statusCallback
   });
 };
 
