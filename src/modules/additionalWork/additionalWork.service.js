@@ -1017,17 +1017,34 @@ const parseApprovalReply = (reqOrBody) => {
   ];
   const rawText = textFields.filter(Boolean).join(' ').trim().toUpperCase();
 
-  const isApproved = /\b(YES|Y|OK|1|CONFIRM|PROCEED|AGREE)\b/i.test(rawText) || /APPROV/i.test(rawText);
-  const isRejected = /\b(NO|N|CANCEL|2|STOP|DECLINE|DISAGREE)\b/i.test(rawText) || /REJECT/i.test(rawText);
+  const isApproved = /\b(YES|Y|OK|1|CONFIRM|PROCEED|AGREE|ACCEPT)\b/i.test(rawText) || /APPROV/i.test(rawText) || /ACCEPT/i.test(rawText);
+  const isRejected = /\b(NO|N|CANCEL|2|STOP|DECLINE|DISAGREE|REJECT)\b/i.test(rawText) || /REJECT/i.test(rawText);
 
   const decision = isApproved ? 'APPROVED' : (isRejected ? 'REJECTED' : null);
   const codeMatch = rawText.match(/\b([A-Z]{2}\d{6})\b/i);
   const approvalCode = codeMatch ? codeMatch[1].toUpperCase() : null;
 
+  // Compute a clean, single-word or natural display text for chat history (prevent "ACCEPT ACCEPT YES")
+  let displayText = '';
+  if (decision === 'APPROVED') {
+    displayText = 'Accept';
+  } else if (decision === 'REJECTED') {
+    displayText = 'Reject';
+  } else if (bodyObj.ButtonText && bodyObj.ButtonText.trim()) {
+    displayText = bodyObj.ButtonText.trim();
+  } else if (bodyObj.Body && bodyObj.Body.trim()) {
+    displayText = bodyObj.Body.trim();
+  } else if (bodyObj.ButtonPayload && bodyObj.ButtonPayload.trim()) {
+    displayText = bodyObj.ButtonPayload.trim();
+  } else {
+    displayText = rawText || '';
+  }
+
   return {
     decision,
     approvalCode,
-    responseText: rawText || decision || ''
+    responseText: displayText || rawText || decision || '',
+    displayText
   };
 };
 
@@ -1139,13 +1156,13 @@ const handleTwilioWebhook = async (req) => {
     incomingMediaUrl = await fetchAndStoreIncomingMedia(mediaUrl0, mediaContentType0);
   }
 
-  const { decision, approvalCode, responseText } = parseApprovalReply(req);
+  const { decision, approvalCode, responseText, displayText } = parseApprovalReply(req);
 
   // If customer sent a message that is not YES/NO (e.g. "Hello", "What about service", voice note, questions)
   if (!decision) {
     const fromNumber = String(req.body?.From || '').replace(/\D/g, '');
     const mobileDigits = fromNumber.length >= 10 ? fromNumber.slice(-10) : null;
-    let incomingText = req.body?.Body || responseText || '';
+    let incomingText = displayText || req.body?.Body || responseText || '';
     let incomingMediaType = null;
     if (incomingMediaUrl) {
       if (mediaContentType0.startsWith('image/')) {
@@ -1430,7 +1447,7 @@ const handleTwilioWebhook = async (req) => {
         customerMobile: approval.jobCard.customer?.mobileNo,
         senderType: 'CUSTOMER',
         senderName: req.body?.ProfileName || 'Customer',
-        text: responseText || decision || (incomingMediaUrl ? '🎤 Voice message' : ''),
+        text: displayText || (decision === 'APPROVED' ? 'Accept' : 'Reject'),
         mediaUrl: incomingMediaUrl
       });
       await chatService.addMessageToChat({
