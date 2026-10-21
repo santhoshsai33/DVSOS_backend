@@ -1,7 +1,76 @@
 const prisma = require('../../config/db');
 const { getSocket } = require('../../config/socket');
 const { sendWhatsAppMessage } = require('../../providers/whatsapp/whatsapp.service');
+const { createStorageProvider } = require('../../providers/storage/storage.provider');
 const env = require('../../config/env');
+
+let storageProviderInstance = null;
+const getStorageProvider = () => {
+  if (!storageProviderInstance) {
+    try {
+      storageProviderInstance = createStorageProvider();
+    } catch (e) {
+      console.warn('[Chat] Could not initialize storage provider:', e.message);
+    }
+  }
+  return storageProviderInstance;
+};
+
+const extractBlobNameFromUrl = (url, containerName) => {
+  if (!url || typeof url !== 'string') return null;
+  const container = containerName || env.azureBlob?.container || 'susee-objects';
+
+  if (url.includes('.blob.core.windows.net/')) {
+    const afterHost = url.split('.blob.core.windows.net/')[1];
+    if (afterHost) {
+      const firstSlash = afterHost.indexOf('/');
+      if (firstSlash !== -1) {
+        const blobPart = afterHost.substring(firstSlash + 1).split('?')[0];
+        try {
+          return decodeURIComponent(blobPart);
+        } catch {
+          return blobPart;
+        }
+      }
+    }
+  }
+
+  const marker = `/${container}/`;
+  if (url.includes(marker)) {
+    const afterMarker = url.split(marker)[1];
+    if (afterMarker) {
+      const blobPart = afterMarker.split('?')[0];
+      try {
+        return decodeURIComponent(blobPart);
+      } catch {
+        return blobPart;
+      }
+    }
+  }
+
+  return null;
+};
+
+const signChatMessageMediaUrl = (mediaUrl, blobName, expirySeconds = 86400) => {
+  if (!mediaUrl && !blobName) return mediaUrl;
+
+  const provider = getStorageProvider();
+  if (!provider || !provider.isConfigured || typeof provider.generateSasUrl !== 'function') {
+    return mediaUrl;
+  }
+
+  const resolvedBlobName = blobName || extractBlobNameFromUrl(mediaUrl, provider.config?.container);
+  if (!resolvedBlobName) {
+    return mediaUrl;
+  }
+
+  try {
+    return provider.generateSasUrl(resolvedBlobName, expirySeconds);
+  } catch (err) {
+    console.warn('[Chat] Failed to sign SAS URL for media file:', err.message);
+    return mediaUrl;
+  }
+};
 
 const CHAT_SCHEMA_SQL = `
 IF OBJECT_ID('dbo.job_card_chats', 'U') IS NULL
@@ -229,6 +298,18 @@ const getChatByJobCard = async (identifier) => {
   messages = await syncExistingApprovalsToChat(jobCard, row, Array.isArray(messages) ? messages : []);
   const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
 
+  // Dynamically sign media URLs with fresh 24-hour SAS tokens (matching vehicle & job card modules)
+  const signedMessages = (Array.isArray(messages) ? messages : []).map(msg => {
+    if (msg && (msg.mediaUrl || msg.blobName)) {
+      const freshUrl = signChatMessageMediaUrl(msg.mediaUrl, msg.blobName, 86400); // 24 hours
+      return {
+        ...msg,
+        mediaUrl: freshUrl
+      };
+    }
+    return msg;
+  });
+
   return {
     jobCardId: jobCard.id,
     jobCardNo: jobCard.jobCardNo,
@@ -241,7 +322,7 @@ const getChatByJobCard = async (identifier) => {
     lastMessageText: lastMsg ? lastMsg.text : (row?.last_message_text || null),
     lastSenderType: lastMsg ? lastMsg.sender : (row?.last_sender_type || null),
     lastMessageAt: lastMsg?.time ? new Date(lastMsg.time) : (row?.last_message_at || null),
-    messages: Array.isArray(messages) ? messages : []
+    messages: signedMessages
   };
 };
 
@@ -252,7 +333,9 @@ const addMessageToChat = async ({
   senderType,
   senderName,
   text,
-  mediaUrl
+  mediaUrl,
+  mediaType,
+  fileName
 }) => {
   await ensureChatSchema();
 
@@ -264,7 +347,31 @@ const addMessageToChat = async ({
   const numericJobCardId = Number(jobCardId);
   const numericCustomerId = Number(customerId || 0);
   const cleanMobile = String(customerMobile || '').trim();
-  const summaryText = cleanText || (mediaUrl ? '🎤 Voice message' : '');
+
+  let detectedMediaType = mediaType;
+  if (!detectedMediaType && mediaUrl) {
+    if (mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)) {
+      detectedMediaType = 'image';
+    } else if (mediaUrl.match(/\.(pdf|doc|docx|txt)/i)) {
+      detectedMediaType = 'document';
+    } else {
+      detectedMediaType = 'audio';
+    }
+  }
+
+  let summaryText = cleanText;
+  if (!summaryText && mediaUrl) {
+    if (detectedMediaType === 'image') {
+      summaryText = '📷 Photo';
+    } else if (detectedMediaType === 'document') {
+      summaryText = `📄 ${fileName || 'Document'}`;
+    } else {
+      summaryText = '🎤 Voice message';
+    }
+  }
+
+  const provider = getStorageProvider();
+  const extractedBlobName = extractBlobNameFromUrl(mediaUrl, provider?.config?.container);
 
   const newMessage = {
     id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -272,6 +379,9 @@ const addMessageToChat = async ({
     senderName: senderName || (senderType === 'CUSTOMER' ? 'Customer' : 'Service Advisor'),
     text: cleanText,
     mediaUrl: mediaUrl || null,
+    mediaType: detectedMediaType || null,
+    fileName: fileName || null,
+    blobName: extractedBlobName || null,
     time: new Date().toISOString()
   };
 
@@ -337,11 +447,21 @@ const addMessageToChat = async ({
     );
   }
 
+  let jobCardLocationId = null;
+  try {
+    const jc = await prisma.jobCard.findUnique({
+      where: { id: numericJobCardId },
+      select: { locationId: true }
+    });
+    jobCardLocationId = jc?.locationId || null;
+  } catch {}
+
   // Real-time broadcast via Socket.IO
   const io = getSocket();
   if (io) {
     const payload = {
       jobCardId: numericJobCardId,
+      locationId: jobCardLocationId,
       message: newMessage,
       unreadCount: newUnreadCount,
       lastMessageAt: now
@@ -357,7 +477,17 @@ const addMessageToChat = async ({
   };
 };
 
-const sendAdvisorReply = async ({ jobCardId, text, audioData, mediaUrl, userId, userName }) => {
+const sendAdvisorReply = async ({
+  jobCardId,
+  text,
+  audioData,
+  mediaUrl,
+  fileData,
+  fileName,
+  fileType,
+  userId,
+  userName
+}) => {
   const jobCard = await resolveJobCard(jobCardId);
   if (!jobCard) {
     const error = new Error('Job Card not found');
@@ -373,19 +503,41 @@ const sendAdvisorReply = async ({ jobCardId, text, audioData, mediaUrl, userId, 
   }
 
   let resolvedMediaUrl = mediaUrl || null;
+  let resolvedMediaType = fileType || null;
+  let resolvedFileName = fileName || null;
+
   if (audioData && typeof audioData === 'string' && audioData.startsWith('data:')) {
     try {
       const { createStorageProvider } = require('../../providers/storage/storage.provider');
       const storageProvider = createStorageProvider();
       resolvedMediaUrl = await storageProvider.uploadDataUrl(audioData, 'chat-audio');
+      resolvedMediaType = 'audio';
     } catch (uploadErr) {
       console.error('[Chat Voice Note] Upload to storage failed:', uploadErr);
+      const error = new Error('Failed to upload voice note: ' + (uploadErr?.message || 'Storage error'));
+      error.statusCode = 500;
+      throw error;
+    }
+  } else if (fileData && typeof fileData === 'string' && fileData.startsWith('data:')) {
+    try {
+      const { createStorageProvider } = require('../../providers/storage/storage.provider');
+      const storageProvider = createStorageProvider();
+      const isImg = fileType === 'image' || fileData.startsWith('data:image/') || (fileName && /\.(jpg|jpeg|png|webp|gif)$/i.test(fileName));
+      const folder = isImg ? 'chat-images' : 'chat-documents';
+      resolvedMediaUrl = await storageProvider.uploadDataUrl(fileData, folder, { fileName });
+      resolvedMediaType = isImg ? 'image' : 'document';
+      resolvedFileName = fileName || (isImg ? 'Photo' : 'Document');
+    } catch (uploadErr) {
+      console.error('[Chat Media Attachment] Upload to storage failed:', uploadErr);
+      const error = new Error('Failed to upload attachment: ' + (uploadErr?.message || 'Storage error'));
+      error.statusCode = 500;
+      throw error;
     }
   }
 
   const cleanText = String(text || '').trim();
   if (!cleanText && !resolvedMediaUrl) {
-    const error = new Error('Message text or voice note is required');
+    const error = new Error('Message text or file attachment is required');
     error.statusCode = 400;
     throw error;
   }
@@ -395,12 +547,25 @@ const sendAdvisorReply = async ({ jobCardId, text, audioData, mediaUrl, userId, 
     ? env.twilio.testMobile
     : (customerMobile || env.twilio.testMobile || '9952656498');
 
-  // 1. Send to WhatsApp via Twilio (routed to sandbox registered test phone in trial mode)
-  await sendWhatsAppMessage({
-    to: targetMobile,
-    body: cleanText || (resolvedMediaUrl ? 'Voice message' : ''),
-    mediaUrl: resolvedMediaUrl ? [resolvedMediaUrl] : undefined
-  });
+  // WhatsApp Message Body
+  let fallbackBody = cleanText;
+  if (!fallbackBody) {
+    if (resolvedMediaType === 'image') fallbackBody = 'Photo';
+    else if (resolvedMediaType === 'document') fallbackBody = resolvedFileName || 'Document';
+    else if (resolvedMediaType === 'audio') fallbackBody = 'Voice message';
+    else fallbackBody = 'Attachment';
+  }
+
+  // 1. Send to WhatsApp via Twilio
+  try {
+    await sendWhatsAppMessage({
+      to: targetMobile,
+      body: fallbackBody,
+      mediaUrl: resolvedMediaUrl ? [resolvedMediaUrl] : undefined
+    });
+  } catch (twErr) {
+    console.warn('[Chat] WhatsApp message delivery notice (persisting to chat):', twErr?.message || twErr);
+  }
 
   // 2. Persist in Chat History with the REAL customer's mobile and details for display
   const result = await addMessageToChat({
@@ -409,8 +574,10 @@ const sendAdvisorReply = async ({ jobCardId, text, audioData, mediaUrl, userId, 
     customerMobile: customerMobile,
     senderType: 'ADVISOR',
     senderName: userName || 'Service Advisor',
-    text: cleanText || (resolvedMediaUrl ? 'Voice message' : ''),
-    mediaUrl: resolvedMediaUrl
+    text: cleanText,
+    mediaUrl: resolvedMediaUrl,
+    mediaType: resolvedMediaType,
+    fileName: resolvedFileName
   });
 
   return result;
@@ -428,8 +595,8 @@ const markChatAsRead = async (identifier) => {
 
   const io = getSocket();
   if (io) {
-    io.to(`chat:job_card_${jobCard.id}`).emit('chat:read', { jobCardId: jobCard.id });
-    io.emit('chat:unread_cleared', { jobCardId: jobCard.id });
+    io.to(`chat:job_card_${jobCard.id}`).emit('chat:read', { jobCardId: jobCard.id, locationId: jobCard.locationId });
+    io.emit('chat:unread_cleared', { jobCardId: jobCard.id, locationId: jobCard.locationId });
   }
 
   return { success: true, jobCardId: jobCard.id };

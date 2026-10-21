@@ -1049,6 +1049,7 @@ const fetchAndStoreIncomingMedia = async (mediaUrl, contentType) => {
 
     let mimeType = contentType || 'audio/ogg';
     let extension = '.ogg';
+    let folder = 'chat-audio';
     if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
       mimeType = 'audio/mp4';
       extension = '.m4a';
@@ -1064,17 +1065,31 @@ const fetchAndStoreIncomingMedia = async (mediaUrl, contentType) => {
     } else if (mimeType.includes('ogg')) {
       mimeType = 'audio/ogg';
       extension = '.ogg';
-    } else if (mimeType.includes('image/jpeg')) {
+    } else if (mimeType.includes('image/jpeg') || mimeType.includes('image/jpg')) {
       mimeType = 'image/jpeg';
       extension = '.jpg';
+      folder = 'chat-images';
     } else if (mimeType.includes('image/png')) {
       mimeType = 'image/png';
       extension = '.png';
+      folder = 'chat-images';
+    } else if (mimeType.includes('image/webp')) {
+      mimeType = 'image/webp';
+      extension = '.webp';
+      folder = 'chat-images';
+    } else if (mimeType.includes('pdf')) {
+      mimeType = 'application/pdf';
+      extension = '.pdf';
+      folder = 'chat-documents';
+    } else if (mimeType.includes('msword') || mimeType.includes('wordprocessingml')) {
+      mimeType = 'application/pdf';
+      extension = '.docx';
+      folder = 'chat-documents';
     }
 
     if (storageProvider && typeof storageProvider.uploadBuffer === 'function' && storageProvider.isConfigured) {
       const uploadRes = await storageProvider.uploadBuffer(buffer, {
-        folder: 'chat-audio',
+        folder,
         mimeType,
         extension
       });
@@ -1124,8 +1139,18 @@ const handleTwilioWebhook = async (req) => {
     const fromNumber = String(req.body?.From || '').replace(/\D/g, '');
     const mobileDigits = fromNumber.length >= 10 ? fromNumber.slice(-10) : null;
     let incomingText = req.body?.Body || responseText || '';
-    if (!incomingText && incomingMediaUrl) {
-      incomingText = mediaContentType0.startsWith('audio/') ? '🎤 Voice message' : '📎 Attachment';
+    let incomingMediaType = null;
+    if (incomingMediaUrl) {
+      if (mediaContentType0.startsWith('image/')) {
+        incomingMediaType = 'image';
+        if (!incomingText) incomingText = '📷 Photo';
+      } else if (mediaContentType0.includes('pdf') || mediaContentType0.includes('document') || mediaContentType0.includes('msword')) {
+        incomingMediaType = 'document';
+        if (!incomingText) incomingText = '📄 Document';
+      } else {
+        incomingMediaType = 'audio';
+        if (!incomingText) incomingText = '🎤 Voice message';
+      }
     }
 
     // Find active job card for this customer phone
@@ -1139,7 +1164,8 @@ const handleTwilioWebhook = async (req) => {
         senderType: 'CUSTOMER',
         senderName: req.body?.ProfileName || activeJobCard.customer?.fullName || 'Customer',
         text: incomingText,
-        mediaUrl: incomingMediaUrl
+        mediaUrl: incomingMediaUrl,
+        mediaType: incomingMediaType
       });
     }
 

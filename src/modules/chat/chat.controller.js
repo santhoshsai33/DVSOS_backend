@@ -20,7 +20,7 @@ const getChat = async (req, res, next) => {
 const sendReply = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { text, audioData, mediaUrl } = req.body;
+    const { text, audioData, mediaUrl, fileData, fileName, fileType } = req.body;
     const userId = req.user?.id;
     const userName = req.user?.fullName || req.user?.name || 'Service Advisor';
 
@@ -29,6 +29,9 @@ const sendReply = async (req, res, next) => {
       text,
       audioData,
       mediaUrl,
+      fileData,
+      fileName,
+      fileType,
       userId,
       userName
     });
@@ -62,6 +65,19 @@ const markRead = async (req, res, next) => {
 
 const getRecentChats = async (req, res, next) => {
   try {
+    const roleSlug = String(req.user?.roleSlug || '').toLowerCase().replace(/[-_\s]+/g, '');
+    if (roleSlug === 'admin' || roleSlug === 'superadmin') {
+      return apiResponse(res, {
+        statusCode: 200,
+        success: true,
+        message: 'Admin role does not track direct chats',
+        data: {
+          totalUnreadCount: 0,
+          chats: []
+        }
+      });
+    }
+
     const { locationId, search, unreadOnly, limit } = req.query;
     const effectiveLocationId = req.user?.locationId || locationId;
 

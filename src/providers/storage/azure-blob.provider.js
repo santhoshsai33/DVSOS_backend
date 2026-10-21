@@ -91,64 +91,110 @@ class AzureBlobProvider {
     };
   }
 
-  async uploadDataUrl(dataUrl, folder = 'voice-notes') {
-    if (!this.isConfigured || !dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
-      return dataUrl || null;
+  async uploadDataUrl(dataUrl, folder = 'voice-notes', options = {}) {
+    if (!this.isConfigured) {
+      throw new Error('Azure Blob storage provider is not configured.');
+    }
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+      return null;
     }
 
     try {
-      const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-      if (!matches) return dataUrl;
+      const commaIdx = dataUrl.indexOf(',');
+      if (commaIdx === -1) {
+        throw new Error('Invalid data URL format: missing comma separator');
+      }
 
-      const rawMimeType = matches[1];
-      const base64Data = matches[2];
+      const meta = dataUrl.substring(5, commaIdx);
+      const base64Data = dataUrl.substring(commaIdx + 1).replace(/\s/g, '');
+      const rawMimeType = meta.split(';')[0].toLowerCase().trim() || 'application/octet-stream';
 
-      // Browser records as audio/webm;codecs=opus — Twilio WhatsApp does NOT support webm.
-      // Twilio supports: MP3, OGG/Opus, AMR, 3GP, AAC, MPEG.
-      // Store webm/opus as audio/ogg with .ogg extension so Twilio can deliver it.
       let mimeType = rawMimeType;
-      let extension = '.ogg';
+      let extension = options.extension || (options.fileName ? path.extname(options.fileName) : '');
       let buffer = Buffer.from(base64Data, 'base64');
 
-      if (rawMimeType.includes('mp3')) {
-        mimeType = 'audio/mpeg'; extension = '.mp3';
-      } else if (rawMimeType.includes('wav')) {
-        mimeType = 'audio/wav'; extension = '.wav';
-      } else if (rawMimeType.includes('m4a') || rawMimeType.includes('mp4')) {
-        mimeType = 'audio/mp4'; extension = '.m4a';
-      } else if (rawMimeType.includes('ogg')) {
-        mimeType = 'audio/ogg'; extension = '.ogg';
-      } else if (rawMimeType.includes('webm')) {
-        // Browser records as audio/webm;codecs=opus
-        // Twilio WhatsApp requires OGG/Opus — do a real conversion using ffmpeg
-        try {
-          buffer = await convertToOgg(buffer, 'webm');
-          mimeType = 'audio/ogg';
-          extension = '.ogg';
-          console.log('[Audio] Successfully converted WebM → OGG/Opus for WhatsApp delivery');
-        } catch (convErr) {
-          console.warn('[Audio] WebM→OGG conversion failed, uploading as-is:', convErr.message);
-          mimeType = 'audio/ogg';
-          extension = '.ogg';
+      if (!extension) {
+        if (rawMimeType.includes('jpeg') || rawMimeType.includes('jpg')) {
+          mimeType = 'image/jpeg'; extension = '.jpg';
+        } else if (rawMimeType.includes('png')) {
+          mimeType = 'image/png'; extension = '.png';
+        } else if (rawMimeType.includes('webp')) {
+          mimeType = 'image/webp'; extension = '.webp';
+        } else if (rawMimeType.includes('gif')) {
+          mimeType = 'image/gif'; extension = '.gif';
+        } else if (rawMimeType.includes('pdf')) {
+          mimeType = 'application/pdf'; extension = '.pdf';
+        } else if (rawMimeType.includes('msword')) {
+          mimeType = 'application/msword'; extension = '.doc';
+        } else if (rawMimeType.includes('wordprocessingml')) {
+          mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; extension = '.docx';
+        } else if (rawMimeType.includes('plain')) {
+          mimeType = 'text/plain'; extension = '.txt';
+        } else if (rawMimeType.includes('mp3')) {
+          mimeType = 'audio/mpeg'; extension = '.mp3';
+        } else if (rawMimeType.includes('wav')) {
+          mimeType = 'audio/wav'; extension = '.wav';
+        } else if (rawMimeType.includes('m4a') || rawMimeType.includes('mp4')) {
+          mimeType = 'audio/mp4'; extension = '.m4a';
+        } else if (rawMimeType.includes('ogg')) {
+          mimeType = 'audio/ogg'; extension = '.ogg';
+        } else if (rawMimeType.includes('webm')) {
+          try {
+            buffer = await convertToOgg(buffer, 'webm');
+            mimeType = 'audio/ogg';
+            extension = '.ogg';
+            console.log('[Audio] Successfully converted WebM → OGG/Opus for WhatsApp delivery');
+          } catch (convErr) {
+            console.warn('[Audio] WebM→OGG conversion failed, uploading as-is:', convErr.message);
+            mimeType = 'audio/ogg';
+            extension = '.ogg';
+          }
+        } else {
+          extension = '.bin';
+        }
+      } else {
+        const extLower = extension.toLowerCase();
+        if (extLower === '.pdf') mimeType = 'application/pdf';
+        else if (extLower === '.jpg' || extLower === '.jpeg') mimeType = 'image/jpeg';
+        else if (extLower === '.png') mimeType = 'image/png';
+        else if (extLower === '.webp') mimeType = 'image/webp';
+        else if (extLower === '.gif') mimeType = 'image/gif';
+        else if (extLower === '.doc') mimeType = 'application/msword';
+        else if (extLower === '.docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (extLower === '.txt') mimeType = 'text/plain';
+
+        if (rawMimeType.includes('webm')) {
+          try {
+            buffer = await convertToOgg(buffer, 'webm');
+            mimeType = 'audio/ogg';
+            extension = '.ogg';
+          } catch {
+            mimeType = 'audio/ogg';
+            extension = '.ogg';
+          }
         }
       }
 
       const result = await this.uploadBuffer(buffer, {
         folder,
         mimeType,
-        extension
+        extension,
+        originalName: options.fileName
       });
 
-      if (!result) return dataUrl;
+      if (!result) {
+        throw new Error('Azure Blob Storage upload did not return a valid result');
+      }
 
       try {
         return this.generateSasUrl(result.public_id, 86400 * 30);
       } catch (sasError) {
+        console.warn('[Azure Storage] SAS generation failed, returning direct URL:', sasError.message);
         return result.url;
       }
     } catch (error) {
       console.error('Failed to upload data URL to Azure Blob Storage:', error);
-      return dataUrl;
+      throw error;
     }
   }
 
